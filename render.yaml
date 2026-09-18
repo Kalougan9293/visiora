@@ -1,0 +1,15 @@
+# Example Render static site config (optional)
+# Create a Static Site on Render with:
+#   Build Command: npm install && npm run build
+#   Publish Directory: dist
+
+services:
+  - type: web
+    name: visiora
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate

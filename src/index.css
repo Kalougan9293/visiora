@@ -1,0 +1,110 @@
+@import "tailwindcss";
+@import "./styles/aqua.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+
+  /* Nuit chaude — espresso / crépuscule (pas de noir froid) */
+  --color-ink: #1a1612;
+  --color-ink-soft: #221e19;
+  --color-ink-elevated: #2c2620;
+
+  /* Jour — crème apaisante */
+  --color-cream: #faf7f2;
+  --color-cream-soft: #f3eee6;
+  --color-cream-card: #ffffff;
+
+  /* Accent chaud : ambre / miel (bougie) — remplace l’or “luxe” */
+  --color-gold: #d4a574;
+  --color-gold-bright: #e8c49a;
+  --color-champagne: #f0e6d6;
+
+  /* Nature / respiration — sauge */
+  --color-olive: #5f6b45;
+  --color-olive-soft: #9aab82;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-sans antialiased text-center;
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--color-ink);
+    color: #faf4eb;
+  }
+
+  html:not(.dark) body {
+    background: var(--color-cream);
+    color: #1a1814;
+  }
+
+  #root {
+    min-height: 100dvh;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-gold) 35%, transparent);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .glass {
+    background: color-mix(in srgb, #352e27 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-champagne) 22%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  html:not(.dark) .glass {
+    background: color-mix(in srgb, #ffffff 88%, transparent);
+    border: 1px solid color-mix(in srgb, #1a1814 8%, transparent);
+    box-shadow: 0 1px 0 color-mix(in srgb, #fff 80%, transparent) inset;
+  }
+
+  .glow-gold {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-gold) 30%, transparent),
+      0 10px 36px color-mix(in srgb, var(--color-gold) 14%, transparent);
+  }
+
+  .page-pad {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+
+  /* Atmosphère nuit : lueur ambre + sauge douce */
+  .bg-atmosphere-dark {
+    background:
+      radial-gradient(ellipse 90% 55% at 50% -8%, color-mix(in srgb, #d4a574 16%, transparent), transparent 58%),
+      radial-gradient(ellipse 55% 40% at 0% 70%, color-mix(in srgb, #9aab82 10%, transparent), transparent 50%),
+      radial-gradient(ellipse 50% 35% at 100% 40%, color-mix(in srgb, #c47d6a 7%, transparent), transparent 48%),
+      var(--color-ink);
+  }
+
+  .bg-atmosphere-light {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--color-olive) 8%, transparent), transparent 55%),
+      radial-gradient(ellipse 50% 40% at 100% 20%, color-mix(in srgb, #c4b8a0 12%, transparent), transparent 50%),
+      var(--color-cream);
+  }
+
+  .texture-paper {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+}
