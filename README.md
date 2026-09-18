@@ -1,6 +1,6 @@
 # Visiora AI
 
-Application web de visualisation mentale et méditation guidée (front-end).
+Application web de visualisation mentale et méditation guidée (front-end + Supabase).
 
 ## Stack
 
@@ -9,6 +9,7 @@ Application web de visualisation mentale et méditation guidée (front-end).
 - React Router
 - Framer Motion
 - PWA (`vite-plugin-pwa`)
+- Supabase (Auth, Postgres, Storage)
 
 ## Démarrage
 
@@ -29,11 +30,12 @@ npm run preview
 ```
 src/
   components/   # UI, layout, lecteur audio
-  context/      # Thème Dark/Light, séances
-  data/         # Questionnaire (13 questions), science
-  pages/        # Accueil, Créer, Bibliothèque, Suivi, Profil
-  services/     # Stubs Supabase / sessions / audio / progress
-  types/        # Types prêts pour le backend
+  context/      # Auth, thème, séances, variante
+  data/         # Wizard (13 questions), science
+  pages/        # Accueil, Créer, Bibliothèque, Suivi, Profil, Admin
+  services/     # Supabase / sessions / audio / progress
+  types/        # Types alignés sur le schéma DB
+supabase/       # SQL (schema, admin, phase1_hardening)
 ```
 
 ## Variables d’environnement
@@ -43,8 +45,19 @@ Copier `.env.example` → `.env` :
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Puis exécuter `supabase/schema.sql` dans le SQL Editor (voir `supabase/README.md`).
+Puis exécuter le SQL (voir `supabase/README.md`).
 
 ## Déploiement (Render)
 
-Le build produit un site statique dans `dist/`. Sur Render : Static Site, build `npm run build`, publish `dist`.
+Static Site — config dans `render.yaml` :
+- Build : `npm install && npm run build`
+- Publish : `dist`
+- Rewrite SPA : `/*` → `/index.html`
+- Env **Build** obligatoires : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+
+## Admin
+
+Pour l’instant : `/admin` → login UI temporaire `jonathan` / `france`.  
+Plus tard : compte Supabase + `is_admin` (voir `phase1_hardening.sql`).
+
+Si après le durcissement SQL le dashboard dit `not authorized` → exécute `admin_temp_dev.sql`.

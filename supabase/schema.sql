@@ -8,10 +8,36 @@ create table if not exists public.profiles (
   email text not null default '',
   cgu_accepted boolean not null default false,
   cgu_accepted_at timestamptz,
+  is_admin boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   last_seen_at timestamptz
 );
+
+-- Empêche un user connecté de s’auto-promouvoir via l’API
+create or replace function public.protect_is_admin()
+returns trigger
+language plpgsql
+as $$
+begin
+  if tg_op = 'UPDATE'
+     and new.is_admin is distinct from old.is_admin
+     and auth.uid() is not null then
+    raise exception 'is_admin ne peut pas être modifié côté client';
+  end if;
+  if tg_op = 'INSERT'
+     and new.is_admin = true
+     and auth.uid() is not null then
+    raise exception 'is_admin ne peut pas être défini à l''inscription';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_protect_is_admin on public.profiles;
+create trigger profiles_protect_is_admin
+  before insert or update on public.profiles
+  for each row execute function public.protect_is_admin();
 
 create index if not exists profiles_email_idx on public.profiles (email);
 alter table public.profiles enable row level security;

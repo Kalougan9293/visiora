@@ -8,14 +8,14 @@ import {
   type ReactNode,
 } from 'react'
 import type { ProgressStats, VisualizationAnswers, VisualizationSession } from '@/types'
-import { uid } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
 import { sessionsService } from '@/services/sessions'
 import { progressService } from '@/services/progress'
 
 interface SessionsContextValue {
   sessions: VisualizationSession[]
   stats: ProgressStats
-  addSession: (answers: VisualizationAnswers) => VisualizationSession
+  addSession: (answers: VisualizationAnswers) => Promise<VisualizationSession>
   removeSession: (id: string) => void
   markListened: (id: string) => void
   simulateProgress: (days: number) => void
@@ -24,61 +24,58 @@ interface SessionsContextValue {
 
 const SessionsContext = createContext<SessionsContextValue | null>(null)
 
-function titleFromAnswers(answers: VisualizationAnswers): string {
-  const q1 = answers.q1
-  if (typeof q1 === 'string' && q1.trim()) {
-    return q1.trim().slice(0, 42) + (q1.trim().length > 42 ? '…' : '')
-  }
-  return 'Séance personnalisée'
-}
-
-function durationFromAnswers(_answers: VisualizationAnswers): number {
-  return 15
-}
-
 export function SessionsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  const userId = user?.id
   const [sessions, setSessions] = useState<VisualizationSession[]>([])
   const [stats, setStats] = useState<ProgressStats>(() => progressService.getLocalStats())
 
   useEffect(() => {
-    void sessionsService.list().then(setSessions)
-  }, [])
+    void sessionsService.list(userId).then(setSessions)
+  }, [userId])
 
   useEffect(() => {
-    sessionsService.persistLocal(sessions)
-  }, [sessions])
+    if (!userId) sessionsService.persistLocal(sessions)
+  }, [sessions, userId])
 
   useEffect(() => {
     progressService.persistLocal(stats)
   }, [stats])
 
-  const addSession = useCallback((answers: VisualizationAnswers) => {
-    const now = new Date().toISOString()
-    const session: VisualizationSession = {
-      id: uid('ses'),
-      title: titleFromAnswers(answers),
-      createdAt: now,
-      updatedAt: now,
-      durationMinutes: durationFromAnswers(answers),
-      answers,
-      status: 'ready',
-      audioUrl: null,
-      listens: 0,
-    }
-    setSessions((prev) => [session, ...prev])
-    return session
-  }, [])
+  const addSession = useCallback(
+    async (answers: VisualizationAnswers) => {
+      const session = await sessionsService.create(answers, userId)
+      setSessions((prev) => [session, ...prev.filter((s) => s.id !== session.id)])
+      return session
+    },
+    [userId],
+  )
 
-  const removeSession = useCallback((id: string) => {
-    setSessions((prev) => prev.filter((s) => s.id !== id))
-  }, [])
+  const removeSession = useCallback(
+    (id: string) => {
+      setSessions((prev) => prev.filter((s) => s.id !== id))
+      void sessionsService.remove(id, userId).catch((err) => {
+        console.warn('[sessions] remove failed', err)
+      })
+    },
+    [userId],
+  )
 
-  const markListened = useCallback((id: string) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, listens: s.listens + 1 } : s)),
-    )
-    setStats((prev) => progressService.recordListen(prev))
-  }, [])
+  const markListened = useCallback(
+    (id: string) => {
+      setSessions((prev) => {
+        const target = prev.find((s) => s.id === id)
+        if (!target) return prev
+        const nextListens = target.listens + 1
+        void sessionsService.markListened(id, nextListens, userId).catch((err) => {
+          console.warn('[sessions] markListened failed', err)
+        })
+        return prev.map((s) => (s.id === id ? { ...s, listens: nextListens } : s))
+      })
+      setStats((prev) => progressService.recordListen(prev))
+    },
+    [userId],
+  )
 
   const simulateProgress = useCallback((days: number) => {
     setStats(progressService.simulateDays(days))

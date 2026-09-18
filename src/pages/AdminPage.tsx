@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react'
 import { adminService, formatStorage, type AdminUserRow } from '@/services/admin'
 import { isSupabaseConfigured } from '@/services/supabase'
 
+/** Login temporaire UI — à remplacer par Supabase Auth + is_admin */
 const AUTH_KEY = 'visiora-admin'
 const ADMIN_USER = 'jonathan'
 const ADMIN_PASS = 'france'

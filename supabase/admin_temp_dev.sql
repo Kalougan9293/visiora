@@ -1,6 +1,8 @@
--- Admin dashboard RPCs (mode temporaire — login UI jonathan/france)
--- Exécuter après schema.sql
--- Plus tard : remplacer par phase1_hardening.sql (is_admin + plus d’accès anon)
+-- TEMP DEV — rouvre les RPCs admin pour jonathan/france (sans session Supabase)
+-- À exécuter SEULEMENT si tu as déjà lancé phase1_hardening.sql
+-- et que /admin affiche "not authorized".
+--
+-- Quand tu passes au vrai admin : ré-exécute phase1_hardening.sql
 
 create or replace function public.admin_list_users()
 returns table (
@@ -43,9 +45,6 @@ as $$
   );
 $$;
 
-grant execute on function public.admin_list_users() to anon, authenticated;
-grant execute on function public.admin_dashboard_stats() to anon, authenticated;
-
 create or replace function public.admin_delete_user(target_id uuid)
 returns boolean
 language plpgsql
@@ -67,4 +66,6 @@ begin
 end;
 $$;
 
+grant execute on function public.admin_list_users() to anon, authenticated;
+grant execute on function public.admin_dashboard_stats() to anon, authenticated;
 grant execute on function public.admin_delete_user(uuid) to anon, authenticated;

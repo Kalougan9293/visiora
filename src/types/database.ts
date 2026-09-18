@@ -13,6 +13,7 @@ export interface Database {
           email: string
           cgu_accepted: boolean
           cgu_accepted_at: string | null
+          is_admin: boolean
           created_at: string
           updated_at: string
           last_seen_at: string | null
@@ -24,6 +25,7 @@ export interface Database {
           email?: string
           cgu_accepted?: boolean
           cgu_accepted_at?: string | null
+          is_admin?: boolean
           created_at?: string
           updated_at?: string
           last_seen_at?: string | null
@@ -35,6 +37,7 @@ export interface Database {
           email?: string
           cgu_accepted?: boolean
           cgu_accepted_at?: string | null
+          is_admin?: boolean
           created_at?: string
           updated_at?: string
           last_seen_at?: string | null
@@ -92,6 +95,10 @@ export interface Database {
     }
     Views: Record<string, never>
     Functions: {
+      is_current_user_admin: {
+        Args: Record<string, never>
+        Returns: boolean
+      }
       admin_list_users: {
         Args: Record<string, never>
         Returns: {

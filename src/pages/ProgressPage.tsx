@@ -176,42 +176,44 @@ export function ProgressPage() {
         </div>
       </Card>
 
-      <div
-        className={cn(
-          'w-full rounded-2xl border border-dashed px-4 py-5 text-center',
-          'border-black/15 bg-black/[0.02] dark:border-champagne/20 dark:bg-white/[0.03]',
-        )}
-      >
-        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7b5a] dark:text-gold">
-          Zone de test de progression (simulateur)
-        </p>
-        <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
-          <button
-            type="button"
-            onClick={() => runSim(21)}
-            className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
-          >
-            <Plus size={15} />
-            Simuler 21 jours d&apos;écoute
-          </button>
-          <button
-            type="button"
-            onClick={() => runSim(60)}
-            className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
-          >
-            <Plus size={15} />
-            Simuler 60 jours d&apos;écoute
-          </button>
-          <button
-            type="button"
-            onClick={resetProgress}
-            className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 sm:w-auto"
-          >
-            <RotateCcw size={15} />
-            Réinitialiser
-          </button>
+      {import.meta.env.DEV && (
+        <div
+          className={cn(
+            'w-full rounded-2xl border border-dashed px-4 py-5 text-center',
+            'border-black/15 bg-black/[0.02] dark:border-champagne/20 dark:bg-white/[0.03]',
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7b5a] dark:text-gold">
+            Zone de test de progression (simulateur)
+          </p>
+          <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+            <button
+              type="button"
+              onClick={() => runSim(21)}
+              className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
+            >
+              <Plus size={15} />
+              Simuler 21 jours d&apos;écoute
+            </button>
+            <button
+              type="button"
+              onClick={() => runSim(60)}
+              className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
+            >
+              <Plus size={15} />
+              Simuler 60 jours d&apos;écoute
+            </button>
+            <button
+              type="button"
+              onClick={resetProgress}
+              className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 dark:border-red-400/30 dark:bg-red-500/15 dark:text-red-200 dark:hover:bg-red-500/25 sm:w-auto"
+            >
+              <RotateCcw size={15} />
+              Réinitialiser
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {popupDays !== null && (
         <MilestonePopup days={popupDays} onClose={() => setPopupDays(null)} />

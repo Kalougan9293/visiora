@@ -22,6 +22,8 @@ const STORAGE_KEY = 'visiora-variant'
 
 function getInitial(): AppVariant {
   if (typeof window === 'undefined') return 'classic'
+  // Variante Aqua réservée au mode dev (toggle Header)
+  if (!import.meta.env.DEV) return 'classic'
   const stored = localStorage.getItem(STORAGE_KEY)
   return stored === 'aqua' ? 'aqua' : 'classic'
 }

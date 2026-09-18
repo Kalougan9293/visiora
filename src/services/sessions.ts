@@ -1,8 +1,25 @@
-import type { VisualizationSession } from '@/types'
+import type { VisualizationAnswers, VisualizationSession } from '@/types'
 import { isSupabaseConfigured, supabase } from './supabase'
 import type { SessionRow } from '@/types/database'
 
 const LOCAL_KEY = 'visiora-sessions'
+
+function voiceFromAnswers(answers: VisualizationAnswers): string | null {
+  const v = answers.q12_voice
+  return typeof v === 'string' && v.trim() ? v.trim() : null
+}
+
+function titleFromAnswers(answers: VisualizationAnswers): string {
+  const q1 = answers.q1
+  if (typeof q1 === 'string' && q1.trim()) {
+    return q1.trim().slice(0, 42) + (q1.trim().length > 42 ? '…' : '')
+  }
+  return 'Séance personnalisée'
+}
+
+function durationFromAnswers(_answers: VisualizationAnswers): number {
+  return 15
+}
 
 function rowToSession(row: SessionRow): VisualizationSession {
   return {
@@ -20,10 +37,23 @@ function rowToSession(row: SessionRow): VisualizationSession {
   }
 }
 
+function readLocal(): VisualizationSession[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY)
+    return raw ? (JSON.parse(raw) as VisualizationSession[]) : []
+  } catch {
+    return []
+  }
+}
+
 /**
- * Session persistence — localStorage fallback, Supabase `sessions` + Storage quand auth.
+ * Session persistence — localStorage (invité) ou Supabase `sessions` (connecté).
  */
 export const sessionsService = {
+  titleFromAnswers,
+  durationFromAnswers,
+  voiceFromAnswers,
+
   async list(userId?: string): Promise<VisualizationSession[]> {
     if (isSupabaseConfigured() && supabase && userId) {
       const { data, error } = await supabase
@@ -33,16 +63,69 @@ export const sessionsService = {
         .order('created_at', { ascending: false })
       if (!error && data) return data.map(rowToSession)
     }
-    try {
-      const raw = localStorage.getItem(LOCAL_KEY)
-      return raw ? (JSON.parse(raw) as VisualizationSession[]) : []
-    } catch {
-      return []
-    }
+    return readLocal()
   },
 
   persistLocal(sessions: VisualizationSession[]) {
     localStorage.setItem(LOCAL_KEY, JSON.stringify(sessions))
+  },
+
+  async create(answers: VisualizationAnswers, userId?: string): Promise<VisualizationSession> {
+    const now = new Date().toISOString()
+    const title = titleFromAnswers(answers)
+    const durationMinutes = durationFromAnswers(answers)
+    const voiceId = voiceFromAnswers(answers)
+
+    if (isSupabaseConfigured() && supabase && userId) {
+      const { data, error } = await supabase
+        .from('sessions')
+        .insert({
+          user_id: userId,
+          title,
+          answers,
+          status: 'draft',
+          duration_minutes: durationMinutes,
+          voice_id: voiceId,
+          listens: 0,
+        })
+        .select('*')
+        .single()
+
+      if (!error && data) return rowToSession(data)
+      console.warn('[sessions] insert failed, fallback local', error)
+    }
+
+    const session: VisualizationSession = {
+      id: crypto.randomUUID(),
+      userId,
+      title,
+      createdAt: now,
+      updatedAt: now,
+      durationMinutes,
+      answers,
+      status: 'draft',
+      audioUrl: null,
+      listens: 0,
+    }
+    return session
+  },
+
+  async remove(id: string, userId?: string): Promise<void> {
+    if (isSupabaseConfigured() && supabase && userId) {
+      const { error } = await supabase.from('sessions').delete().eq('id', id).eq('user_id', userId)
+      if (error) throw error
+    }
+  },
+
+  async markListened(id: string, nextListens: number, userId?: string): Promise<void> {
+    if (isSupabaseConfigured() && supabase && userId) {
+      const { error } = await supabase
+        .from('sessions')
+        .update({ listens: nextListens, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', userId)
+      if (error) throw error
+    }
   },
 
   async attachAudio(_sessionId: string, _file: Blob): Promise<string | null> {

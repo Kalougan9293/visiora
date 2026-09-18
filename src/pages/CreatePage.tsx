@@ -48,8 +48,7 @@ export function CreatePage() {
       setStepIdx((s) => s + 1)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      addSession(answers)
-      navigate('/bibliotheque')
+      void addSession(answers).then(() => navigate('/bibliotheque'))
     }
   }
 

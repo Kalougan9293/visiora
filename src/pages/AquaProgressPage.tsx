@@ -262,36 +262,37 @@ export function AquaProgressPage() {
           </div>
         </div>
 
-        {/* Zone test — hors champ produit, pliée par défaut */}
-        <details className="mt-12 w-full max-w-sm opacity-40 open:opacity-70 transition-opacity">
-          <summary
-            className="cursor-pointer select-none text-center text-[10px] uppercase tracking-[0.2em] text-[#b8e4ea]/80"
-            style={{ fontFamily: 'var(--font-aqua-sans)' }}
-          >
-            Dev · simuler
-          </summary>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-            {MILESTONE_STEPS.map((days) => (
-              <button
-                key={days}
-                type="button"
-                onClick={() => runSim(days)}
-                className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-[#e8f7f9]/90 transition-colors hover:bg-white/10"
-                style={{ fontFamily: 'var(--font-aqua-sans)' }}
-              >
-                {days}j
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={resetProgress}
-              className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#b8e4ea]/80 transition-colors hover:bg-white/10"
+        {import.meta.env.DEV && (
+          <details className="mt-12 w-full max-w-sm opacity-40 open:opacity-70 transition-opacity">
+            <summary
+              className="cursor-pointer select-none text-center text-[10px] uppercase tracking-[0.2em] text-[#b8e4ea]/80"
               style={{ fontFamily: 'var(--font-aqua-sans)' }}
             >
-              Reset
-            </button>
-          </div>
-        </details>
+              Dev · simuler
+            </summary>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
+              {MILESTONE_STEPS.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => runSim(days)}
+                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-[#e8f7f9]/90 transition-colors hover:bg-white/10"
+                  style={{ fontFamily: 'var(--font-aqua-sans)' }}
+                >
+                  {days}j
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={resetProgress}
+                className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] text-[#b8e4ea]/80 transition-colors hover:bg-white/10"
+                style={{ fontFamily: 'var(--font-aqua-sans)' }}
+              >
+                Reset
+              </button>
+            </div>
+          </details>
+        )}
       </motion.div>
 
       {popupDays !== null && (
