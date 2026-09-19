@@ -1,4 +1,5 @@
 import type { VisualizationAnswers, VisualizationSession } from '@/types'
+import { audioStorage } from './audioStorage'
 import { isSupabaseConfigured, supabase } from './supabase'
 import type { SessionRow } from '@/types/database'
 
@@ -21,6 +22,14 @@ function durationFromAnswers(_answers: VisualizationAnswers): number {
   return 15
 }
 
+function progressFromRow(row: SessionRow): number {
+  if (row.status === 'ready') return 100
+  if (row.status !== 'generating') return 0
+  const raw = Number(row.audio_bytes)
+  if (Number.isFinite(raw) && raw > 0 && raw <= 100) return Math.round(raw)
+  return 8
+}
+
 function rowToSession(row: SessionRow): VisualizationSession {
   return {
     id: row.id,
@@ -33,8 +42,15 @@ function rowToSession(row: SessionRow): VisualizationSession {
     status: row.status,
     audioUrl: row.audio_url,
     audioStoragePath: row.audio_path,
+    audioProgress: progressFromRow(row),
     listens: row.listens,
   }
+}
+
+async function withFreshAudioUrl(session: VisualizationSession): Promise<VisualizationSession> {
+  if (!session.audioStoragePath) return session
+  const url = await audioStorage.refreshSessionUrl(session.audioStoragePath)
+  return url ? { ...session, audioUrl: url } : session
 }
 
 function readLocal(): VisualizationSession[] {
@@ -61,9 +77,25 @@ export const sessionsService = {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-      if (!error && data) return data.map(rowToSession)
+      if (!error && data) {
+        const mapped = data.map(rowToSession)
+        return Promise.all(mapped.map(withFreshAudioUrl))
+      }
     }
     return readLocal()
+  },
+
+  async get(id: string, userId?: string): Promise<VisualizationSession | null> {
+    if (isSupabaseConfigured() && supabase && userId) {
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (!error && data) return withFreshAudioUrl(rowToSession(data))
+    }
+    return readLocal().find((s) => s.id === id) ?? null
   },
 
   persistLocal(sessions: VisualizationSession[]) {
@@ -75,6 +107,8 @@ export const sessionsService = {
     const title = titleFromAnswers(answers)
     const durationMinutes = durationFromAnswers(answers)
     const voiceId = voiceFromAnswers(answers)
+    /** Connecté → génération audio prévue ; invité → brouillon local sans TTS */
+    const status = userId ? 'generating' : 'draft'
 
     if (isSupabaseConfigured() && supabase && userId) {
       const { data, error } = await supabase
@@ -83,9 +117,10 @@ export const sessionsService = {
           user_id: userId,
           title,
           answers,
-          status: 'draft',
+          status,
           duration_minutes: durationMinutes,
           voice_id: voiceId,
+          audio_bytes: status === 'generating' ? 5 : null,
           listens: 0,
         })
         .select('*')
@@ -95,7 +130,7 @@ export const sessionsService = {
       console.warn('[sessions] insert failed, fallback local', error)
     }
 
-    const session: VisualizationSession = {
+    return {
       id: crypto.randomUUID(),
       userId,
       title,
@@ -107,7 +142,14 @@ export const sessionsService = {
       audioUrl: null,
       listens: 0,
     }
-    return session
+  },
+
+  async patchLocal(
+    id: string,
+    patch: Partial<VisualizationSession>,
+    sessions: VisualizationSession[],
+  ): Promise<VisualizationSession[]> {
+    return sessions.map((s) => (s.id === id ? { ...s, ...patch, updatedAt: new Date().toISOString() } : s))
   },
 
   async remove(id: string, userId?: string): Promise<void> {
@@ -126,10 +168,5 @@ export const sessionsService = {
         .eq('user_id', userId)
       if (error) throw error
     }
-  },
-
-  async attachAudio(_sessionId: string, _file: Blob): Promise<string | null> {
-    if (!isSupabaseConfigured()) return null
-    return null
   },
 }

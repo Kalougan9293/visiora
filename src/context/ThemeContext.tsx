@@ -16,7 +16,6 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
-
 const STORAGE_KEY = 'visiora-theme'
 
 function getInitialTheme(): Theme {
@@ -35,7 +34,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('light', theme === 'light')
     localStorage.setItem(STORAGE_KEY, theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#1A1612' : '#FAF7F2')
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#020C25' : '#FAF7F2')
   }, [theme])
 
   const setTheme = useCallback((next: Theme) => setThemeState(next), [])

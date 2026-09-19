@@ -47,7 +47,7 @@ export function Header() {
             'relative border-b backdrop-blur-xl',
             isAqua
               ? 'border-white/10 bg-[#0d3d47]/75'
-              : 'border-black/8 bg-cream/80 dark:border-white/8 dark:bg-ink/75',
+              : 'border-black/8 bg-cream/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-nuit)]/90',
           )}
         >
           <div className="relative flex h-14 items-center justify-center px-4">
@@ -59,7 +59,7 @@ export function Header() {
                   'absolute left-3 top-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] transition-all',
                   isAqua
                     ? 'border border-white/25 bg-white/10 text-[#e8f7f9] hover:bg-white/15'
-                    : 'border border-black/12 bg-black/[0.03] text-ink/55 hover:border-olive/40 hover:text-olive dark:border-champagne/20 dark:text-champagne/78 dark:hover:text-gold',
+                    : 'border border-black/12 bg-black/[0.03] text-ink/68 hover:border-olive/40 hover:text-olive dark:border-[var(--vs-ardoise)] dark:bg-white/5 dark:text-[var(--vs-texte-faible)] dark:hover:border-[var(--vs-azur)] dark:hover:text-[var(--vs-ecume)]',
                 )}
                 title={isAqua ? 'Revenir à la version client' : 'Ouvrir la version test'}
               >
@@ -73,7 +73,7 @@ export function Header() {
                   'text-2xl font-medium tracking-[0.14em] transition-colors',
                   isAqua
                     ? 'text-[#e8f7f9] hover:text-[#7ed4df]'
-                    : 'font-display text-ink group-hover:text-olive dark:text-cream dark:group-hover:text-gold',
+                    : 'vs-logotype !text-2xl',
                 )}
                 style={isAqua ? { fontFamily: 'var(--font-aqua-display)' } : undefined}
               >
@@ -92,7 +92,7 @@ export function Header() {
                         'inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all',
                         isAqua
                           ? 'border-white/20 text-[#e8f7f9]/90 hover:border-[#7ed4df]/50 hover:text-[#7ed4df]'
-                          : 'border-black/15 text-ink/85 hover:border-olive/50 hover:text-olive dark:border-champagne/25 dark:text-cream/85 dark:hover:border-gold/40 dark:hover:text-gold',
+                          : 'border-black/15 text-ink/85 hover:border-olive/50 hover:text-olive dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)] dark:hover:border-[var(--vs-azur)] dark:hover:text-[var(--vs-ecume)]',
                       )}
                     >
                       <User size={13} strokeWidth={1.75} />
@@ -105,7 +105,7 @@ export function Header() {
                           'absolute right-0 top-[calc(100%+0.4rem)] z-50 min-w-[7.5rem] rounded-xl border px-1 py-1 shadow-lg backdrop-blur-xl',
                           isAqua
                             ? 'border-white/15 bg-[#0d3d47]/95'
-                            : 'border-black/10 bg-cream/95 dark:border-white/12 dark:bg-ink-elevated/95',
+                            : 'border-black/10 bg-cream/95 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
                         )}
                       >
                         <button
@@ -115,7 +115,7 @@ export function Header() {
                             'w-full rounded-lg px-3 py-2 text-center text-[11px] tracking-wide transition',
                             isAqua
                               ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-[#e8f7f9]'
-                              : 'text-ink/55 hover:bg-black/[0.04] hover:text-ink dark:text-champagne/65 dark:hover:bg-white/8 dark:hover:text-cream',
+                              : 'text-ink/68 hover:bg-black/[0.04] hover:text-ink dark:text-[var(--vs-texte-faible)] dark:hover:bg-white/5 dark:hover:text-[var(--vs-ecume)]',
                           )}
                         >
                           Déconnexion
@@ -131,7 +131,7 @@ export function Header() {
                       'inline-flex h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all',
                       isAqua
                         ? 'border-white/20 text-[#e8f7f9]/90 hover:border-[#7ed4df]/50 hover:text-[#7ed4df]'
-                        : 'border-black/15 text-ink/85 hover:border-olive/50 hover:text-olive dark:border-champagne/25 dark:text-cream/85 dark:hover:border-gold/40 dark:hover:text-gold',
+                        : 'border-black/15 text-ink/85 hover:border-olive/50 hover:text-olive dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)] dark:hover:border-[var(--vs-azur)] dark:hover:text-[var(--vs-ecume)]',
                     )}
                   >
                     <User size={13} strokeWidth={1.75} />

@@ -260,6 +260,26 @@
   }
 }
 
+/* Cadre lumineux au focus — même logique que la version client */
+html.variant-aqua :focus-visible {
+  outline: 2px solid #e8f7f9;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+html.variant-aqua input:focus,
+html.variant-aqua textarea:focus,
+html.variant-aqua .aqua-field-lit {
+  outline: 2px solid #e8f7f9 !important;
+  outline-offset: 2px !important;
+  border-color: #e8f7f9 !important;
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 2px #0d3d47,
+    0 0 0 4px #e8f7f9,
+    0 0 22px rgba(232, 247, 249, 0.35);
+}
+
 /* Petites hauteurs : densifier sans cacher le bas */
 @media (max-height: 700px) {
   .variant-aqua .aqua-home-tight .aqua-brand {

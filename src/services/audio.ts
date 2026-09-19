@@ -1,34 +1,56 @@
 /**
- * ElevenLabs / audio pipeline stubs.
- * Architecture: generate once offline → store in Supabase Storage → stream URL here.
- * Never call live TTS from the client during playback.
+ * Pipeline audio Visiora.
+ * Le front déclenche le job et lit le statut en base.
+ * Jamais de TTS live côté client à la lecture.
  */
 
-export interface AudioSource {
-  url: string
-  durationSeconds?: number
-  mimeType?: string
+import { isSupabaseConfigured, supabase } from './supabase'
+
+export interface EnqueueAudioResult {
+  ok: boolean
+  accepted?: boolean
+  error?: string
 }
 
-export interface GenerateAudioRequest {
-  sessionId: string
-  script: string
-  voiceId: string
-  /** ambient bed track id */
-  ambianceId?: string
+type InvokePayload = {
+  ok?: boolean
+  accepted?: boolean
+  error?: string
+  status?: string
+}
+
+function looksLikeTimeout(message: string): boolean {
+  return /timeout|timed out|504|546|network/i.test(message)
 }
 
 export const audioService = {
   /**
-   * Future server endpoint: POST /api/audio/generate
-   * Uses ElevenLabs on the backend, uploads result, returns CDN URL.
+   * Démarre le traitement audio (réponse 202). Le MP3 arrive plus tard en base.
    */
-  async requestGeneration(_payload: GenerateAudioRequest): Promise<AudioSource | null> {
-    console.info('[audio] Generation pipeline not connected yet')
-    return null
-  },
+  async enqueueGeneration(sessionId: string, force = false): Promise<EnqueueAudioResult> {
+    if (!isSupabaseConfigured() || !supabase) {
+      return { ok: false, error: 'Supabase non configuré' }
+    }
 
-  resolvePlaybackUrl(sessionAudioUrl?: string | null): string | null {
-    return sessionAudioUrl ?? null
+    const { data, error } = await supabase.functions.invoke<InvokePayload>(
+      'generate-session-audio',
+      { body: { sessionId, force } },
+    )
+
+    if (error) {
+      const fromBody = data && typeof data === 'object' ? data.error : undefined
+      const message = fromBody || error.message
+      if (looksLikeTimeout(message)) {
+        return { ok: true, accepted: true }
+      }
+      console.warn('[audio] enqueue failed', error, data)
+      return { ok: false, error: message }
+    }
+
+    if (data?.status === 'failed' || data?.error) {
+      return { ok: false, error: data.error ?? 'Génération échouée' }
+    }
+
+    return { ok: true, accepted: true }
   },
 }

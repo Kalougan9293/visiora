@@ -14,6 +14,7 @@ import { ProgressPage } from '@/pages/ProgressPage'
 import { AquaProgressPage } from '@/pages/AquaProgressPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
+import { VoicesLabPage } from '@/pages/VoicesLabPage'
 
 function HomeSwitch() {
   const { isAqua } = useVariant()
@@ -50,6 +51,9 @@ export default function App() {
                   <Route path="bibliotheque" element={<LibrarySwitch />} />
                   <Route path="suivi" element={<ProgressSwitch />} />
                   <Route path="profil" element={<ProfilePage />} />
+                  {import.meta.env.DEV && (
+                    <Route path="voix" element={<VoicesLabPage />} />
+                  )}
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
               </Routes>

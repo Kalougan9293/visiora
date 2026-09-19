@@ -55,9 +55,9 @@ Static Site — config dans `render.yaml` :
 - Rewrite SPA : `/*` → `/index.html`
 - Env **Build** obligatoires : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
-## Admin
+## Voice API (ElevenLabs)
 
-Pour l’instant : `/admin` → login UI temporaire `jonathan` / `france`.  
-Plus tard : compte Supabase + `is_admin` (voir `phase1_hardening.sql`).
-
-Si après le durcissement SQL le dashboard dit `not authorized` → exécute `admin_temp_dev.sql`.
+Pipeline documenté dans `supabase/VOICE.md` :
+1. Déployer l’Edge Function `generate-session-audio`
+2. Secret serveur `ELEVENLABS_API_KEY` (jamais dans `.env` Vite)
+3. Créer une séance **connecté** → job asynchrone → MP3 en Bibliothèque

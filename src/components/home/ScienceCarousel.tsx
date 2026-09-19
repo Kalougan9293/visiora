@@ -113,20 +113,20 @@ export function ScienceCarousel() {
                 <div
                   className={cn(
                     'flex h-full min-h-[210px] flex-col items-center justify-center rounded-2xl p-5 text-center',
-                    'glass texture-paper',
-                    active && 'glow-gold',
+                    'glass',
+                    active && 'border-olive dark:border-[var(--vs-azur)]',
                   )}
                 >
-                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-gold/12 text-gold">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-olive/15 text-olive">
                     <Icon size={20} strokeWidth={1.75} />
                   </div>
-                  <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-ink/65 dark:text-gold-bright/90">
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-olive">
                     0{i + 1}
                   </p>
                   <h3 className="font-medium leading-snug text-ink dark:text-cream">
                     {card.title}
                   </h3>
-                  <p className="mt-2 text-sm leading-relaxed text-ink/70 dark:text-cream/78">
+                  <p className="mt-2 text-sm leading-relaxed text-ink/82 dark:text-cream/90">
                     {card.body}
                   </p>
                 </div>
@@ -146,13 +146,13 @@ export function ScienceCarousel() {
             className={cn(
               'h-1.5 rounded-full transition-all duration-300',
               i === index
-                ? 'w-6 bg-olive dark:bg-gold'
+                ? 'w-6 bg-olive'
                 : 'w-1.5 bg-ink/20 hover:bg-ink/35 dark:bg-champagne/35',
             )}
           />
         ))}
       </div>
-      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-ink/45 dark:text-champagne/70">
+      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.18em] text-ink/58 dark:text-champagne/86">
         Glissez pour explorer
       </p>
     </div>

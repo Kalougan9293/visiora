@@ -160,14 +160,14 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
   const labelClass = cn(
     'mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em]',
-    isAqua ? 'text-[#7ed4df]' : 'text-ink/50 dark:text-champagne/60',
+    isAqua ? 'text-[#7ed4df]' : 'text-ink/62 dark:text-champagne/78',
   )
 
   const linkClass = cn(
     'mx-auto block text-center text-xs transition',
     isAqua
       ? 'text-[#b8e4ea]/75 hover:text-[#7ed4df]'
-      : 'text-ink/55 hover:text-olive dark:text-champagne/65 dark:hover:text-gold',
+      : 'text-ink/68 hover:text-olive dark:text-champagne/82 dark:hover:text-gold',
   )
 
   const title =
@@ -215,7 +215,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 'absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border transition',
                 isAqua
                   ? 'border-white/20 text-[#e8f7f9]/80 hover:bg-white/10'
-                  : 'border-black/10 text-ink/60 hover:bg-black/5 dark:border-white/15 dark:text-cream/70 dark:hover:bg-white/10',
+                  : 'border-black/10 text-ink/72 hover:bg-black/5 dark:border-white/15 dark:text-cream/86 dark:hover:bg-white/10',
               )}
               aria-label="Fermer"
             >
@@ -350,7 +350,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                                 ? 'font-medium text-emerald-500'
                                 : isAqua
                                   ? 'text-[#b8e4ea]/70'
-                                  : 'text-ink/55 dark:text-champagne/60',
+                                  : 'text-ink/68 dark:text-champagne/78',
                             )}
                           >
                             <span
@@ -374,7 +374,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     <label
                       className={cn(
                         'mx-auto flex max-w-[16rem] cursor-pointer items-start gap-2.5 pt-1 text-left text-[11px] leading-snug sm:text-xs',
-                        isAqua ? 'text-[#b8e4ea]/75' : 'text-ink/60 dark:text-champagne/65',
+                        isAqua ? 'text-[#b8e4ea]/75' : 'text-ink/72 dark:text-champagne/82',
                       )}
                     >
                       <input

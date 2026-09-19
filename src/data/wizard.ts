@@ -152,11 +152,6 @@ export const WIZARD_STEPS: WizardStep[] = [
     subtitle: 'Choisissons la texture vocale et littéraire de ton voyage.',
     fields: [
       {
-        id: 'q12_voice',
-        label: 'Q12. STYLE DE LA SÉANCE (VOIX & REGISTRE)',
-        type: 'voice',
-      },
-      {
         id: 'q12_tutoiement',
         label: 'Formulation de guidage :',
         type: 'choice-row',
@@ -182,57 +177,79 @@ export const WIZARD_STEPS: WizardStep[] = [
         type: 'text',
         optional: true,
       },
+      {
+        id: 'q12_voice',
+        label: 'Q12. STYLE DE LA SÉANCE (VOIX)',
+        type: 'voice',
+      },
     ],
   },
 ]
 
 export const VOICES = [
   {
-    id: 'rachel',
-    name: 'Rachel',
-    description: 'Douce & Enveloppante',
+    id: 'rituel',
+    name: 'Rituel',
+    description: 'Référence · fond oiseaux',
     gender: 'Féminin',
-    tag: 'SOPHROLOGIE & RELAXATION',
+    tag: '10/10',
+    ambiance: 'oiseaux',
+    preview: '/voices/rituel-clone-sample.mp3',
+  },
+  {
+    id: 'onde',
+    name: 'Onde',
+    description: 'Variante · fond eau',
+    gender: 'Féminin',
+    tag: '8/10',
+    ambiance: 'eau',
+    preview: '/voices/onde-clone-sample.mp3?v=slow1',
   },
   {
     id: 'antoni',
     name: 'Antoni',
-    description: 'Posée, Profonde & Calme',
+    description: 'ElevenLabs · fond spa',
     gender: 'Masculin',
-    tag: 'ANCRAGE & RESPIRATION',
+    tag: '6/10',
+    ambiance: 'spa',
+    preview: '/voices/antoni.mp3?v=fr5',
   },
-  {
-    id: 'bella',
-    name: 'Bella',
-    description: 'Inspirante & Lumineuse',
-    gender: 'Féminin',
-    tag: 'IMAGERIE & MOTIVATION',
-  },
+] as const
+
+export const AMBIANCES = [
+  { id: 'eau', label: 'Eau', description: 'Flux doux' },
+  { id: 'oiseaux', label: 'Oiseaux', description: 'Nature légère' },
+  { id: 'spa', label: 'Spa', description: 'Pad calme' },
 ] as const
 
 /** Voix Aqua : portraits carrés (sans noms) — placer les images dans /public/voices/ */
 export const AQUA_VOICES = [
   {
-    id: 'rachel',
+    id: 'rituel',
     photo: '/voices/yoga.jpg',
-    label: 'Yoga',
-    vibe: 'Douce & enveloppante',
-    /** Cadrage portrait : visage haut dans la source → ancrer en haut */
+    label: 'Rituel',
+    vibe: 'Oiseaux',
     objectPosition: '50% 12%',
+    ambiance: 'oiseaux' as const,
+    preview: '/voices/rituel-clone-sample.mp3',
+  },
+  {
+    id: 'onde',
+    photo: '/voices/pilates.jpg',
+    label: 'Onde',
+    vibe: 'Eau',
+    objectPosition: '50% 8%',
+    ambiance: 'eau' as const,
+    preview: '/voices/onde-clone-sample.mp3?v=slow1',
   },
   {
     id: 'antoni',
-    photo: '/voices/pilates.jpg',
-    label: 'Pilates',
-    vibe: 'Posée & ancrée',
-    objectPosition: '50% 8%',
-  },
-  {
-    id: 'bella',
     photo: '/voices/reformer.jpg',
-    label: 'Reformer',
-    vibe: 'Inspirante & lumineuse',
+    label: 'Antoni',
+    vibe: 'Spa',
     objectPosition: '50% 18%',
+    ambiance: 'spa' as const,
+    preview: '/voices/antoni.mp3?v=fr5',
   },
 ] as const
 

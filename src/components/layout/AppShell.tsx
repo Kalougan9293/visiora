@@ -28,7 +28,7 @@ export function AppShell() {
       <div
         className={cn(
           'relative mx-auto flex min-h-dvh w-full flex-1 flex-col',
-          isAqua ? 'max-w-none' : 'max-w-md md:max-w-3xl',
+          isAqua ? 'max-w-none' : 'max-w-[35rem]',
           fillViewport && 'h-dvh max-h-dvh overflow-hidden',
         )}
       >

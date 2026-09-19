@@ -1,0 +1,16 @@
+# Visiora — config Supabase (Edge Functions)
+# Déploiement : supabase functions deploy generate-session-audio
+# Secret : supabase secrets set ELEVENLABS_API_KEY=sk_...
+
+[edge_runtime]
+policy = "per_worker"
+
+[functions.generate-session-audio]
+verify_jwt = true
+
+[functions.list-eleven-voices]
+verify_jwt = true
+
+
+
+

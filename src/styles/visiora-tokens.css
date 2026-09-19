@@ -1,0 +1,168 @@
+/* ==========================================================================
+   VISIORA — jetons de design (version client)
+   Source : cahier des charges MVP, septembre 2026
+   Aqua (version test) n’utilise pas ce fichier.
+   ========================================================================== */
+
+.variant-classic {
+  --vs-nuit: #020c25;
+  --vs-abysse: #0b1e44;
+  --vs-azur: #5797b4;
+  --vs-ecume: #c2f6fc;
+  --vs-or: #e09a38;
+  --vs-coeur: #fff3d0;
+  --vs-brume: #8fa3b8;
+  --vs-ardoise: #263a56;
+  --vs-lunaire: #e9eff4;
+
+  --vs-fond: var(--vs-nuit);
+  --vs-surface: var(--vs-abysse);
+  --vs-bordure: var(--vs-ardoise);
+  --vs-bordure-active: var(--vs-azur);
+  --vs-texte: var(--vs-lunaire);
+  --vs-texte-faible: var(--vs-brume);
+  --vs-texte-fort: var(--vs-ecume);
+  --vs-accent: var(--vs-or);
+  --vs-accent-texte: var(--vs-nuit);
+
+  --vs-lueur-centre: radial-gradient(
+    circle at 50% 18%,
+    color-mix(in srgb, var(--vs-or) 10%, transparent) 0%,
+    transparent 60%
+  );
+
+  --vs-police-titre: 'Marcellus', Georgia, 'Times New Roman', serif;
+  --vs-police-texte: 'Karla', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --vs-courbe: cubic-bezier(0.22, 1, 0.36, 1);
+  --vs-rayon-s: 12px;
+  --vs-rayon-m: 20px;
+  --vs-cible-min: 44px;
+  --font-display: var(--vs-police-titre);
+  --font-sans: var(--vs-police-texte);
+  --ease-out-expo: var(--vs-courbe);
+}
+
+/* Sombre = charte client — textes un cran plus blancs pour la lecture */
+.variant-classic.dark {
+  --vs-texte: color-mix(in srgb, var(--vs-lunaire) 42%, #ffffff);
+  --vs-texte-fort: color-mix(in srgb, var(--vs-ecume) 52%, #ffffff);
+  --vs-texte-faible: color-mix(in srgb, var(--vs-brume) 48%, #e4eef4);
+
+  --color-ink: var(--vs-nuit);
+  --color-ink-soft: var(--vs-abysse);
+  --color-ink-elevated: var(--vs-abysse);
+  --color-cream: color-mix(in srgb, var(--vs-ecume) 38%, #ffffff);
+  --color-cream-soft: color-mix(in srgb, var(--vs-lunaire) 30%, #ffffff);
+  --color-cream-card: var(--vs-abysse);
+  --color-gold: var(--vs-or);
+  --color-gold-bright: var(--vs-coeur);
+  --color-champagne: color-mix(in srgb, var(--vs-brume) 46%, #e8f0f5);
+  --color-olive: var(--vs-azur);
+  --color-olive-soft: var(--vs-ecume);
+}
+
+/* Clair = version crème / olive — textes un cran plus encre */
+.variant-classic:not(.dark) {
+  --color-ink: #100e0c;
+  --color-ink-soft: #1a1714;
+  --color-ink-elevated: #241f1a;
+  --color-cream: #faf7f2;
+  --color-cream-soft: #f3eee6;
+  --color-cream-card: #ffffff;
+  --color-gold: #d4a574;
+  --color-gold-bright: #e8c49a;
+  --color-champagne: #5c5448;
+  --color-olive: #4f5a38;
+  --color-olive-soft: #7d8c68;
+}
+
+.variant-classic.dark,
+.variant-classic.dark body {
+  color-scheme: dark;
+}
+
+.variant-classic.dark body {
+  background-color: var(--vs-fond);
+  background-image: var(--vs-lueur-centre);
+  color: var(--vs-texte);
+  font-family: var(--vs-police-texte);
+}
+
+.variant-classic:not(.dark),
+.variant-classic:not(.dark) body {
+  color-scheme: light;
+}
+
+.variant-classic:not(.dark) body {
+  background-color: var(--color-cream);
+  background-image: none;
+  color: var(--color-ink);
+  font-family: var(--vs-police-texte);
+}
+
+.variant-classic h1,
+.variant-classic h2,
+.variant-classic h3,
+.variant-classic .font-display {
+  font-family: var(--vs-police-titre);
+  font-weight: 400;
+}
+
+.variant-classic.dark h1,
+.variant-classic.dark h2,
+.variant-classic.dark h3,
+.variant-classic.dark .font-display {
+  color: var(--vs-texte-fort);
+}
+
+.variant-classic:not(.dark) h1,
+.variant-classic:not(.dark) h2,
+.variant-classic:not(.dark) h3,
+.variant-classic:not(.dark) .font-display {
+  color: var(--color-ink);
+}
+
+.variant-classic.dark h1 .vs-titre-accent {
+  color: var(--vs-azur);
+}
+
+.variant-classic:not(.dark) h1 .vs-titre-accent {
+  color: var(--color-olive);
+}
+
+.variant-classic .vs-logotype {
+  font-family: var(--vs-police-titre);
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+.variant-classic.dark .vs-logotype {
+  color: var(--vs-texte-fort);
+}
+
+.variant-classic:not(.dark) .vs-logotype {
+  color: var(--color-ink);
+}
+
+.variant-classic.dark :focus-visible {
+  outline: 2px solid var(--vs-ecume);
+  outline-offset: 2px;
+  border-radius: var(--vs-rayon-s);
+}
+
+.variant-classic:not(.dark) :focus-visible {
+  outline: 2px solid var(--color-olive);
+  outline-offset: 2px;
+  border-radius: var(--vs-rayon-s);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .variant-classic *,
+  .variant-classic *::before,
+  .variant-classic *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

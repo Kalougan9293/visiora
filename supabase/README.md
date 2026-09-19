@@ -43,7 +43,8 @@ Puis relancer `npm run dev`.
 Connexion avec le **même compte Supabase Auth** que l’app (email + mot de passe).
 Sans `is_admin = true` → accès refusé. Les RPCs refusent aussi les non-admins côté base.
 
-## Stockage audio (plus tard — Phase 2)
+## Stockage audio / Voice API
+Voir **`supabase/VOICE.md`** pour déployer l’Edge Function `generate-session-audio` et configurer `ELEVENLABS_API_KEY`.
+
 Convention : `audios/{user_id}/{session_id}.mp3`  
-Champs DB prêts : `audio_path`, `audio_url`, `audio_bytes`, `voice_id`.  
-Upload / quotas : `src/services/audioStorage.ts` + backend TTS (jamais de clé dans `VITE_*`).
+Champs DB : `audio_path`, `audio_url`, `audio_bytes`, `voice_id`, `status`.

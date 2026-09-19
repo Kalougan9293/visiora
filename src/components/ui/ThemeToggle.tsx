@@ -12,12 +12,12 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={toggleTheme}
       aria-label={isDark ? 'Passer en mode clair' : 'Passer en mode sombre'}
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-full border transition-all duration-300',
-        'border-black/15 bg-cream-card text-ink/80 shadow-sm',
-        'hover:border-olive/40 hover:text-olive hover:shadow',
-        'dark:border-champagne/20 dark:bg-ink-elevated dark:text-champagne/80',
-        'dark:hover:border-gold/40 dark:hover:text-gold',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/40',
+        'flex h-8 w-8 items-center justify-center rounded-full border shadow-sm transition-all duration-300',
+        'border-[#5f6b45]/40 bg-[#faf7f2] text-[#5f6b45]',
+        'hover:border-[#5f6b45] hover:bg-[#5f6b45]/10',
+        'dark:border-[#5f6b45]/55 dark:bg-[#0b1e44] dark:text-[#5f6b45]',
+        'dark:hover:border-[#9aab82] dark:hover:text-[#9aab82]',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5f6b45]/40',
         className,
       )}
     >

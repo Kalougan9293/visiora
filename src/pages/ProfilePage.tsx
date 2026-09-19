@@ -1,14 +1,11 @@
 import { User } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { ThemeToggle } from '@/components/ui/ThemeToggle'
-import { useTheme } from '@/context/ThemeContext'
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
 import { useVariant } from '@/context/VariantContext'
 import { cn } from '@/lib/utils'
 
 export function ProfilePage() {
-  const { theme } = useTheme()
   const { sessions, stats } = useSessions()
   const { user, profile, signOut, configured } = useAuth()
   const { isAqua } = useVariant()
@@ -24,7 +21,9 @@ export function ProfilePage() {
         <div
           className={cn(
             'flex h-16 w-16 items-center justify-center rounded-full',
-            isAqua ? 'bg-white/10 text-[#7ed4df]' : 'bg-gold/20 text-gold',
+            isAqua
+              ? 'bg-white/10 text-[#7ed4df]'
+              : 'bg-olive/15 text-olive dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-azur)]',
           )}
         >
           <User size={28} strokeWidth={1.5} />
@@ -42,7 +41,7 @@ export function ProfilePage() {
           <p
             className={cn(
               'mt-1 text-sm',
-              isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/70 dark:text-champagne/78',
+              isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/82 dark:text-champagne/90',
             )}
           >
             {user
@@ -55,20 +54,6 @@ export function ProfilePage() {
       </div>
 
       <Card className="w-full !p-4 space-y-4">
-        {!isAqua && (
-          <>
-            <div className="flex flex-col items-center gap-2">
-              <span className="text-sm">Thème</span>
-              <div className="flex flex-col items-center gap-2">
-                <span className="text-xs text-ink/65 dark:text-champagne/75">
-                  {theme === 'dark' ? 'Sombre' : 'Clair'}
-                </span>
-                <ThemeToggle />
-              </div>
-            </div>
-            <div className="h-px bg-black/5 dark:bg-white/5" />
-          </>
-        )}
         <Row label="Séances créées" value={String(sessions.length)} isAqua={isAqua} />
         <Row label="Série actuelle" value={`${stats.streakDays} j`} isAqua={isAqua} />
         <Row label="Écoutes" value={String(stats.totalListens)} isAqua={isAqua} />
@@ -85,7 +70,7 @@ export function ProfilePage() {
             'text-xs uppercase tracking-[0.14em] transition',
             isAqua
               ? 'text-[#b8e4ea]/55 hover:text-[#7ed4df]'
-              : 'text-ink/50 hover:text-olive dark:text-champagne/55 dark:hover:text-gold',
+              : 'text-ink/62 hover:text-olive dark:text-champagne/72 dark:hover:text-olive',
           )}
         >
           Déconnexion
@@ -106,7 +91,7 @@ function Row({
 }) {
   return (
     <div className="flex flex-col items-center gap-0.5 text-sm">
-      <span className={isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/70 dark:text-champagne/82'}>
+      <span className={isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/82 dark:text-champagne/92'}>
         {label}
       </span>
       <span className="font-medium">{value}</span>

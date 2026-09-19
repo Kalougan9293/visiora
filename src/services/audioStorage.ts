@@ -2,8 +2,7 @@ import { AUDIO_BUCKET, isSupabaseConfigured, supabase } from './supabase'
 import { authService } from './auth'
 
 /**
- * Préparation Storage audios — upload réel + garde-fous plus tard.
- * Convention : audios/{userId}/{sessionId}.mp3
+ * Storage audios — convention : audios/{userId}/{sessionId}.mp3
  */
 export const audioStorage = {
   bucket: AUDIO_BUCKET,
@@ -12,21 +11,18 @@ export const audioStorage = {
     return authService.audioObjectPath(userId, sessionId, ext)
   },
 
-  async upload(_userId: string, _sessionId: string, _file: Blob): Promise<{
-    path: string | null
-    bytes: number | null
-    error: string | null
-  }> {
-    if (!isSupabaseConfigured() || !supabase) {
-      return { path: null, bytes: null, error: 'Supabase non configuré' }
+  async getSignedUrl(path: string, expiresIn = 3600 * 24): Promise<string | null> {
+    if (!isSupabaseConfigured() || !supabase) return null
+    const { data, error } = await supabase.storage.from(AUDIO_BUCKET).createSignedUrl(path, expiresIn)
+    if (error || !data?.signedUrl) {
+      console.warn('[audioStorage] signed URL failed', error)
+      return null
     }
-    // TODO: upload + limites taille / mime / quota
-    return { path: null, bytes: null, error: 'Upload audio pas encore branché' }
+    return data.signedUrl
   },
 
-  async getSignedUrl(_path: string, _expiresIn = 3600): Promise<string | null> {
-    if (!isSupabaseConfigured() || !supabase) return null
-    // TODO: createSignedUrl
-    return null
+  async refreshSessionUrl(audioPath: string | null | undefined): Promise<string | null> {
+    if (!audioPath) return null
+    return this.getSignedUrl(audioPath)
   },
 }

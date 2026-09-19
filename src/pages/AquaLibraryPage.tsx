@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
-import { AudioPlayer } from '@/components/audio/AudioPlayer'
+import { Plus } from 'lucide-react'
 import { FlickeringCandle } from '@/components/aqua/FlickeringCandle'
+import { SessionRow } from '@/components/library/SessionRow'
 import { useSessions } from '@/context/SessionsContext'
-import { formatDateFr, cn } from '@/lib/utils'
 
 export function AquaLibraryPage() {
-  const { sessions, removeSession, markListened } = useSessions()
+  const { sessions } = useSessions()
 
   if (sessions.length === 0) {
     return (
@@ -55,7 +54,7 @@ export function AquaLibraryPage() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center overflow-y-auto pb-2 text-center">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pb-2 text-center">
       <header className="w-full shrink-0">
         <h1
           className="text-3xl text-[#e8f7f9]"
@@ -77,31 +76,9 @@ export function AquaLibraryPage() {
         </Link>
       </header>
 
-      <div className="mt-5 w-full space-y-3">
+      <div className="mt-5 w-full space-y-1.5">
         {sessions.map((session) => (
-          <div key={session.id} className={cn('aqua-glass space-y-3 rounded-2xl p-4 text-center')}>
-            <div className="flex flex-col items-center gap-2">
-              <h2 className="font-medium text-[#e8f7f9]">{session.title}</h2>
-              <p className="text-xs text-[#b8e4ea]/80">
-                {formatDateFr(session.createdAt)} · {session.durationMinutes} min ·{' '}
-                {session.listens} écoute{session.listens !== 1 ? 's' : ''}
-              </p>
-              <button
-                type="button"
-                aria-label="Supprimer"
-                onClick={() => removeSession(session.id)}
-                className="rounded-lg p-2 text-[#b8e4ea]/70 transition-colors hover:bg-white/10 hover:text-red-300"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-            <AudioPlayer
-              src={session.audioUrl}
-              title={session.title}
-              subtitle="Séance guidée personnalisée"
-              onPlayStart={() => markListened(session.id)}
-            />
-          </div>
+          <SessionRow key={session.id} session={session} />
         ))}
       </div>
     </div>

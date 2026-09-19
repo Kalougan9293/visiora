@@ -33,7 +33,7 @@ export function ProgressPage() {
         <h1 className="font-display text-3xl tracking-tight text-ink dark:text-cream sm:text-[2rem]">
           Mon Suivi & Progrès
         </h1>
-        <p className="mt-1.5 text-sm text-ink/55 dark:text-champagne/70">
+        <p className="mt-1.5 text-sm text-ink/68 dark:text-champagne/86">
           Régularité de l&apos;ancrage mental quotidien
         </p>
       </header>
@@ -41,39 +41,39 @@ export function ProgressPage() {
       <div className="grid w-full grid-cols-2 gap-3">
         <Card className="!p-4 text-left">
           <div className="flex items-start justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45 dark:text-champagne/60">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/58 dark:text-champagne/78">
               Série active
             </span>
-            <Flame size={18} className="text-orange-500 dark:text-orange-400" strokeWidth={1.75} />
+            <Flame size={18} className="text-olive dark:text-[var(--vs-azur)]" strokeWidth={1.75} />
           </div>
           <p className="mt-3 font-display text-4xl leading-none text-ink dark:text-cream">
             {streakDays}
           </p>
-          <p className="mt-1 text-xs text-ink/50 dark:text-champagne/65">jours consécutifs</p>
+          <p className="mt-1 text-xs text-ink/62 dark:text-champagne/82">jours consécutifs</p>
         </Card>
 
         <Card className="!p-4 text-left">
           <div className="flex items-start justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45 dark:text-champagne/60">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/58 dark:text-champagne/78">
               Écoutes totales
             </span>
             <CircleCheck
               size={18}
-              className="text-ink/40 dark:text-champagne/55"
+              className="text-ink/52 dark:text-champagne/72"
               strokeWidth={1.75}
             />
           </div>
           <p className="mt-3 font-display text-4xl leading-none text-ink dark:text-cream">
             {totalListens}
           </p>
-          <p className="mt-1 text-xs text-ink/50 dark:text-champagne/65">
+          <p className="mt-1 text-xs text-ink/62 dark:text-champagne/82">
             séance{totalListens !== 1 ? 's' : ''} validée{totalListens !== 1 ? 's' : ''}
           </p>
         </Card>
       </div>
 
       <Card className="w-full !p-5 text-left">
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#9a7b5a] dark:text-gold">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/58 dark:text-[var(--vs-texte-faible)]">
           <Award size={14} strokeWidth={1.75} />
           Objectif palier
         </div>
@@ -81,23 +81,23 @@ export function ProgressPage() {
           <h2 className="text-base font-semibold text-ink dark:text-cream">
             Prochain palier : Jour {milestoneTarget}
           </h2>
-          <span className="shrink-0 text-xs text-ink/45 dark:text-champagne/60">
+          <span className="shrink-0 text-xs text-ink/58 dark:text-champagne/78">
             {daysCompletedTowardMilestone}/{milestoneTarget} jours
           </span>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/10">
           <div
-            className="h-full rounded-full bg-olive transition-[width] duration-500 dark:bg-gold"
+            className="h-full rounded-full bg-olive transition-[width] duration-500"
             style={{ width: `${pct}%` }}
           />
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-ink/55 dark:text-champagne/70">
+        <p className="mt-3 text-sm leading-relaxed text-ink/68 dark:text-champagne/86">
           Il te reste encore {remaining} jour{remaining !== 1 ? 's' : ''} d&apos;écoute régulière
           pour consolider ce palier de progression.
         </p>
         <div className="mt-4 rounded-xl bg-black/[0.04] px-4 py-3 dark:bg-white/[0.06]">
           <p className="text-sm font-semibold text-ink dark:text-cream">Sagesse du Palier :</p>
-          <p className="mt-1 text-sm italic leading-relaxed text-ink/60 dark:text-champagne/75">
+          <p className="mt-1 text-sm italic leading-relaxed text-ink/72 dark:text-champagne/88">
             « {MILESTONE_WISDOM} »
           </p>
         </div>
@@ -109,13 +109,13 @@ export function ProgressPage() {
             <CalendarDays
               size={16}
               strokeWidth={1.75}
-              className="text-ink/55 dark:text-champagne/70"
+              className="text-ink/68 dark:text-champagne/86"
             />
             <h2 className="text-sm font-semibold text-ink dark:text-cream">
               Journal des 14 derniers jours
             </h2>
           </div>
-          <span className="text-[11px] text-ink/40 dark:text-champagne/55">
+          <span className="text-[11px] text-ink/52 dark:text-champagne/72">
             1 seule écoute / jour
           </span>
         </div>
@@ -133,8 +133,8 @@ export function ProgressPage() {
                 className={cn(
                   'flex aspect-[3/4] flex-col items-center justify-center rounded-xl border text-[10px]',
                   day.completed
-                    ? 'border-olive/40 bg-olive/15 text-ink dark:border-gold/40 dark:bg-gold/20 dark:text-cream'
-                    : 'border-black/8 bg-black/[0.02] text-ink/50 dark:border-white/10 dark:bg-white/[0.03] dark:text-champagne/65',
+                    ? 'border-olive/40 bg-olive/15 text-cream'
+                    : 'border-black/8 bg-black/[0.02] text-ink/62 dark:border-white/10 dark:bg-white/[0.03] dark:text-champagne/82',
                 )}
               >
                 <span className="opacity-70">{label}</span>
@@ -150,12 +150,12 @@ export function ProgressPage() {
 
       <Card className="w-full !p-5 text-left">
         <div className="flex items-center gap-2">
-          <HelpCircle size={16} strokeWidth={1.75} className="text-ink/55 dark:text-champagne/70" />
+          <HelpCircle size={16} strokeWidth={1.75} className="text-ink/68 dark:text-champagne/86" />
           <h2 className="text-sm font-semibold text-ink dark:text-cream">
             Pourquoi la régularité quotidienne ?
           </h2>
         </div>
-        <div className="mt-4 space-y-4 text-sm leading-relaxed text-ink/60 dark:text-champagne/75">
+        <div className="mt-4 space-y-4 text-sm leading-relaxed text-ink/72 dark:text-champagne/88">
           <p>
             <span className="font-semibold text-ink dark:text-cream">La gravure neuronale : </span>
             Chaque séance d&apos;imagerie mentale trace des connexions. La répétition quotidienne
@@ -183,7 +183,7 @@ export function ProgressPage() {
             'border-black/15 bg-black/[0.02] dark:border-champagne/20 dark:bg-white/[0.03]',
           )}
         >
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#9a7b5a] dark:text-gold">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-olive">
             Zone de test de progression (simulateur)
           </p>
           <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center">

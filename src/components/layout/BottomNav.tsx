@@ -19,7 +19,7 @@ export function BottomNav() {
         'fixed bottom-0 left-1/2 z-50 w-full -translate-x-1/2 border-t backdrop-blur-xl',
         isAqua
           ? 'max-w-none border-white/15 bg-[#0d3d47]/95'
-          : 'max-w-md border-black/5 bg-cream/90 dark:border-white/5 dark:bg-ink/90 md:max-w-3xl',
+          : 'max-w-[35rem] border-black/8 bg-cream/90 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-nuit)]/95',
       )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
@@ -37,8 +37,8 @@ export function BottomNav() {
                     ? 'bg-white/15 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.2)]'
                     : 'text-[#e8f7f9]/55 hover:text-white hover:bg-white/5'
                   : isActive
-                    ? 'bg-olive/15 text-olive dark:bg-gold/20 dark:text-gold-bright'
-                    : 'text-ink/45 hover:text-ink/70 hover:bg-black/[0.03] dark:text-cream/45 dark:hover:text-cream/75 dark:hover:bg-white/5',
+                    ? 'bg-olive/15 text-olive dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-ecume)]'
+                    : 'text-ink/55 hover:text-ink/80 hover:bg-black/[0.03] dark:text-[var(--vs-texte-faible)] dark:hover:text-[var(--vs-ecume)] dark:hover:bg-white/5',
               )
             }
           >
@@ -48,7 +48,7 @@ export function BottomNav() {
                   <span
                     className={cn(
                       'absolute inset-x-5 top-0 h-0.5 rounded-full',
-                      isAqua ? 'bg-[#7ed4df]' : 'bg-olive dark:bg-gold',
+                      isAqua ? 'bg-[#7ed4df]' : 'bg-olive dark:bg-[var(--vs-azur)]',
                     )}
                   />
                 )}

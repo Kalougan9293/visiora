@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Mic, MicOff, Play } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Mic, MicOff, Pause, Play } from 'lucide-react'
 import { AquaBubbles } from '@/components/aqua/AquaBubbles'
 import {
   AQUA_VOICES,
@@ -11,6 +11,7 @@ import {
 } from '@/data/wizard'
 import { useSessions } from '@/context/SessionsContext'
 import { cn } from '@/lib/utils'
+import { holdAmbiance, releaseAmbiance, type AmbianceId } from '@/services/ambiance'
 
 type Answers = Record<string, string>
 
@@ -29,7 +30,7 @@ export function AquaCreatePage() {
   const [phase, setPhase] = useState<'intro' | 'wizard'>('intro')
   const [stepIdx, setStepIdx] = useState(0)
   const [answers, setAnswers] = useState<Answers>({
-    q12_voice: 'rachel',
+    q12_voice: 'rituel',
     q12_tutoiement: 'tu',
     q12_registre: 'neutre',
   })
@@ -293,53 +294,19 @@ function AquaField({
   onMic: () => void
   placeholder?: string
 }) {
-  const inputClass =
-    'mt-2 w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-center text-sm text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/50 focus:border-[#7ed4df]/60 focus:ring-2 focus:ring-[#7ed4df]/20'
+  const [focused, setFocused] = useState(false)
+  const inputClass = cn(
+    'mt-2 w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-center text-sm text-[#e8f7f9] placeholder:text-[#b8e4ea]/50',
+    focused && 'aqua-field-lit',
+  )
 
   if (field.type === 'voice') {
     return (
-      <div className="w-full">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7ed4df]">
-          {field.label}
-        </p>
-        <p className="mt-1 text-xs text-[#b8e4ea]">Choisis une texture de voix :</p>
-        <div className="mt-4 flex items-center justify-center gap-3 sm:gap-4">
-          {AQUA_VOICES.map((v) => {
-            const selected = answers.q12_voice === v.id
-            return (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => setField('q12_voice', v.id)}
-                aria-label={v.label}
-                className={cn(
-                  'relative h-24 w-24 shrink-0 overflow-hidden rounded-xl transition-all sm:h-28 sm:w-28',
-                  selected
-                    ? 'ring-2 ring-[#7ed4df] shadow-[0_0_16px_rgba(126,212,223,0.35)]'
-                    : 'ring-1 ring-white/15 hover:ring-white/30',
-                )}
-              >
-                <span
-                  className="absolute inset-0 bg-gradient-to-br from-[#1a6b78] to-[#0d3d47]"
-                  aria-hidden
-                />
-                <img
-                  src={v.photo}
-                  alt=""
-                  className="relative h-full w-full object-cover"
-                  style={{ objectPosition: v.objectPosition }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-                <span className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center justify-center rounded-full bg-black/40 p-1.5 text-[#7ed4df] backdrop-blur-sm">
-                  <Play size={10} className="fill-current" />
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <AquaVoiceChoice
+        fieldLabel={field.label}
+        value={answers.q12_voice}
+        onChange={(id) => setField('q12_voice', id)}
+      />
     )
   }
 
@@ -394,6 +361,8 @@ function AquaField({
           <textarea
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder={placeholder ?? field.placeholder}
             rows={4}
             className={cn(inputClass, 'resize-none pr-11')}
@@ -403,6 +372,8 @@ function AquaField({
             type="text"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder={placeholder ?? field.placeholder}
             className={cn(inputClass, 'pr-11')}
           />
@@ -425,6 +396,120 @@ function AquaField({
             <Mic size={13} strokeWidth={2.25} className="block translate-y-px" />
           )}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function AquaVoiceChoice({
+  fieldLabel,
+  value,
+  onChange,
+}: {
+  fieldLabel: string
+  value: string
+  onChange: (id: string) => void
+}) {
+  const [playingId, setPlayingId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  useEffect(() => {
+    const el = audioRef.current
+    return () => {
+      el?.pause()
+      releaseAmbiance()
+    }
+  }, [])
+
+  const stopPreview = () => {
+    const el = audioRef.current
+    el?.pause()
+    releaseAmbiance()
+    setPlayingId(null)
+  }
+
+  const togglePreview = async (id: string, src: string, ambiance: AmbianceId) => {
+    const el = audioRef.current
+    if (!el) return
+    onChange(id)
+    if (playingId === id && !el.paused) {
+      stopPreview()
+      return
+    }
+    el.pause()
+    releaseAmbiance()
+    el.src = src
+    holdAmbiance(ambiance)
+    try {
+      await el.play()
+      setPlayingId(id)
+    } catch {
+      releaseAmbiance()
+      setPlayingId(null)
+    }
+  }
+
+  return (
+    <div className="w-full">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7ed4df]">
+        {fieldLabel}
+      </p>
+      <p className="mt-1 text-xs text-[#b8e4ea]">
+        Chaque voix inclut son fond. Écoute, puis choisis :
+      </p>
+      <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
+      <div className="mt-4 flex items-center justify-center gap-3 sm:gap-4">
+        {AQUA_VOICES.map((v) => {
+          const selected = value === v.id
+          const playing = playingId === v.id
+          return (
+            <div
+              key={v.id}
+              className={cn(
+                'relative h-24 w-24 shrink-0 overflow-hidden rounded-xl transition-all sm:h-28 sm:w-28',
+                selected
+                  ? 'ring-2 ring-[#7ed4df] shadow-[0_0_16px_rgba(126,212,223,0.35)]'
+                  : 'ring-1 ring-white/15',
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onChange(v.id)}
+                aria-label={`${v.label} — fond ${v.vibe}`}
+                className="absolute inset-0"
+              >
+                <span
+                  className="absolute inset-0 bg-gradient-to-br from-[#1a6b78] to-[#0d3d47]"
+                  aria-hidden
+                />
+                <img
+                  src={v.photo}
+                  alt=""
+                  className="relative h-full w-full object-cover"
+                  style={{ objectPosition: v.objectPosition }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none'
+                  }}
+                />
+              </button>
+              <button
+                type="button"
+                onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
+                aria-label={playing ? `Arrêter ${v.label}` : `Écouter ${v.label}`}
+                className={cn(
+                  'absolute bottom-2 left-1/2 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full backdrop-blur-sm',
+                  playing ? 'bg-[#7ed4df] text-[#0d3d47]' : 'bg-black/45 text-[#7ed4df]',
+                )}
+              >
+                {playing ? (
+                  <Pause size={11} className="fill-current" />
+                ) : (
+                  <Play size={11} className="fill-current" />
+                )}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

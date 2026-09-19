@@ -101,7 +101,7 @@ export function MilestonePopup({
           <p
             className={cn(
               'mt-2 text-sm',
-              isAqua ? 'text-[#b8e4ea]' : 'text-ink/55 dark:text-champagne/70',
+              isAqua ? 'text-[#b8e4ea]' : 'text-ink/68 dark:text-champagne/86',
             )}
           >
             Tu viens de franchir un cap exceptionnel :
@@ -119,7 +119,7 @@ export function MilestonePopup({
           <p
             className={cn(
               'mt-5 text-sm italic leading-relaxed',
-              isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/55 dark:text-champagne/70',
+              isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/68 dark:text-champagne/86',
             )}
           >
             « {content.quote} »
