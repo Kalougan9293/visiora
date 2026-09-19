@@ -45,19 +45,19 @@ export const WIZARD_STEPS: WizardStep[] = [
     fields: [
       {
         id: 'q1',
-        label: 'Q1. QUEL OBJECTIF PRÉCIS VEUX-TU ATTEINDRE ?',
+        label: 'Quel objectif précis veux-tu atteindre ?',
         placeholder: "Ex: Passer mon entretien d'embauche avec calme...",
         type: 'text',
       },
       {
         id: 'q2',
-        label: 'Q2. POUR QUAND ? DATE OU ÉCHÉANCE ?',
+        label: 'Pour quand ? Date ou échéance ?',
         placeholder: 'Ex: Le 15 septembre, dans 2 mois...',
         type: 'text',
       },
       {
         id: 'q3',
-        label: 'Q3. POURQUOI EST-CE IMPORTANT POUR TOI, MAINTENANT ?',
+        label: 'Pourquoi est-ce important pour toi, maintenant ?',
         placeholder: 'Ex: Pour lancer ma carrière, me sentir à ma place...',
         type: 'textarea',
       },
@@ -72,7 +72,7 @@ export const WIZARD_STEPS: WizardStep[] = [
     fields: [
       {
         id: 'q4',
-        label: 'Q4. DÉCRIS LA SCÈNE DE RÉUSSITE COMME SI TU Y ÉTAIS :',
+        label: 'Décris la scène de réussite comme si tu y étais :',
         placeholder:
           "Que vois-tu autour de toi ? Qu'entends-tu ? Que ressens-tu physiquement dans ton corps ? (Ex: je vois des visages souriants, j'entends des applaudissements chaleureux, mon cœur bat sereinement...)",
         type: 'textarea',
@@ -80,7 +80,7 @@ export const WIZARD_STEPS: WizardStep[] = [
       },
       {
         id: 'q5',
-        label: 'Q5. QUELLE ÉMOTION VEUX-TU RESSENTIR LE PLUS FORT À LA FIN ?',
+        label: 'Quelle émotion veux-tu ressentir le plus fort à la fin ?',
         placeholder: "Ex: Une paix profonde, une fierté immense, l'invincibilité...",
         type: 'text',
       },
@@ -95,22 +95,21 @@ export const WIZARD_STEPS: WizardStep[] = [
     fields: [
       {
         id: 'q6',
-        label: 'Q6. COMMENT TE SENS-TU À CE SUJET AUJOURD\'HUI ?',
+        label: "Comment te sens-tu à ce sujet aujourd'hui ?",
         placeholder: 'Ex: Anxieux, impatient, hésitant...',
         type: 'text',
       },
       {
         id: 'q7',
         label:
-          "Q7. QU'EST-CE QUI SE MET LE PLUS EN TRAVERS, ET COMMENT AIMERAIS-TU LE VOIR AUTREMENT ?",
+          "Qu'est-ce qui se met le plus en travers, et comment aimerais-tu le voir autrement ?",
         placeholder:
           "Ex: Le syndrome de l'imposteur. J'aimerais le voir comme un signal que j'apprends de nouvelles choses...",
         type: 'textarea',
       },
       {
         id: 'q8',
-        label:
-          'Q8. UNE SENSATION PHYSIQUE LIÉE À CETTE PEUR OU PRÉOCCUPATION CORPORELLE ? (OPTIONNEL)',
+        label: 'Une sensation physique liée à cette peur ? (optionnel)',
         placeholder: 'Ex: Gorge nouée, cheville fragile, estomac lourd...',
         type: 'text',
         optional: true,
@@ -126,19 +125,19 @@ export const WIZARD_STEPS: WizardStep[] = [
     fields: [
       {
         id: 'q9',
-        label: "Q9. QU'EST-CE QUE TU METS DÉJÀ EN PLACE POUR Y ARRIVER ? (1 À 3 CHOSES)",
+        label: "Qu'est-ce que tu mets déjà en place pour y arriver ?",
         placeholder: "Ex: Je révise mes dossiers, je m'entraîne à voix haute devant un miroir...",
         type: 'textarea',
       },
       {
         id: 'q10',
-        label: 'Q10. UNE MICRO-ACTION CONCRÈTE FAISABLE DÈS AUJOURD\'HUI OU DEMAIN ?',
+        label: "Une micro-action concrète faisable dès aujourd'hui ou demain ?",
         placeholder: 'Ex: Envoyer un mail, relire une fiche, faire 3 respirations...',
         type: 'textarea',
       },
       {
         id: 'q11',
-        label: 'Q11. QUELLE NOUVELLE VÉRITÉ PROFONDE VEUX-TU CROIRE SUR TOI ?',
+        label: 'Quelle nouvelle vérité profonde veux-tu croire sur toi ?',
         placeholder: "Ex: J'ai pleinement ma place parmi ces professionnels...",
         type: 'text',
       },
@@ -153,33 +152,33 @@ export const WIZARD_STEPS: WizardStep[] = [
     fields: [
       {
         id: 'q12_tutoiement',
-        label: 'Formulation de guidage :',
+        label: 'Formulation',
         type: 'choice-row',
         choices: [
-          { id: 'tu', label: 'Tutoiement (tu)' },
-          { id: 'vous', label: 'Vouvoiement (vous)' },
+          { id: 'tu', label: 'Tutoiement' },
+          { id: 'vous', label: 'Vouvoiement' },
         ],
       },
       {
         id: 'q12_registre',
-        label: 'Registre de langage :',
+        label: 'Registre',
         type: 'choice-row',
         choices: [
-          { id: 'neutre', label: 'Neutre / Laïc' },
+          { id: 'neutre', label: 'Neutre' },
           { id: 'spirituel', label: 'Spirituel' },
           { id: 'metaphysique', label: 'Métaphysique' },
         ],
       },
       {
         id: 'q13',
-        label: 'Q13. QUEL PRÉNOM VEUX-TU ENTENDRE DURANT TA SÉANCE ? (OPTIONNEL)',
+        label: 'Prénom à entendre (optionnel)',
         placeholder: 'Ex: Marie, Julien...',
         type: 'text',
         optional: true,
       },
       {
         id: 'q12_voice',
-        label: 'Q12. STYLE DE LA SÉANCE (VOIX)',
+        label: 'Voix',
         type: 'voice',
       },
     ],
@@ -189,30 +188,30 @@ export const WIZARD_STEPS: WizardStep[] = [
 export const VOICES = [
   {
     id: 'rituel',
-    name: 'Rituel',
-    description: 'Référence · fond oiseaux',
+    name: 'Vanessa',
+    description: '',
     gender: 'Féminin',
     tag: '10/10',
     ambiance: 'oiseaux',
-    preview: '/voices/rituel-preview.mp3?v=clone1',
+    preview: '/voices/rituel-preview.mp3?v=v3',
   },
   {
     id: 'onde',
-    name: 'Onde',
-    description: 'Variante · fond eau',
+    name: 'Sabrina',
+    description: '',
     gender: 'Féminin',
     tag: '8/10',
     ambiance: 'eau',
-    preview: '/voices/onde-preview.mp3?v=clone1',
+    preview: '/voices/onde-preview.mp3?v=natural1',
   },
   {
     id: 'antoni',
-    name: 'Antoni',
-    description: 'ElevenLabs · fond spa',
-    gender: 'Masculin',
-    tag: '6/10',
-    ambiance: 'spa',
-    preview: '/voices/antoni.mp3?v=fr5',
+    name: 'Amandine',
+    description: '',
+    gender: 'Féminin',
+    tag: '7/10',
+    ambiance: null,
+    preview: '/voices/antoni.mp3?v=dry2',
   },
 ] as const
 
@@ -227,29 +226,29 @@ export const AQUA_VOICES = [
   {
     id: 'rituel',
     photo: '/voices/yoga.jpg',
-    label: 'Rituel',
-    vibe: 'Oiseaux',
+    label: 'Vanessa',
+    vibe: '',
     objectPosition: '50% 12%',
     ambiance: 'oiseaux' as const,
-    preview: '/voices/rituel-preview.mp3?v=clone1',
+    preview: '/voices/rituel-preview.mp3?v=v3',
   },
   {
     id: 'onde',
-    photo: '/voices/pilates.jpg',
-    label: 'Onde',
-    vibe: 'Eau',
-    objectPosition: '50% 8%',
+    photo: '/voices/sabrina.jpg',
+    label: 'Sabrina',
+    vibe: '',
+    objectPosition: '50% 18%',
     ambiance: 'eau' as const,
-    preview: '/voices/onde-preview.mp3?v=clone1',
+    preview: '/voices/onde-preview.mp3?v=natural1',
   },
   {
     id: 'antoni',
     photo: '/voices/reformer.jpg',
-    label: 'Antoni',
-    vibe: 'Spa',
+    label: 'Amandine',
+    vibe: '',
     objectPosition: '50% 18%',
-    ambiance: 'spa' as const,
-    preview: '/voices/antoni.mp3?v=fr5',
+    ambiance: null,
+    preview: '/voices/antoni.mp3?v=dry2',
   },
 ] as const
 

@@ -10,8 +10,10 @@ import {
   type WizardField,
 } from '@/data/wizard'
 import { useSessions } from '@/context/SessionsContext'
+import { useAuth } from '@/context/AuthContext'
+import { AuthModal } from '@/components/auth/AuthModal'
 import { cn } from '@/lib/utils'
-import { holdAmbiance, releaseAmbiance, type AmbianceId } from '@/services/ambiance'
+import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 
 type Answers = Record<string, string>
 
@@ -27,8 +29,11 @@ const INSPIRING_LINES = [
 export function AquaCreatePage() {
   const navigate = useNavigate()
   const { addSession } = useSessions()
+  const { user } = useAuth()
   const [phase, setPhase] = useState<'intro' | 'wizard'>('intro')
   const [stepIdx, setStepIdx] = useState(0)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [pendingStart, setPendingStart] = useState(false)
   const [answers, setAnswers] = useState<Answers>({
     q12_voice: 'rituel',
     q12_tutoiement: 'tu',
@@ -122,6 +127,28 @@ export function AquaCreatePage() {
     rec.start()
   }
 
+  const startWizard = () => {
+    setPhase('wizard')
+    setStepIdx(0)
+  }
+
+  const onStartClick = () => {
+    if (!user) {
+      setPendingStart(true)
+      setAuthOpen(true)
+      return
+    }
+    startWizard()
+  }
+
+  useEffect(() => {
+    if (!user || !pendingStart) return
+    setPendingStart(false)
+    setAuthOpen(false)
+    startWizard()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter wizard only after login
+  }, [user, pendingStart])
+
   const goNext = () => {
     if (stepIdx < WIZARD_STEPS.length - 1) {
       setStepIdx((s) => s + 1)
@@ -142,6 +169,13 @@ export function AquaCreatePage() {
   if (phase === 'intro') {
     return (
       <div className="relative flex h-full min-h-0 flex-1 flex-col items-center overflow-hidden px-4 pb-2 pt-6 text-center sm:pt-8">
+        <AuthModal
+          open={authOpen}
+          onClose={() => {
+            setAuthOpen(false)
+            setPendingStart(false)
+          }}
+        />
         <AquaBubbles density="soft" />
 
         <div className="relative z-10 flex max-w-sm shrink-0 flex-col items-center">
@@ -163,7 +197,7 @@ export function AquaCreatePage() {
         <div className="relative z-10 flex w-full max-w-sm flex-1 flex-col items-center justify-center py-2">
           <button
             type="button"
-            onClick={() => setPhase('wizard')}
+            onClick={onStartClick}
             className="aqua-cta aqua-cta-hero w-full max-w-[16rem] sm:max-w-[17rem]"
           >
             <span>
@@ -194,13 +228,13 @@ export function AquaCreatePage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center text-center">
-      <div className="mb-2 flex w-full shrink-0 items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-[#b8e4ea]">
+      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-[#b8e4ea]/70">
         <span>
-          Étape {step.step} de {step.total}
+          Étape {step.step} / {step.total}
         </span>
-        <span>{step.percent}% complété</span>
+        <span>{step.percent}%</span>
       </div>
-      <div className="mb-3 h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-white/10">
+      <div className="mb-2 h-1 w-full shrink-0 overflow-hidden rounded-full bg-white/10">
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-[#3db8c5] to-[#e8f7f9]"
           initial={false}
@@ -209,29 +243,31 @@ export function AquaCreatePage() {
         />
       </div>
 
-      <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-1">
+      <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-2">
         <AnimatePresence mode="wait">
           <motion.div
             key={step.step}
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="w-full"
+            exit={{ opacity: 0, y: -8 }}
+            className="my-auto w-full"
           >
             <h1
-              className="text-2xl text-[#e8f7f9] sm:text-3xl"
+              className="text-[1.65rem] leading-snug text-[#e8f7f9] sm:text-3xl"
               style={{ fontFamily: 'var(--font-aqua-display)' }}
             >
               {step.title}
             </h1>
-            <p className="mt-2 text-sm text-[#b8e4ea]">{step.subtitle}</p>
+            <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-[#b8e4ea]/80">
+              {step.subtitle}
+            </p>
             {step.step === 1 && (
-              <p className="mt-1.5 text-xs italic text-[#b8e4ea]/65">
+              <p className="mt-1.5 text-xs italic text-[#b8e4ea]/50">
                 Tout est strictement anonyme, lâchez-vous dans vos réponses
               </p>
             )}
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-6 space-y-5">
               {step.fields.map((field) => (
                 <AquaField
                   key={field.id}
@@ -252,11 +288,11 @@ export function AquaCreatePage() {
         </AnimatePresence>
       </div>
 
-      <div className="mt-auto flex w-full shrink-0 gap-2 pt-3 pb-1">
+      <div className="flex w-full shrink-0 gap-2 pt-3 pb-1">
         <button
           type="button"
           onClick={goBack}
-          className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/20 py-3 text-sm font-medium text-[#e8f7f9] transition-colors hover:bg-white/10"
+          className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/15 py-2.5 text-sm font-medium text-[#e8f7f9]/90 transition-colors hover:bg-white/10"
         >
           <ArrowLeft size={16} />
           Retour
@@ -265,7 +301,7 @@ export function AquaCreatePage() {
           type="button"
           disabled={!canContinue}
           onClick={goNext}
-          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#e8f7f9] py-3 text-sm font-semibold text-[#0d3d47] transition-opacity disabled:opacity-40"
+          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#e8f7f9] py-2.5 text-sm font-semibold text-[#0d3d47] transition-opacity disabled:opacity-40"
         >
           {stepIdx === WIZARD_STEPS.length - 1 ? 'Générer' : 'Suivant'}
           <ArrowRight size={16} />
@@ -296,8 +332,8 @@ function AquaField({
 }) {
   const [focused, setFocused] = useState(false)
   const inputClass = cn(
-    'mt-2 w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-center text-sm text-[#e8f7f9] placeholder:text-[#b8e4ea]/50',
-    focused && 'aqua-field-lit',
+    'w-full rounded-2xl border border-white/12 bg-white/[0.07] px-4 py-3 text-center text-sm text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 outline-none transition',
+    focused && 'aqua-field-lit border-[#7ed4df]/35',
   )
 
   if (field.type === 'voice') {
@@ -312,11 +348,9 @@ function AquaField({
 
   if (field.type === 'choice-row') {
     return (
-      <div className="w-full">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7ed4df]">
-          {field.label}
-        </p>
-        <div className="mt-2 flex flex-wrap justify-center gap-2">
+      <div className="w-full text-center">
+        <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{field.label}</p>
+        <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
           {field.choices?.map((c) => {
             const selected = value === c.id
             return (
@@ -325,10 +359,10 @@ function AquaField({
                 type="button"
                 onClick={() => onChange(c.id)}
                 className={cn(
-                  'rounded-full border px-4 py-2 text-sm font-medium transition-all',
+                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all',
                   selected
-                    ? 'border-[#e8f7f9] bg-[#e8f7f9] text-[#0d3d47]'
-                    : 'border-white/20 bg-white/5 text-[#e8f7f9]',
+                    ? 'bg-[#e8f7f9] text-[#0d3d47]'
+                    : 'bg-white/[0.06] text-[#e8f7f9]/80 hover:bg-white/10',
                 )}
               >
                 {c.label}
@@ -341,22 +375,15 @@ function AquaField({
   }
 
   return (
-    <div className="w-full">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7ed4df]">
-        {field.label}
-      </p>
+    <div className="w-full text-center">
+      <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{field.label}</p>
       {field.hint && (
-        <p className="mt-1.5 text-xs italic leading-relaxed text-[#b8e4ea]/80">
+        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-[#b8e4ea]/55">
           {field.hint}
         </p>
       )}
-      {field.badge && (
-        <span className="mt-1.5 inline-block rounded-full bg-white/10 px-2.5 py-0.5 text-[10px] text-[#b8e4ea]">
-          {field.badge}
-        </span>
-      )}
 
-      <div className="relative mt-2">
+      <div className="relative mt-2.5">
         {field.type === 'textarea' ? (
           <textarea
             value={value}
@@ -364,7 +391,7 @@ function AquaField({
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={placeholder ?? field.placeholder}
-            rows={4}
+            rows={3}
             className={cn(inputClass, 'resize-none pr-11')}
           />
         ) : (
@@ -384,7 +411,7 @@ function AquaField({
           aria-label={listening ? 'Arrêter le micro' : 'Dicter au micro'}
           className={cn(
             'absolute right-2.5 flex h-7 w-7 items-center justify-center rounded-full leading-none transition-all',
-            field.type === 'textarea' ? 'top-3.5' : 'inset-y-0 my-auto',
+            field.type === 'textarea' ? 'top-3' : 'top-1/2 -translate-y-1/2',
             listening
               ? 'bg-[#7ed4df] text-[#0d3d47] shadow-[0_0_16px_rgba(126,212,223,0.5)]'
               : 'bg-white/10 text-[#7ed4df] hover:bg-white/20',
@@ -428,7 +455,7 @@ function AquaVoiceChoice({
     setPlayingId(null)
   }
 
-  const togglePreview = async (id: string, src: string, ambiance: AmbianceId) => {
+  const togglePreview = async (id: string, src: string, ambiance: AmbianceChoice) => {
     const el = audioRef.current
     if (!el) return
     onChange(id)
@@ -439,7 +466,7 @@ function AquaVoiceChoice({
     el.pause()
     releaseAmbiance()
     el.src = src
-    holdAmbiance(ambiance)
+    if (ambiance) holdAmbiance(ambiance)
     try {
       await el.play()
       setPlayingId(id)
@@ -450,63 +477,68 @@ function AquaVoiceChoice({
   }
 
   return (
-    <div className="w-full">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#7ed4df]">
-        {fieldLabel}
-      </p>
-      <p className="mt-1 text-xs text-[#b8e4ea]">
-        Chaque voix inclut son fond. Écoute, puis choisis :
-      </p>
+    <div className="w-full text-center">
+      <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{fieldLabel}</p>
+      <p className="mt-1 text-xs text-[#b8e4ea]/55">Écoute, puis choisis</p>
       <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
-      <div className="mt-4 flex items-center justify-center gap-3 sm:gap-4">
+      <div className="mt-3 flex items-end justify-center gap-3">
         {AQUA_VOICES.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
           return (
-            <div
-              key={v.id}
-              className={cn(
-                'relative h-24 w-24 shrink-0 overflow-hidden rounded-xl transition-all sm:h-28 sm:w-28',
-                selected
-                  ? 'ring-2 ring-[#7ed4df] shadow-[0_0_16px_rgba(126,212,223,0.35)]'
-                  : 'ring-1 ring-white/15',
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => onChange(v.id)}
-                aria-label={`${v.label} — fond ${v.vibe}`}
-                className="absolute inset-0"
-              >
-                <span
-                  className="absolute inset-0 bg-gradient-to-br from-[#1a6b78] to-[#0d3d47]"
-                  aria-hidden
-                />
-                <img
-                  src={v.photo}
-                  alt=""
-                  className="relative h-full w-full object-cover"
-                  style={{ objectPosition: v.objectPosition }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
-                aria-label={playing ? `Arrêter ${v.label}` : `Écouter ${v.label}`}
+            <div key={v.id} className="flex w-[4.75rem] flex-col items-center gap-1.5 sm:w-[5.25rem]">
+              <div
                 className={cn(
-                  'absolute bottom-2 left-1/2 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full backdrop-blur-sm',
-                  playing ? 'bg-[#7ed4df] text-[#0d3d47]' : 'bg-black/45 text-[#7ed4df]',
+                  'relative h-[4.75rem] w-[4.75rem] overflow-hidden rounded-2xl transition-all sm:h-[5.25rem] sm:w-[5.25rem]',
+                  selected
+                    ? 'ring-2 ring-[#7ed4df] shadow-[0_0_14px_rgba(126,212,223,0.3)]'
+                    : 'ring-1 ring-white/12',
                 )}
               >
-                {playing ? (
-                  <Pause size={11} className="fill-current" />
-                ) : (
-                  <Play size={11} className="fill-current" />
+                <button
+                  type="button"
+                  onClick={() => onChange(v.id)}
+                  aria-label={v.label}
+                  className="absolute inset-0"
+                >
+                  <span
+                    className="absolute inset-0 bg-gradient-to-br from-[#1a6b78] to-[#0d3d47]"
+                    aria-hidden
+                  />
+                  <img
+                    src={v.photo}
+                    alt=""
+                    className="relative h-full w-full object-cover"
+                    style={{ objectPosition: v.objectPosition }}
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
+                  aria-label={playing ? `Arrêter ${v.label}` : `Écouter ${v.label}`}
+                  className={cn(
+                    'absolute bottom-1.5 left-1/2 z-10 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full backdrop-blur-sm',
+                    playing ? 'bg-[#7ed4df] text-[#0d3d47]' : 'bg-black/45 text-[#e8f7f9]',
+                  )}
+                >
+                  {playing ? (
+                    <Pause size={10} className="fill-current" />
+                  ) : (
+                    <Play size={10} className="fill-current" />
+                  )}
+                </button>
+              </div>
+              <span
+                className={cn(
+                  'text-[11px] font-medium',
+                  selected ? 'text-[#7ed4df]' : 'text-[#b8e4ea]/75',
                 )}
-              </button>
+              >
+                {v.label}
+              </span>
             </div>
           )
         })}

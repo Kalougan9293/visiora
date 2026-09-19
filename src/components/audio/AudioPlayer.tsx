@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { holdAmbiance, releaseAmbiance, type AmbianceId } from '@/services/ambiance'
+import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 
 interface AudioPlayerProps {
   src?: string | null
@@ -12,7 +12,7 @@ interface AudioPlayerProps {
   className?: string
   /** Bouton play seul, pour une ligne de bibliothèque */
   compact?: boolean
-  ambiance?: AmbianceId
+  ambiance?: AmbianceChoice
 }
 
 export function AudioPlayer({
@@ -37,6 +37,7 @@ export function AudioPlayer({
   }
 
   const takeBed = () => {
+    if (!ambiance) return
     if (bedHeldRef.current) return
     bedHeldRef.current = true
     holdAmbiance(ambiance)

@@ -9,19 +9,24 @@ import {
   type WizardField,
 } from '@/data/wizard'
 import { useSessions } from '@/context/SessionsContext'
+import { useAuth } from '@/context/AuthContext'
+import { AuthModal } from '@/components/auth/AuthModal'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/lib/utils'
-import { holdAmbiance, releaseAmbiance, type AmbianceId } from '@/services/ambiance'
+import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 
 type Answers = Record<string, string>
 
 export function CreatePage() {
   const navigate = useNavigate()
   const { addSession } = useSessions()
+  const { user } = useAuth()
   const [phase, setPhase] = useState<'intro' | 'wizard'>('intro')
   const [stepIdx, setStepIdx] = useState(0)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [pendingStart, setPendingStart] = useState(false)
   const [answers, setAnswers] = useState<Answers>({
     q12_voice: 'rituel',
     q12_tutoiement: 'tu',
@@ -44,6 +49,28 @@ export function CreatePage() {
     setAnswers((prev) => ({ ...prev, [id]: value }))
   }
 
+  const startWizard = () => {
+    setPhase('wizard')
+    setStepIdx(0)
+  }
+
+  const onStartClick = () => {
+    if (!user) {
+      setPendingStart(true)
+      setAuthOpen(true)
+      return
+    }
+    startWizard()
+  }
+
+  useEffect(() => {
+    if (!user || !pendingStart) return
+    setPendingStart(false)
+    setAuthOpen(false)
+    startWizard()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter wizard only after login
+  }, [user, pendingStart])
+
   const goNext = () => {
     if (stepIdx < WIZARD_STEPS.length - 1) {
       setStepIdx((s) => s + 1)
@@ -64,6 +91,13 @@ export function CreatePage() {
   if (phase === 'intro') {
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col items-center overflow-y-auto pb-4 pt-2 text-center">
+        <AuthModal
+          open={authOpen}
+          onClose={() => {
+            setAuthOpen(false)
+            setPendingStart(false)
+          }}
+        />
         <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-olive/10 dark:bg-olive/15">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-olive text-cream dark:text-ink">
             <Compass size={24} strokeWidth={1.75} />
@@ -97,7 +131,7 @@ export function CreatePage() {
         <Button
           size="lg"
           className="mt-8 w-full max-w-md rounded-full"
-          onClick={() => setPhase('wizard')}
+          onClick={onStartClick}
         >
           {CREATE_INTRO.cta}
           <ArrowRight size={18} />
@@ -108,35 +142,32 @@ export function CreatePage() {
 
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center text-center">
-      <div className="mb-2 flex w-full shrink-0 items-center justify-between text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/62 dark:text-champagne/88">
+      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-ink/45 dark:text-cream/45">
         <span>
-          Étape {step.step} de {step.total}
+          Étape {step.step} / {step.total}
         </span>
-        <span>{step.percent}% complété</span>
+        <span>{step.percent}%</span>
       </div>
-      <ProgressBar value={step.percent} className="mb-3 shrink-0" />
+      <ProgressBar value={step.percent} className="mb-2 shrink-0" />
 
-      <div
-        className={cn(
-          'flex min-h-0 w-full flex-1 flex-col overflow-y-auto py-1',
-          stepIdx === WIZARD_STEPS.length - 1 ? 'justify-start' : 'justify-center',
-        )}
-      >
+      <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-2">
         <AnimatePresence mode="wait">
           <motion.div
             key={step.step}
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3 }}
-            className="w-full"
+            transition={{ duration: 0.28 }}
+            className="my-auto w-full"
           >
-            <h1 className="font-display text-2xl tracking-tight text-ink dark:text-cream sm:text-3xl">
+            <h1 className="font-display text-[1.65rem] leading-snug tracking-tight text-ink dark:text-cream sm:text-3xl">
               {step.title}
             </h1>
-            <p className="mt-2 text-sm text-ink/72 dark:text-cream/88">{step.subtitle}</p>
+            <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink/60 dark:text-cream/65">
+              {step.subtitle}
+            </p>
 
-            <div className={cn('mt-5', stepIdx === WIZARD_STEPS.length - 1 ? 'space-y-3' : 'space-y-4')}>
+            <div className="mt-6 space-y-5">
               {step.fields.map((field) => (
                 <FieldBlock
                   key={field.id}
@@ -152,7 +183,7 @@ export function CreatePage() {
         </AnimatePresence>
       </div>
 
-      <div className="mt-auto flex w-full shrink-0 gap-2 pt-3 pb-1">
+      <div className="flex w-full shrink-0 gap-2 pt-3 pb-1">
         <Button variant="outline" className="flex-1 rounded-full" onClick={goBack}>
           <ArrowLeft size={16} />
           Retour
@@ -180,10 +211,10 @@ function FieldBlock({
   setField: (id: string, v: string) => void
 }) {
   const inputClass = cn(
-    'mt-2 w-full rounded-2xl border px-4 py-3 text-center text-sm outline-none transition-all',
-    'border-black/10 bg-white/80 text-ink placeholder:text-ink/35',
-    'focus:border-olive/50 focus:ring-2 focus:ring-olive/15',
-    'dark:border-champagne/20 dark:bg-white/5 dark:text-cream dark:placeholder:text-champagne/40 dark:focus:border-olive/40',
+    'mt-2.5 w-full rounded-2xl border px-4 py-3 text-center text-sm outline-none transition',
+    'border-black/[0.08] bg-white/70 text-ink placeholder:text-ink/30',
+    'focus:border-olive/40 focus:ring-2 focus:ring-olive/10',
+    'dark:border-white/10 dark:bg-white/[0.05] dark:text-cream dark:placeholder:text-cream/30 dark:focus:border-gold/30 dark:focus:ring-gold/10',
   )
 
   if (field.type === 'voice') {
@@ -198,11 +229,11 @@ function FieldBlock({
 
   if (field.type === 'choice-row') {
     return (
-      <div className="w-full">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-olive dark:text-olive">
+      <div className="w-full text-center">
+        <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
           {field.label}
         </p>
-        <div className="mt-2 flex flex-wrap justify-center gap-2">
+        <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
           {field.choices?.map((c) => {
             const selected = value === c.id
             return (
@@ -211,10 +242,10 @@ function FieldBlock({
                 type="button"
                 onClick={() => onChange(c.id)}
                 className={cn(
-                  'rounded-full border px-4 py-2 text-sm font-medium transition-all',
+                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all',
                   selected
-                    ? 'border-olive bg-olive text-cream dark:text-ink'
-                    : 'border-black/10 bg-white/70 text-ink dark:border-champagne/20 dark:bg-white/5 dark:text-cream',
+                    ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
+                    : 'bg-black/[0.04] text-ink/70 hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-cream/75 dark:hover:bg-white/10',
                 )}
               >
                 {c.label}
@@ -227,28 +258,21 @@ function FieldBlock({
   }
 
   return (
-    <div className="w-full">
-      <div className="flex flex-col items-center gap-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-olive dark:text-olive">
-          {field.label}
+    <div className="w-full text-center">
+      <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
+        {field.label}
+      </p>
+      {field.hint && (
+        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink/45 dark:text-cream/45">
+          {field.hint}
         </p>
-        {field.hint && (
-          <p className="max-w-md text-xs italic leading-relaxed text-ink/58 dark:text-champagne/82">
-            {field.hint}
-          </p>
-        )}
-        {field.badge && (
-          <span className="rounded-full bg-black/[0.04] px-2.5 py-0.5 text-[10px] text-ink/62 dark:bg-white/5 dark:text-champagne/86">
-            {field.badge}
-          </span>
-        )}
-      </div>
+      )}
       {field.type === 'textarea' ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          rows={4}
+          rows={3}
           className={cn(inputClass, 'resize-none')}
         />
       ) : (
@@ -291,7 +315,7 @@ function VoiceChoice({
     setPlayingId(null)
   }
 
-  const togglePreview = async (id: string, src: string, ambiance: AmbianceId) => {
+  const togglePreview = async (id: string, src: string, ambiance: AmbianceChoice) => {
     const el = audioRef.current
     if (!el) return
     onChange(id)
@@ -302,7 +326,7 @@ function VoiceChoice({
     el.pause()
     releaseAmbiance()
     el.src = src
-    holdAmbiance(ambiance)
+    if (ambiance) holdAmbiance(ambiance)
     try {
       await el.play()
       setPlayingId(id)
@@ -313,20 +337,13 @@ function VoiceChoice({
   }
 
   return (
-    <div className="w-full">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-olive dark:text-olive">
+    <div className="w-full text-center">
+      <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
         {fieldLabel}
       </p>
-      <p className="mt-1 text-xs text-ink/68 dark:text-cream/82">
-        Chaque voix inclut son fond. Écoute, puis choisis :
-      </p>
-      <audio
-        ref={audioRef}
-        playsInline
-        preload="none"
-        onEnded={stopPreview}
-      />
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <p className="mt-1 text-xs text-ink/45 dark:text-cream/45">Écoute, puis choisis</p>
+      <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
+      <div className="mt-3 flex flex-wrap justify-center gap-2">
         {VOICES.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
@@ -334,37 +351,28 @@ function VoiceChoice({
             <div
               key={v.id}
               className={cn(
-                'flex min-h-[4.5rem] flex-col items-center justify-center rounded-xl border px-1 py-1.5 text-center transition-all',
+                'inline-flex items-center gap-1 rounded-full pl-3.5 pr-1.5 py-1 transition-all',
                 selected
-                  ? 'border-olive bg-olive text-cream dark:text-ink'
-                  : 'border-black/10 bg-white/70 text-ink dark:border-champagne/20 dark:bg-white/5 dark:text-cream',
-                'max-sm:last:col-span-2 max-sm:last:mx-auto max-sm:last:w-[calc(50%-0.25rem)]',
+                  ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
+                  : 'bg-black/[0.04] text-ink/75 dark:bg-white/[0.06] dark:text-cream/80',
               )}
             >
               <button
                 type="button"
                 onClick={() => onChange(v.id)}
-                className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-0.5"
+                className="text-[13px] font-semibold"
               >
-                <span className="text-sm font-semibold leading-tight">{v.name}</span>
-                <span
-                  className={cn(
-                    'line-clamp-2 text-[10px] leading-tight',
-                    selected ? 'text-cream/85 dark:text-ink/70' : 'text-ink/60 dark:text-cream/75',
-                  )}
-                >
-                  {v.description}
-                </span>
+                {v.name}
               </button>
               <button
                 type="button"
                 onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
                 aria-label={playing ? `Arrêter ${v.name}` : `Écouter ${v.name}`}
                 className={cn(
-                  'mt-1 inline-flex h-7 w-7 items-center justify-center rounded-full',
+                  'flex h-7 w-7 items-center justify-center rounded-full transition',
                   selected
-                    ? 'bg-white/20 text-cream dark:bg-ink/15 dark:text-ink'
-                    : 'bg-olive/10 text-olive dark:bg-olive/15 dark:text-olive',
+                    ? 'bg-white/20 dark:bg-ink/10'
+                    : 'bg-olive/10 text-olive dark:bg-white/10 dark:text-cream/80',
                 )}
               >
                 {playing ? <Pause size={11} className="fill-current" /> : <Play size={11} className="fill-current" />}

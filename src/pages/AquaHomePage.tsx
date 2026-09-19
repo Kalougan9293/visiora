@@ -30,7 +30,11 @@ export function AquaHomePage() {
   useEffect(() => {
     const anyOpen = videoOpen || ritualOpen
     if (!anyOpen) {
-      videoRef.current?.pause()
+      const el = videoRef.current
+      if (el) {
+        el.pause()
+        el.currentTime = 0
+      }
       return
     }
     const onKey = (e: KeyboardEvent) => {
@@ -41,7 +45,18 @@ export function AquaHomePage() {
     }
     document.addEventListener('keydown', onKey)
     document.body.style.overflow = 'hidden'
-    if (videoOpen) void videoRef.current?.play().catch(() => {})
+
+    if (videoOpen) {
+      const el = videoRef.current
+      if (el) {
+        el.muted = false
+        el.volume = 1
+        void el.play().catch(() => {
+          /* certains navigateurs bloquent encore — l’utilisateur peut appuyer Play */
+        })
+      }
+    }
+
     return () => {
       document.removeEventListener('keydown', onKey)
       document.body.style.overflow = ''
@@ -50,7 +65,7 @@ export function AquaHomePage() {
 
   return (
     <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <AquaBubbles />
+      {!videoOpen && <AquaBubbles />}
 
       <motion.section
         initial={{ opacity: 0, y: 12 }}
@@ -98,7 +113,7 @@ export function AquaHomePage() {
           <button
             type="button"
             onClick={() => setVideoOpen(true)}
-            className="group relative block aspect-[3/4] w-[42%] max-w-[160px] overflow-hidden rounded-2xl border border-white/20 bg-[#0a333b] shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7ed4df]/60 sm:max-w-[180px]"
+            className="group relative block aspect-[3/4] w-[42%] max-w-[160px] overflow-hidden rounded-2xl border border-white/20 bg-[#0a333b] shadow-[0_8px_24px_rgba(0,0,0,0.28)] transition-shadow duration-300 hover:shadow-[0_12px_28px_rgba(0,0,0,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7ed4df]/60 sm:max-w-[180px]"
             aria-label="Lire la vidéo"
           >
             <video
@@ -106,10 +121,10 @@ export function AquaHomePage() {
               muted
               playsInline
               preload="metadata"
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover [transform:translateZ(0)]"
             />
             <span className="absolute inset-0 flex items-center justify-center">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur-sm transition-transform duration-300 group-hover:scale-105">
                 <Play size={18} className="ml-0.5 fill-white" />
               </span>
             </span>
@@ -126,7 +141,6 @@ export function AquaHomePage() {
         </div>
       </motion.section>
 
-      {/* Vidéo — inchangée */}
       <AnimatePresence>
         {videoOpen && (
           <motion.div
@@ -145,10 +159,10 @@ export function AquaHomePage() {
             <motion.div
               role="dialog"
               aria-modal="true"
-              initial={{ opacity: 0, scale: 0.96, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.96, y: 12 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
               className="relative z-10 w-full max-w-sm overflow-hidden rounded-[1.5rem] border border-white/20 bg-black shadow-2xl sm:max-w-md"
             >
               <button
@@ -160,15 +174,14 @@ export function AquaHomePage() {
                 <X size={16} />
               </button>
 
-              <div className="aspect-[3/4] w-full">
+              <div className="aspect-[3/4] w-full bg-black">
                 <video
                   ref={videoRef}
                   src="/rituel.mp4"
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover [transform:translateZ(0)]"
                   controls
                   playsInline
                   autoPlay
-                  muted
                   loop
                 />
               </div>

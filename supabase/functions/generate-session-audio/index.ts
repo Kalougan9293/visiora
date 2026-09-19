@@ -7,12 +7,15 @@ const corsHeaders = {
 }
 
 const DEFAULT_VOICES: Record<string, string> = {
-  /** Secrets ELEVENLABS_VOICE_* prioritaires ; fallback = clones Visiora (compte courant) */
-  rituel: 'efWmzjIYIGBDoGcGTcaV',
-  onde: '1zaEYJSYmxoQNiDl5C42',
+  /** Secrets ELEVENLABS_VOICE_* prioritaires */
+  /** 1 · Vanessa — clone oiseaux + musique */
+  rituel: '1zaEYJSYmxoQNiDl5C42',
+  /** 2 · Sabrina — clone fond eau */
+  onde: 'JQ2r7F93aKZaFxO6C5Tu',
+  /** 3 · Amandine */
+  antoni: 'nVPCtAFzgyMX3FZKNzH0',
   /** Anciens slots (séances déjà créées) */
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
-  antoni: 'f37Tyb9RuhPPJKa60pUr',
   bella: 'EXAVITQu4vr4xnSDxMaL',
 }
 
@@ -87,9 +90,14 @@ async function setProgress(admin: SupabaseClient, sessionId: string, pct: number
 async function elevenTts(params: {
   apiKey: string
   voiceId: string
+  /** Clé app (rituel / onde / antoni) pour caler le rythme */
+  appVoiceKey: string
   text: string
   previousRequestIds: string[]
 }): Promise<{ audio: Uint8Array; requestId: string | null }> {
+  const key = params.appVoiceKey.toLowerCase()
+  /** Vanessa : rythme lent ; Sabrina / Amandine : tempo naturel */
+  const speed = key === 'rituel' ? 0.78 : key === 'onde' ? 1.0 : 0.95
   const ttsRes = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=mp3_44100_128`,
     {
@@ -107,11 +115,11 @@ async function elevenTts(params: {
           ? { previous_request_ids: params.previousRequestIds.slice(-3) }
           : {}),
         voice_settings: {
-          stability: 0.88,
+          stability: key === 'rituel' ? 0.88 : 0.72,
           similarity_boost: 0.55,
           style: 0,
           use_speaker_boost: false,
-          speed: 0.78,
+          speed,
         },
       }),
     },
@@ -159,6 +167,7 @@ async function processJob(params: {
       const { audio, requestId } = await elevenTts({
         apiKey: params.elevenKey,
         voiceId: resolveElevenVoiceId(params.voiceId),
+        appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
         text: chunk,
         previousRequestIds,
       })

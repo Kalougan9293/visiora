@@ -2,15 +2,17 @@
  * Fonds sonores sous la voix (eau / oiseaux / spa).
  * Liés à la voix choisie — pas de choix séparé dans le wizard.
  * Démarrés dans le même geste utilisateur que Play (Safari iPhone).
+ * Certaines voix (ex. Amandine) n’ont pas encore de fond → null.
  */
 
 import { VOICES } from '@/data/wizard'
 
 export type AmbianceId = 'eau' | 'oiseaux' | 'spa'
+export type AmbianceChoice = AmbianceId | null
 
-const VOICE_AMBIANCE: Record<string, AmbianceId> = Object.fromEntries(
+const VOICE_AMBIANCE: Record<string, AmbianceChoice> = Object.fromEntries(
   VOICES.map((v) => [v.id, v.ambiance]),
-) as Record<string, AmbianceId>
+) as Record<string, AmbianceChoice>
 
 const LOOP_SRC: Record<AmbianceId, string> = {
   eau: '/voices/ambiance-eau.mp3',
@@ -21,6 +23,7 @@ const LOOP_SRC: Record<AmbianceId, string> = {
 const VOLUME: Record<AmbianceId, number> = {
   eau: 0.22,
   oiseaux: 0.16,
+  /** Pad doux — rester discret sous la voix */
   spa: 0.14,
 }
 
@@ -88,8 +91,9 @@ function stopGraph(suspendCtx: boolean) {
   if (suspendCtx && ctx && ctx.state !== 'closed') void ctx.suspend()
 }
 
-/** À appeler dans le click Play, avant voice.play(). */
-export function holdAmbiance(id: AmbianceId = 'eau') {
+/** À appeler dans le click Play, avant voice.play(). null = pas de fond. */
+export function holdAmbiance(id: AmbianceChoice = 'eau') {
+  if (!id) return
   holders += 1
   const ac = ensureContext()
   void ac.resume()
@@ -105,12 +109,12 @@ export function releaseAmbiance() {
   stopGraph(true)
 }
 
-export function ambianceForVoice(voiceId: string | null | undefined): AmbianceId {
+export function ambianceForVoice(voiceId: string | null | undefined): AmbianceChoice {
   if (!voiceId) return 'oiseaux'
   return VOICE_AMBIANCE[voiceId.toLowerCase()] ?? 'oiseaux'
 }
 
-export function ambianceFromAnswers(answers: Record<string, unknown> | undefined): AmbianceId {
+export function ambianceFromAnswers(answers: Record<string, unknown> | undefined): AmbianceChoice {
   const voice = answers?.q12_voice
   if (typeof voice === 'string' && voice.trim()) {
     return ambianceForVoice(voice.trim())

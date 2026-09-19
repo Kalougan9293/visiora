@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, X } from 'lucide-react'
+import { ArrowRight, Check, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useVariant } from '@/context/VariantContext'
 import { cn } from '@/lib/utils'
@@ -152,26 +152,37 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   }
 
   const inputClass = cn(
-    'w-full rounded-xl border px-3 py-2.5 text-center text-sm outline-none transition',
+    'w-full rounded-2xl border px-3.5 py-3 text-left text-sm outline-none transition',
     isAqua
-      ? 'border-white/20 bg-white/10 text-[#e8f7f9] placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/55 focus:ring-2 focus:ring-[#7ed4df]/15'
-      : 'border-black/12 bg-black/[0.03] text-ink placeholder:text-ink/35 focus:border-olive/45 focus:ring-2 focus:ring-olive/15 dark:border-white/15 dark:bg-white/5 dark:text-cream dark:placeholder:text-champagne/40 dark:focus:border-gold/40 dark:focus:ring-gold/15',
+      ? 'border-white/15 bg-white/[0.07] text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 focus:border-[#7ed4df]/50 focus:bg-white/[0.1] focus:ring-2 focus:ring-[#7ed4df]/12'
+      : 'border-black/10 bg-white/80 text-ink placeholder:text-ink/30 focus:border-olive/40 focus:ring-2 focus:ring-olive/12 dark:border-white/12 dark:bg-white/[0.06] dark:text-cream dark:placeholder:text-champagne/35 dark:focus:border-gold/35 dark:focus:ring-gold/12',
   )
 
   const labelClass = cn(
-    'mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.14em]',
-    isAqua ? 'text-[#7ed4df]' : 'text-ink/62 dark:text-champagne/78',
+    'mb-1.5 block text-left text-[10px] font-semibold uppercase tracking-[0.16em]',
+    isAqua ? 'text-[#7ed4df]/90' : 'text-ink/55 dark:text-champagne/70',
   )
 
   const linkClass = cn(
-    'mx-auto block text-center text-xs transition',
+    'text-center text-xs transition',
     isAqua
-      ? 'text-[#b8e4ea]/75 hover:text-[#7ed4df]'
-      : 'text-ink/68 hover:text-olive dark:text-champagne/82 dark:hover:text-gold',
+      ? 'text-[#b8e4ea]/70 hover:text-[#7ed4df]'
+      : 'text-ink/55 hover:text-olive dark:text-champagne/70 dark:hover:text-gold',
   )
 
   const title =
-    mode === 'login' ? 'Connexion' : signupStep === 1 ? 'Compte' : 'Mot de passe'
+    mode === 'login'
+      ? 'Connexion'
+      : signupStep === 1
+        ? 'Créer un compte'
+        : 'Sécuriser le compte'
+
+  const subtitle =
+    mode === 'login'
+      ? 'Retrouve tes séances et ton suivi.'
+      : signupStep === 1
+        ? 'Quelques infos pour personnaliser Visiora.'
+        : 'Choisis un mot de passe solide.'
 
   return (
     <AnimatePresence>
@@ -201,10 +212,10 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'relative z-10 w-full max-w-[22rem] rounded-[1.35rem] border p-6 shadow-2xl',
+              'relative z-10 w-full max-w-[22.5rem] overflow-hidden rounded-[1.5rem] border p-6 shadow-2xl sm:p-7',
               isAqua
                 ? 'aqua-glass border-white/20'
-                : 'border-black/10 bg-cream dark:border-white/12 dark:bg-ink-elevated',
+                : 'border-black/8 bg-cream dark:border-white/10 dark:bg-ink-elevated',
             )}
             style={isAqua ? { fontFamily: 'var(--font-aqua-sans)' } : undefined}
           >
@@ -212,29 +223,60 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
               type="button"
               onClick={onClose}
               className={cn(
-                'absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full border transition',
+                'absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full transition',
                 isAqua
-                  ? 'border-white/20 text-[#e8f7f9]/80 hover:bg-white/10'
-                  : 'border-black/10 text-ink/72 hover:bg-black/5 dark:border-white/15 dark:text-cream/86 dark:hover:bg-white/10',
+                  ? 'text-[#e8f7f9]/55 hover:bg-white/10 hover:text-[#e8f7f9]'
+                  : 'text-ink/40 hover:bg-black/5 hover:text-ink dark:text-cream/50 dark:hover:bg-white/10 dark:hover:text-cream',
               )}
               aria-label="Fermer"
             >
-              <X size={15} />
+              <X size={16} />
             </button>
 
-            <h2
-              className={cn(
-                'text-center text-xl tracking-tight',
-                isAqua ? 'text-[#f4fcfd]' : 'font-display text-ink dark:text-cream',
-              )}
-              style={
-                isAqua
-                  ? { fontFamily: 'var(--font-aqua-display)', fontWeight: 450 }
-                  : undefined
-              }
-            >
-              {title}
-            </h2>
+            {mode === 'signup' && (
+              <div className="mb-5 flex items-center justify-center gap-2">
+                {[1, 2].map((n) => (
+                  <span
+                    key={n}
+                    className={cn(
+                      'h-1 rounded-full transition-all duration-300',
+                      n === signupStep ? 'w-8' : 'w-3',
+                      n <= signupStep
+                        ? isAqua
+                          ? 'bg-[#7ed4df]'
+                          : 'bg-olive dark:bg-gold'
+                        : isAqua
+                          ? 'bg-white/20'
+                          : 'bg-black/12 dark:bg-white/15',
+                    )}
+                  />
+                ))}
+              </div>
+            )}
+
+            <div className="text-center">
+              <h2
+                className={cn(
+                  'text-xl tracking-tight sm:text-[1.35rem]',
+                  isAqua ? 'text-[#f4fcfd]' : 'font-display text-ink dark:text-cream',
+                )}
+                style={
+                  isAqua
+                    ? { fontFamily: 'var(--font-aqua-display)', fontWeight: 450 }
+                    : undefined
+                }
+              >
+                {title}
+              </h2>
+              <p
+                className={cn(
+                  'mt-1.5 text-xs leading-relaxed',
+                  isAqua ? 'text-[#b8e4ea]/75' : 'text-ink/50 dark:text-champagne/65',
+                )}
+              >
+                {subtitle}
+              </p>
+            </div>
 
             {mode === 'login' ? (
               <form onSubmit={onLogin} className="mt-6 space-y-3.5">
@@ -262,9 +304,9 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 </Field>
 
                 <Hint text={hint} isAqua={isAqua} />
-                <SubmitButton isAqua={isAqua} label={busy ? '…' : 'OK'} disabled={busy} />
-                <button type="button" onClick={() => switchMode('signup')} className={linkClass}>
-                  Pas de compte ?
+                <PrimaryButton isAqua={isAqua} label={busy ? '…' : 'Se connecter'} disabled={busy} />
+                <button type="button" onClick={() => switchMode('signup')} className={cn(linkClass, 'w-full pt-1')}>
+                  Pas de compte ? Créer un compte
                 </button>
               </form>
             ) : (
@@ -273,32 +315,34 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   <motion.form
                     key="signup-1"
                     onSubmit={onSignupStep1}
-                    className="mt-6 space-y-3"
-                    initial={{ opacity: 0, x: 12 }}
+                    className="mt-6 space-y-3.5"
+                    initial={{ opacity: 0, x: 14 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -12 }}
+                    exit={{ opacity: 0, x: -14 }}
                     transition={{ duration: 0.22 }}
                   >
-                    <Field label="Prénom" labelClass={labelClass} htmlFor="auth-first">
-                      <input
-                        id="auth-first"
-                        type="text"
-                        autoComplete="given-name"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Field>
-                    <Field label="Nom" labelClass={labelClass} htmlFor="auth-last">
-                      <input
-                        id="auth-last"
-                        type="text"
-                        autoComplete="family-name"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        className={inputClass}
-                      />
-                    </Field>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <Field label="Prénom" labelClass={labelClass} htmlFor="auth-first">
+                        <input
+                          id="auth-first"
+                          type="text"
+                          autoComplete="given-name"
+                          value={firstName}
+                          onChange={(e) => setFirstName(e.target.value)}
+                          className={inputClass}
+                        />
+                      </Field>
+                      <Field label="Nom" labelClass={labelClass} htmlFor="auth-last">
+                        <input
+                          id="auth-last"
+                          type="text"
+                          autoComplete="family-name"
+                          value={lastName}
+                          onChange={(e) => setLastName(e.target.value)}
+                          className={inputClass}
+                        />
+                      </Field>
+                    </div>
                     <Field label="Mail" labelClass={labelClass} htmlFor="auth-email">
                       <input
                         id="auth-email"
@@ -311,8 +355,16 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     </Field>
 
                     <Hint text={hint} isAqua={isAqua} />
-                    <BasicButton isAqua={isAqua} label="Suivant" />
-                    <button type="button" onClick={() => switchMode('login')} className={linkClass}>
+                    <PrimaryButton
+                      isAqua={isAqua}
+                      label="Suivant"
+                      icon={<ArrowRight size={16} strokeWidth={2.25} />}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => switchMode('login')}
+                      className={cn(linkClass, 'w-full pt-1')}
+                    >
                       Déjà un compte ?
                     </button>
                   </motion.form>
@@ -320,10 +372,10 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   <motion.form
                     key="signup-2"
                     onSubmit={onSignupStep2}
-                    className="mt-6 space-y-3"
-                    initial={{ opacity: 0, x: 12 }}
+                    className="mt-6 space-y-3.5"
+                    initial={{ opacity: 0, x: 14 }}
                     animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -12 }}
+                    exit={{ opacity: 0, x: -14 }}
                     transition={{ duration: 0.22 }}
                   >
                     <Field label="Mot de passe" labelClass={labelClass} htmlFor="auth-signup-pass">
@@ -338,32 +390,34 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                       />
                     </Field>
 
-                    <ul className="mx-auto mt-1 w-fit space-y-2.5 text-left">
+                    <ul className="space-y-2 rounded-2xl px-1 py-0.5">
                       {PASS_RULES.map((rule) => {
                         const ok = rule.test(signupPass)
                         return (
                           <li
                             key={rule.id}
                             className={cn(
-                              'flex items-center gap-2.5 text-[13px] leading-snug transition-colors sm:text-sm',
+                              'flex items-center gap-2.5 text-[12px] leading-snug transition-colors',
                               ok
-                                ? 'font-medium text-emerald-500'
+                                ? isAqua
+                                  ? 'text-[#8ee0a8]'
+                                  : 'font-medium text-emerald-600 dark:text-emerald-400'
                                 : isAqua
-                                  ? 'text-[#b8e4ea]/70'
-                                  : 'text-ink/68 dark:text-champagne/78',
+                                  ? 'text-[#b8e4ea]/55'
+                                  : 'text-ink/45 dark:text-champagne/55',
                             )}
                           >
                             <span
                               className={cn(
-                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors',
+                                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors',
                                 ok
                                   ? 'bg-emerald-500 text-white'
                                   : isAqua
-                                    ? 'border border-white/25 bg-transparent'
-                                    : 'border border-black/15 bg-transparent dark:border-white/20',
+                                    ? 'bg-white/10'
+                                    : 'bg-black/[0.06] dark:bg-white/10',
                               )}
                             >
-                              {ok ? <Check size={12} strokeWidth={3} /> : null}
+                              {ok ? <Check size={10} strokeWidth={3} /> : null}
                             </span>
                             {rule.label}
                           </li>
@@ -373,8 +427,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
                     <label
                       className={cn(
-                        'mx-auto flex max-w-[16rem] cursor-pointer items-start gap-2.5 pt-1 text-left text-[11px] leading-snug sm:text-xs',
-                        isAqua ? 'text-[#b8e4ea]/75' : 'text-ink/72 dark:text-champagne/82',
+                        'flex cursor-pointer items-start gap-2.5 rounded-2xl px-0.5 text-left text-[11px] leading-snug sm:text-xs',
+                        isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/60 dark:text-champagne/70',
                       )}
                     >
                       <input
@@ -383,24 +437,26 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                         onChange={(e) => setAcceptCgu(e.target.checked)}
                         className={cn(
                           'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border accent-emerald-500',
-                          isAqua ? 'border-white/30' : 'border-black/25 dark:border-white/25',
+                          isAqua ? 'border-white/30' : 'border-black/20 dark:border-white/25',
                         )}
                         disabled={busy}
                       />
-                      <span>
-                        J&apos;accepte les CGU et la politique de confidentialité
-                      </span>
+                      <span>J&apos;accepte les CGU et la politique de confidentialité</span>
                     </label>
 
                     <Hint text={hint} isAqua={isAqua} />
-                    <SubmitButton isAqua={isAqua} label={busy ? '…' : 'Créer'} disabled={busy} />
+                    <PrimaryButton
+                      isAqua={isAqua}
+                      label={busy ? '…' : 'Créer mon compte'}
+                      disabled={busy}
+                    />
                     <button
                       type="button"
                       onClick={() => {
                         setSignupStep(1)
                         setHint('')
                       }}
-                      className={linkClass}
+                      className={cn(linkClass, 'w-full pt-1')}
                     >
                       Retour
                     </button>
@@ -427,7 +483,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <div>
+    <div className="text-left">
       <label className={labelClass} htmlFor={htmlFor}>
         {label}
       </label>
@@ -450,39 +506,28 @@ function Hint({ text, isAqua }: { text: string; isAqua: boolean }) {
   )
 }
 
-function BasicButton({ isAqua, label }: { isAqua: boolean; label: string }) {
-  return (
-    <button
-      type="submit"
-      className={cn(
-        'mt-1 w-full rounded-xl border px-4 py-2.5 text-sm font-medium transition',
-        isAqua
-          ? 'border-white/25 bg-white/10 text-[#e8f7f9] hover:bg-white/15'
-          : 'border-black/12 bg-black/[0.04] text-ink hover:bg-black/[0.07] dark:border-white/15 dark:bg-white/5 dark:text-cream dark:hover:bg-white/10',
-      )}
-    >
-      {label}
-    </button>
-  )
-}
-
-function SubmitButton({
+function PrimaryButton({
   isAqua,
   label,
   disabled,
+  icon,
 }: {
   isAqua: boolean
   label: string
   disabled?: boolean
+  icon?: React.ReactNode
 }) {
   if (isAqua) {
     return (
       <button
         type="submit"
         disabled={disabled}
-        className="aqua-cta mt-1 w-full !py-2.5 text-sm disabled:opacity-60"
+        className="aqua-cta mt-2 w-full !py-3 text-sm disabled:opacity-60"
       >
-        <span>{label}</span>
+        <span className="inline-flex items-center justify-center gap-2">
+          {label}
+          {icon}
+        </span>
       </button>
     )
   }
@@ -491,9 +536,10 @@ function SubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="mt-1 w-full rounded-full bg-olive px-4 py-2.5 text-sm font-semibold text-cream transition hover:bg-olive/90 disabled:opacity-60 dark:bg-gold dark:text-ink dark:hover:bg-gold-bright"
+      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-olive px-4 py-3 text-sm font-semibold text-cream shadow-[0_8px_20px_-8px_rgba(95,107,69,0.55)] transition hover:bg-olive/90 disabled:opacity-60 dark:bg-gold dark:text-ink dark:shadow-[0_8px_20px_-8px_rgba(212,175,55,0.4)] dark:hover:bg-gold-bright"
     >
       {label}
+      {icon}
     </button>
   )
 }

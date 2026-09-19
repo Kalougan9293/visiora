@@ -38,13 +38,15 @@ npx supabase secrets set ELEVENLABS_API_KEY=sk_xxxx
 npx supabase functions deploy generate-session-audio
 ```
 
-Mapping voix app → ElevenLabs (défaut) :
-| App (`q12_voice`) | Voice ID |
-|-------------------|----------|
-| rituel | secret `ELEVENLABS_VOICE_RITUEL` (sinon fallback Justine) |
-| onde | secret `ELEVENLABS_VOICE_ONDE` (sinon fallback Justine) |
+Mapping voix app → ElevenLabs :
 
-Fonds sonores : liés à la voix (pas de choix séparé) — Rituel→oiseaux, Onde→eau, Antoni→spa. Boucles dans `public/voices/ambiance-*.mp3`.
+| App (`q12_voice`) | ElevenLabs Voice ID | Fond | Aperçu |
+|-------------------|---------------------|------|--------|
+| rituel (Vanessa) | `1zaEYJSYmxoQNiDl5C42` (`ELEVENLABS_VOICE_RITUEL`) | oiseaux (+ musique extrait) | `rituel.mp4` / `rituel-preview.mp3` |
+| onde (Sabrina) | `JQ2r7F93aKZaFxO6C5Tu` (`ELEVENLABS_VOICE_ONDE`) | eau | gemini / `onde-preview.mp3` |
+| antoni (Amandine) | `nVPCtAFzgyMX3FZKNzH0` (`ELEVENLABS_VOICE_ANTONI`) | spa | `antoni.mp3` (extrait TTS) |
+
+Fonds sonores liés à la voix (pas de choix séparé). Boucles app : `public/voices/ambiance-*.mp3`.
 
 ## Clone voix « Rituel » (Veo → ElevenLabs)
 
