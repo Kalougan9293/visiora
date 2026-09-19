@@ -51,21 +51,19 @@ export function Header() {
           )}
         >
           <div className="relative flex h-14 items-center justify-center px-4">
-            {import.meta.env.DEV && (
-              <button
-                type="button"
-                onClick={toggleVariant}
-                className={cn(
-                  'absolute left-3 top-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] transition-all',
-                  isAqua
-                    ? 'border border-white/25 bg-white/10 text-[#e8f7f9] hover:bg-white/15'
-                    : 'border border-black/12 bg-black/[0.03] text-ink/68 hover:border-olive/40 hover:text-olive dark:border-[var(--vs-ardoise)] dark:bg-white/5 dark:text-[var(--vs-texte-faible)] dark:hover:border-[var(--vs-azur)] dark:hover:text-[var(--vs-ecume)]',
-                )}
-                title={isAqua ? 'Revenir à la version client' : 'Ouvrir la version test'}
-              >
-                {isAqua ? 'Version client' : 'Version test'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={toggleVariant}
+              className={cn(
+                'absolute left-3 top-1/2 -translate-y-1/2 rounded-full px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] transition-all',
+                isAqua
+                  ? 'border border-white/25 bg-white/10 text-[#e8f7f9] hover:bg-white/15'
+                  : 'border border-black/12 bg-black/[0.03] text-ink/68 hover:border-olive/40 hover:text-olive dark:border-[var(--vs-ardoise)] dark:bg-white/5 dark:text-[var(--vs-texte-faible)] dark:hover:border-[var(--vs-azur)] dark:hover:text-[var(--vs-ecume)]',
+              )}
+              title={isAqua ? 'Revenir à la version client' : 'Ouvrir la version test'}
+            >
+              {isAqua ? 'Version client' : 'Version test'}
+            </button>
 
             <Link to="/" className="group flex items-center">
               <span
