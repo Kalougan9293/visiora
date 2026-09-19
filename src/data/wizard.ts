@@ -194,7 +194,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '10/10',
     ambiance: 'oiseaux',
-    preview: '/voices/rituel-clone-sample.mp3',
+    preview: '/voices/rituel-preview.mp3?v=clone1',
   },
   {
     id: 'onde',
@@ -203,7 +203,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '8/10',
     ambiance: 'eau',
-    preview: '/voices/onde-clone-sample.mp3?v=slow1',
+    preview: '/voices/onde-preview.mp3?v=clone1',
   },
   {
     id: 'antoni',
@@ -231,7 +231,7 @@ export const AQUA_VOICES = [
     vibe: 'Oiseaux',
     objectPosition: '50% 12%',
     ambiance: 'oiseaux' as const,
-    preview: '/voices/rituel-clone-sample.mp3',
+    preview: '/voices/rituel-preview.mp3?v=clone1',
   },
   {
     id: 'onde',
@@ -240,7 +240,7 @@ export const AQUA_VOICES = [
     vibe: 'Eau',
     objectPosition: '50% 8%',
     ambiance: 'eau' as const,
-    preview: '/voices/onde-clone-sample.mp3?v=slow1',
+    preview: '/voices/onde-preview.mp3?v=clone1',
   },
   {
     id: 'antoni',

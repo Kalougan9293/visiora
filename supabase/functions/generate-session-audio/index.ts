@@ -7,10 +7,9 @@ const corsHeaders = {
 }
 
 const DEFAULT_VOICES: Record<string, string> = {
-  /** Remplacer via secret ELEVENLABS_VOICE_RITUEL après clone ElevenLabs */
-  rituel: 'zPy2sgLU4pZ7Xrjh87uz',
-  /** Remplacer via secret ELEVENLABS_VOICE_ONDE après clone du 2ᵉ Veo */
-  onde: 'zPy2sgLU4pZ7Xrjh87uz',
+  /** Secrets ELEVENLABS_VOICE_* prioritaires ; fallback = clones Visiora (compte courant) */
+  rituel: 'efWmzjIYIGBDoGcGTcaV',
+  onde: '1zaEYJSYmxoQNiDl5C42',
   /** Anciens slots (séances déjà créées) */
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
   antoni: 'f37Tyb9RuhPPJKa60pUr',
