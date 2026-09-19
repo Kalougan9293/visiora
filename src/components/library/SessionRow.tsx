@@ -5,6 +5,7 @@ import { useSessions } from '@/context/SessionsContext'
 import { useVariant } from '@/context/VariantContext'
 import { formatDateFr, cn } from '@/lib/utils'
 import { ambianceFromAnswers } from '@/services/ambiance'
+import type { VisualizationSession } from '@/types'
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
   const { isAqua } = useVariant()
