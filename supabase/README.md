@@ -40,8 +40,17 @@ VITE_SUPABASE_ANON_KEY=...
 Puis relancer `npm run dev`.
 
 ## Admin `/admin`
-Connexion avec le **même compte Supabase Auth** que l’app (email + mot de passe).
-Sans `is_admin = true` → accès refusé. Les RPCs refusent aussi les non-admins côté base.
+Connexion avec un compte Supabase Auth dont `profiles.is_admin = true`.
+Emails admin actuels : `jona_92100@hotmail.com`, `jonathanvillette25@gmail.com`.
+Sans `is_admin` → accès refusé. Les RPCs refusent aussi les non-admins côté base.
+
+Promouvoir un admin (SQL Editor / `db query`) :
+
+```sql
+update public.profiles set is_admin = true where email = 'ton@email.com';
+```
+
+Voir aussi `supabase/promote_admins.sql`.
 
 ## Stockage audio / Voice API
 Voir **`supabase/VOICE.md`** pour déployer l’Edge Function `generate-session-audio` et configurer `ELEVENLABS_API_KEY`.

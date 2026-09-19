@@ -1,20 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { adminService, formatStorage, type AdminUserRow } from '@/services/admin'
-import { isSupabaseConfigured } from '@/services/supabase'
-
-/** Login temporaire UI — à remplacer par Supabase Auth + is_admin */
-const AUTH_KEY = 'visiora-admin'
-const ADMIN_USER = 'jonathan'
-const ADMIN_PASS = 'france'
-
-function isAuthed() {
-  try {
-    return sessionStorage.getItem(AUTH_KEY) === '1'
-  } catch {
-    return false
-  }
-}
+import { isSupabaseConfigured, supabase } from '@/services/supabase'
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -30,10 +17,12 @@ function formatDate(iso: string | null) {
 }
 
 export function AdminPage() {
-  const [authed, setAuthed] = useState(isAuthed)
-  const [user, setUser] = useState('')
+  const [authed, setAuthed] = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
-  const [error, setError] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const [rows, setRows] = useState<AdminUserRow[]>([])
   const [usersCount, setUsersCount] = useState(0)
   const [audios, setAudios] = useState(0)
@@ -66,6 +55,50 @@ export function AdminPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  /** Session Supabase + flag is_admin */
+  useEffect(() => {
+    if (!supabase) {
+      setChecking(false)
+      return
+    }
+
+    let mounted = true
+
+    async function checkAdmin() {
+      if (!supabase) return
+      const { data } = await supabase.auth.getSession()
+      const user = data.session?.user
+      if (!user) {
+        if (mounted) {
+          setAuthed(false)
+          setChecking(false)
+        }
+        return
+      }
+      const { data: isAdmin, error: adminErr } = await supabase.rpc('is_current_user_admin')
+      if (!mounted) return
+      if (adminErr || !isAdmin) {
+        setAuthed(false)
+        setError(adminErr ? adminErr.message : 'Compte non admin')
+        setChecking(false)
+        return
+      }
+      setAuthed(true)
+      setChecking(false)
+    }
+
+    void checkAdmin()
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      void checkAdmin()
+    })
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
   useEffect(() => {
     if (!authed) return
     refresh()
@@ -86,53 +119,89 @@ export function AdminPage() {
     }
   }
 
-  function onSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent) {
     e.preventDefault()
-    if (user.trim() === ADMIN_USER && pass === ADMIN_PASS) {
-      sessionStorage.setItem(AUTH_KEY, '1')
-      setAuthed(true)
-      setError(false)
+    if (!supabase) {
+      setError('Supabase non configuré')
       return
     }
-    setError(true)
+    if (!email.trim() || !pass) {
+      setError('Champs requis')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const { error: signErr } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: pass,
+      })
+      if (signErr) {
+        setError('Identifiants incorrects')
+        return
+      }
+      const { data: isAdmin, error: adminErr } = await supabase.rpc('is_current_user_admin')
+      if (adminErr || !isAdmin) {
+        await supabase.auth.signOut()
+        setError('Compte non admin')
+        return
+      }
+      setAuthed(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function logout() {
-    sessionStorage.removeItem(AUTH_KEY)
+  async function logout() {
+    if (supabase) await supabase.auth.signOut()
     setAuthed(false)
-    setUser('')
+    setEmail('')
     setPass('')
+    setError('')
+  }
+
+  if (checking) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-aqua px-6 text-sm text-[#b8e4ea]/70">
+        …
+      </div>
+    )
   }
 
   if (!authed) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-atmosphere-aqua px-6">
-        <form onSubmit={onSubmit} className="w-full max-w-[220px] space-y-3">
+        <form onSubmit={(e) => void onSubmit(e)} className="w-full max-w-[240px] space-y-3">
           <input
-            type="text"
-            autoComplete="username"
-            placeholder="Admin"
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
+            type="email"
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-sm text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
             style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+            disabled={busy}
           />
           <input
             type="password"
             autoComplete="current-password"
-            placeholder="••••••"
+            placeholder="Mot de passe"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
             className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-sm text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
             style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+            disabled={busy}
           />
-          {error && <p className="text-xs text-[#f0a0a0]">Erreur</p>}
+          {error && <p className="text-xs text-[#f0a0a0]">{error}</p>}
           <button
             type="submit"
-            className="aqua-cta w-full !py-2.5 text-sm"
+            disabled={busy}
+            className="aqua-cta w-full !py-2.5 text-sm disabled:opacity-60"
             style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
           >
-            <span>OK</span>
+            <span>{busy ? '…' : 'OK'}</span>
           </button>
         </form>
       </div>
@@ -154,7 +223,7 @@ export function AdminPage() {
           </h1>
           <button
             type="button"
-            onClick={logout}
+            onClick={() => void logout()}
             className="absolute right-0 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wider text-[#b8e4ea]/50 transition hover:text-[#7ed4df]"
           >
             Sortir
