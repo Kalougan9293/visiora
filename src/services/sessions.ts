@@ -44,6 +44,7 @@ function rowToSession(row: SessionRow): VisualizationSession {
     audioStoragePath: row.audio_path,
     audioProgress: progressFromRow(row),
     listens: row.listens,
+    script: row.script ?? null,
   }
 }
 
@@ -111,6 +112,8 @@ export const sessionsService = {
     const status = userId ? 'generating' : 'draft'
 
     if (isSupabaseConfigured() && supabase && userId) {
+      const healthAckAt =
+        typeof answers.health_ack_at === 'string' ? answers.health_ack_at : null
       const { data, error } = await supabase
         .from('sessions')
         .insert({
@@ -122,6 +125,7 @@ export const sessionsService = {
           voice_id: voiceId,
           audio_bytes: status === 'generating' ? 5 : null,
           listens: 0,
+          health_ack_at: healthAckAt,
         })
         .select('*')
         .single()
@@ -159,14 +163,20 @@ export const sessionsService = {
     }
   },
 
-  async markListened(id: string, nextListens: number, userId?: string): Promise<void> {
+  async markListened(id: string, nextListens: number, userId?: string): Promise<boolean> {
     if (isSupabaseConfigured() && supabase && userId) {
-      const { error } = await supabase
+      const { data, error } = await supabase.rpc('record_listen', { p_session_id: id })
+      if (!error) return Boolean(data)
+      /** Fallback si la migration listens n’est pas encore appliquée */
+      console.warn('[sessions] record_listen fallback', error.message)
+      const { error: upErr } = await supabase
         .from('sessions')
         .update({ listens: nextListens, updated_at: new Date().toISOString() })
         .eq('id', id)
         .eq('user_id', userId)
-      if (error) throw error
+      if (upErr) throw upErr
+      return true
     }
+    return true
   },
 }

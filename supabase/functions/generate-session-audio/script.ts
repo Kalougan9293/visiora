@@ -3,7 +3,8 @@
 import { ANNEX_FIXTURE_SCRIPT } from './annex.ts'
 
 export const PAUSE_SHORT_SECONDS = 3
-export const PAUSE_LONG_SECONDS = 6
+/** CDC : pause longue ≈ 9 s */
+export const PAUSE_LONG_SECONDS = 9
 export const TTS_CHUNK_CHARS = 3500
 
 export type ScriptPart =
@@ -11,6 +12,12 @@ export type ScriptPart =
   | { kind: 'silence'; seconds: number }
 
 const MARKER = /\[pause longue\]|\[pause\]/gi
+/** Titres de mouvement : affichage seul, jamais lus */
+const MOVEMENT_LINE = /\[Mouvement[^\]]*\]/gi
+
+function stripDisplayOnly(raw: string): string {
+  return raw.replace(MOVEMENT_LINE, ' ')
+}
 
 function mergeSilences(parts: ScriptPart[]): ScriptPart[] {
   const out: ScriptPart[] = []
@@ -26,7 +33,7 @@ function mergeSilences(parts: ScriptPart[]): ScriptPart[] {
 }
 
 export function parseAnnexScript(raw: string): ScriptPart[] {
-  const text = raw.replace(/\r\n/g, '\n')
+  const text = stripDisplayOnly(raw.replace(/\r\n/g, '\n'))
   const parts: ScriptPart[] = []
   let last = 0
 

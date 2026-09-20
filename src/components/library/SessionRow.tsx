@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
 import { AudioPlayer } from '@/components/audio/AudioPlayer'
+import { ScriptReader } from '@/components/library/ScriptReader'
 import { useSessions } from '@/context/SessionsContext'
 import { useVariant } from '@/context/VariantContext'
 import { formatDateFr, cn } from '@/lib/utils'
@@ -10,8 +11,10 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const { isAqua } = useVariant()
   const { removeSession, markListened, retryGeneration } = useSessions()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [scriptOpen, setScriptOpen] = useState(false)
   const ready = session.status === 'ready' || Boolean(session.audioUrl)
   const pct = Math.min(99, Math.max(5, Math.round(session.audioProgress ?? 8)))
+  const hasScript = Boolean(session.script?.trim()) || ready
 
   const meta =
     session.status === 'generating'
@@ -31,70 +34,103 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
 
   return (
     <>
-    <div
-      className={cn(
-        'flex h-11 w-full min-w-0 items-center gap-2 px-2.5',
-        isAqua
-          ? 'aqua-glass rounded-xl'
-          : 'rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
-      )}
-    >
-      <span
+      <div
         className={cn(
-          'w-[5.75rem] shrink-0 truncate text-left text-[11px]',
-          isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/55 dark:text-champagne/85',
+          'flex h-11 w-full min-w-0 items-center gap-2 px-2.5',
+          isAqua
+            ? 'aqua-glass rounded-xl'
+            : 'rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
         )}
       >
-        {meta}
-      </span>
-
-      <p
-        className={cn(
-          'min-w-0 flex-1 truncate text-center text-sm font-medium',
-          isAqua ? 'text-[#e8f7f9]' : 'text-ink dark:text-cream',
-        )}
-      >
-        {session.title}
-      </p>
-
-      {session.status === 'failed' && (
-        <button
-          type="button"
-          onClick={() => void retryGeneration(session.id)}
+        <span
           className={cn(
-            'shrink-0 text-[10px] underline',
-            isAqua ? 'text-red-300' : 'text-red-600 dark:text-red-300',
+            'w-[5.75rem] shrink-0 truncate text-left text-[11px]',
+            isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/55 dark:text-champagne/85',
           )}
         >
-          Réessayer
-        </button>
-      )}
+          {meta}
+        </span>
 
-      <button
-        type="button"
-        aria-label="Supprimer"
-        onClick={() => setConfirmOpen(true)}
-        className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-          isAqua
-            ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-red-300'
-            : 'text-ink/40 hover:bg-black/5 hover:text-red-500 dark:text-champagne/70 dark:hover:bg-white/5',
+        <p
+          className={cn(
+            'min-w-0 flex-1 truncate text-center text-sm font-medium',
+            isAqua ? 'text-[#e8f7f9]' : 'text-ink dark:text-cream',
+          )}
+        >
+          {session.title}
+        </p>
+
+        {hasScript && (
+          <button
+            type="button"
+            aria-expanded={scriptOpen}
+            aria-label={scriptOpen ? 'Masquer le script' : 'Lire le script'}
+            onClick={() => setScriptOpen((v) => !v)}
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+              isAqua
+                ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-[#7ed4df]'
+                : 'text-ink/40 hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5',
+            )}
+          >
+            <ChevronDown
+              size={16}
+              className={cn('transition-transform', scriptOpen && 'rotate-180')}
+            />
+          </button>
         )}
-      >
-        <Trash2 size={14} />
-      </button>
 
-      {ready ? (
-        <AudioPlayer
-          compact
-          src={session.audioUrl}
-          title={session.title}
-          onPlayStart={() => markListened(session.id)}
-        />
-      ) : (
-        <span className="h-9 w-9 shrink-0" aria-hidden />
+        {session.status === 'failed' && (
+          <button
+            type="button"
+            onClick={() => void retryGeneration(session.id)}
+            className={cn(
+              'shrink-0 text-[10px] underline',
+              isAqua ? 'text-red-300' : 'text-red-600 dark:text-red-300',
+            )}
+          >
+            Réessayer
+          </button>
+        )}
+
+        <button
+          type="button"
+          aria-label="Supprimer"
+          onClick={() => setConfirmOpen(true)}
+          className={cn(
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+            isAqua
+              ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-red-300'
+              : 'text-ink/40 hover:bg-black/5 hover:text-red-500 dark:text-champagne/70 dark:hover:bg-white/5',
+          )}
+        >
+          <Trash2 size={14} />
+        </button>
+
+        {ready ? (
+          <AudioPlayer
+            compact
+            src={session.audioUrl}
+            title={session.title}
+            onPlayStart={() => markListened(session.id)}
+          />
+        ) : (
+          <span className="h-9 w-9 shrink-0" aria-hidden />
+        )}
+      </div>
+
+      {scriptOpen && (
+        <div
+          className={cn(
+            'mt-1 rounded-2xl px-4 py-4',
+            isAqua
+              ? 'border border-white/10 bg-white/[0.04]'
+              : 'border border-black/8 bg-cream-card/60 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]/80',
+          )}
+        >
+          <ScriptReader script={session.script} isAqua={isAqua} />
+        </div>
       )}
-    </div>
 
       {confirmOpen && (
         <div

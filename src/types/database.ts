@@ -57,6 +57,8 @@ export interface Database {
           audio_url: string | null
           audio_bytes: number | null
           voice_id: string | null
+          script: string | null
+          health_ack_at: string | null
           created_at: string
           updated_at: string
         }
@@ -72,6 +74,8 @@ export interface Database {
           audio_url?: string | null
           audio_bytes?: number | null
           voice_id?: string | null
+          script?: string | null
+          health_ack_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -87,6 +91,8 @@ export interface Database {
           audio_url?: string | null
           audio_bytes?: number | null
           voice_id?: string | null
+          script?: string | null
+          health_ack_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -116,6 +122,10 @@ export interface Database {
       }
       admin_delete_user: {
         Args: { target_id: string }
+        Returns: boolean
+      }
+      record_listen: {
+        Args: { p_session_id: string }
         Returns: boolean
       }
     }

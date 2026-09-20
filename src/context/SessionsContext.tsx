@@ -63,7 +63,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         current.status === fresh.status &&
         current.audioUrl === fresh.audioUrl &&
         current.audioStoragePath === fresh.audioStoragePath &&
-        current.audioProgress === fresh.audioProgress
+        current.audioProgress === fresh.audioProgress &&
+        current.script === fresh.script
       ) {
         return prev
       }
@@ -170,16 +171,31 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   const markListened = useCallback(
     (id: string) => {
-      setSessions((prev) => {
-        const target = prev.find((s) => s.id === id)
-        if (!target) return prev
-        const nextListens = target.listens + 1
-        void sessionsService.markListened(id, nextListens, userId).catch((err) => {
+      void (async () => {
+        try {
+          if (userId) {
+            const counted = await sessionsService.markListened(id, 0, userId)
+            if (!counted) return
+            setSessions((prev) =>
+              prev.map((s) => (s.id === id ? { ...s, listens: s.listens + 1 } : s)),
+            )
+            setStats((prev) => progressService.recordListen(prev))
+            return
+          }
+          /** Invité : 1 jour validé max (journal local) */
+          setStats((prev) => {
+            const key = new Date().toISOString().slice(0, 10)
+            const already = prev.journal.find((d) => d.date === key)?.completed
+            if (already) return prev
+            return progressService.recordListen(prev)
+          })
+          setSessions((prev) =>
+            prev.map((s) => (s.id === id ? { ...s, listens: s.listens + 1 } : s)),
+          )
+        } catch (err) {
           console.warn('[sessions] markListened failed', err)
-        })
-        return prev.map((s) => (s.id === id ? { ...s, listens: nextListens } : s))
-      })
-      setStats((prev) => progressService.recordListen(prev))
+        }
+      })()
     },
     [userId],
   )

@@ -104,6 +104,6 @@ Différence vs Rituel : **pas d’oiseaux / pas de fond** dans le raw — meille
 
 ## Limites actuelles
 
-- Fixture au format annexe (pas encore le script 15 min verbatim)
+- Script Annexe 1 du CDC branché ; le **prompt IA** perso n’est pas encore là
 - Sample clone ~10 s (court) — un extrait voix seule 30–60 s améliorera le clone
-- Job borné par le wall-clock Edge Function (150 s free / 400 s paid)
+- Job borné par le wall-clock Edge Function (150 s free / 400 s paid) — séance longue peut nécessiter Pro

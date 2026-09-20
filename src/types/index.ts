@@ -38,6 +38,8 @@ export interface VisualizationSession {
   /** Pre-generated audio URL (Supabase Storage / CDN) — never live TTS */
   audioUrl?: string | null
   audioStoragePath?: string | null
+  /** Script Annexe / généré — restitution lisible */
+  script?: string | null
   /** 0–100 pendant `generating` (stocké temporairement dans audio_bytes) */
   audioProgress?: number
   listens: number

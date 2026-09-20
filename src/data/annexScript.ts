@@ -1,9 +1,9 @@
 /**
- * Script Annexe 1 du CDC MVP (OCR p.20–22).
- * [Mouvement …] = affichage seul, jamais lus au TTS.
- * [pause] ≈ 3 s · [pause longue] ≈ 9 s.
+ * Script Annexe 1 du CDC MVP — restitution lisible + fallback audio.
+ * [Mouvement …] = titres d’affichage (non lus).
+ * [pause] / [pause longue] → blancs typographiques à l’écran.
  */
-export const ANNEX_FIXTURE_SCRIPT = `
+export const ANNEX_SCRIPT = `
 [Mouvement 1 — Intention]
 
 Installe-toi confortablement, Thomas… et offre-toi simplement ce moment, rien que pour toi.

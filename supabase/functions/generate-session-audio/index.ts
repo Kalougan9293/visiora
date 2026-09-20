@@ -127,6 +127,12 @@ async function processJob(params: {
 
   await setProgress(params.admin, params.sessionId, 8)
 
+  /** Persiste le script pour la restitution lisible (même si le TTS échoue plus tard). */
+  await params.admin
+    .from('sessions')
+    .update({ script: params.script, updated_at: new Date().toISOString() })
+    .eq('id', params.sessionId)
+
   const pcmParts: Int16Array[] = []
   const previousRequestIds: string[] = []
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
@@ -187,6 +193,7 @@ async function processJob(params: {
     .from('sessions')
     .update({
       status: 'ready',
+      script: params.script,
       audio_path: path,
       audio_url: signed.signedUrl,
       audio_bytes: audioBytes.byteLength,

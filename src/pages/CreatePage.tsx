@@ -11,11 +11,13 @@ import {
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
+import { HealthScreen } from '@/components/create/HealthScreen'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
+import { needsHealthScreen } from '@/services/healthGate'
 
 type Answers = Record<string, string>
 
@@ -32,6 +34,7 @@ export function CreatePage() {
     q12_tutoiement: 'tu',
     q12_registre: 'neutre',
   })
+  const [healthGate, setHealthGate] = useState(false)
 
   const step = WIZARD_STEPS[stepIdx]
 
@@ -73,14 +76,39 @@ export function CreatePage() {
 
   const goNext = () => {
     if (stepIdx < WIZARD_STEPS.length - 1) {
-      setStepIdx((s) => s + 1)
+      const next = stepIdx + 1
+      if (next === WIZARD_STEPS.length - 1 && needsHealthScreen(answers)) {
+        setHealthGate(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      setStepIdx(next)
       window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      void addSession(answers).then(() => navigate('/bibliotheque'))
+      return
     }
+    if (needsHealthScreen(answers)) {
+      setHealthGate(true)
+      return
+    }
+    void addSession(answers).then(() => navigate('/bibliotheque'))
+  }
+
+  const acceptHealth = () => {
+    setAnswers((prev) => ({
+      ...prev,
+      health_ack: '1',
+      health_ack_at: new Date().toISOString(),
+    }))
+    setHealthGate(false)
+    setStepIdx(WIZARD_STEPS.length - 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const goBack = () => {
+    if (healthGate) {
+      setHealthGate(false)
+      return
+    }
     if (stepIdx === 0) {
       setPhase('intro')
       return
@@ -144,13 +172,16 @@ export function CreatePage() {
     <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center text-center">
       <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-ink/45 dark:text-cream/45">
         <span>
-          Étape {step.step} / {step.total}
+          {healthGate ? 'Santé' : `Étape ${step.step} / ${step.total}`}
         </span>
         <span>{step.percent}%</span>
       </div>
       <ProgressBar value={step.percent} className="mb-2 shrink-0" />
 
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-2">
+        {healthGate ? (
+          <HealthScreen onAccept={acceptHealth} />
+        ) : (
         <AnimatePresence mode="wait">
           <motion.div
             key={step.step}
@@ -181,6 +212,7 @@ export function CreatePage() {
             </div>
           </motion.div>
         </AnimatePresence>
+        )}
       </div>
 
       <div className="flex w-full shrink-0 gap-2 pt-3 pb-1">
@@ -188,10 +220,12 @@ export function CreatePage() {
           <ArrowLeft size={16} />
           Retour
         </Button>
+        {!healthGate && (
         <Button className="flex-1 rounded-full" disabled={!canContinue} onClick={goNext}>
           {stepIdx === WIZARD_STEPS.length - 1 ? 'Générer' : 'Suivant'}
           <ArrowRight size={16} />
         </Button>
+        )}
       </div>
     </div>
   )

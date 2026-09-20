@@ -123,4 +123,35 @@
   .texture-paper {
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
   }
+
+  /* Restitution script CDC */
+  .vs-seance {
+    line-height: 1.8;
+    max-width: 34rem;
+  }
+  .vs-silence-court {
+    height: 2rem;
+  }
+  .vs-silence-long {
+    height: 4rem;
+  }
+  .vs-voix-interieure {
+    margin-block: 1.25rem;
+    border-left: 2px solid color-mix(in srgb, #5797b4 80%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, #0b1e44 55%, transparent);
+    padding: 1rem;
+    font-style: italic;
+    color: color-mix(in srgb, #c2f6fc 85%, #fff);
+  }
+  .variant-classic:not(.dark) .vs-voix-interieure {
+    border-left-color: var(--color-olive);
+    background: color-mix(in srgb, var(--color-olive) 8%, #fff);
+    color: var(--color-ink);
+  }
+  .variant-aqua .vs-voix-interieure {
+    border-left-color: #7ed4df;
+    background: color-mix(in srgb, #0d3d47 70%, transparent);
+    color: #e8f7f9;
+  }
 }

@@ -61,6 +61,8 @@ create table if not exists public.sessions (
   audio_url text,
   audio_bytes bigint,
   voice_id text,
+  script text,
+  health_ack_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
