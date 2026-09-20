@@ -196,6 +196,15 @@ export const VOICES = [
     preview: '/voices/rituel-preview.mp3?v=v3',
   },
   {
+    id: 'antoni',
+    name: 'Damien',
+    description: '',
+    gender: 'Masculin',
+    tag: '8/10',
+    ambiance: null,
+    preview: '/voices/damien-preview.mp3?v=d1',
+  },
+  {
     id: 'onde',
     name: 'Sabrina',
     description: '',
@@ -203,15 +212,6 @@ export const VOICES = [
     tag: '8/10',
     ambiance: 'eau',
     preview: '/voices/onde-preview.mp3?v=natural1',
-  },
-  {
-    id: 'antoni',
-    name: 'Amandine',
-    description: '',
-    gender: 'Féminin',
-    tag: '7/10',
-    ambiance: null,
-    preview: '/voices/antoni.mp3?v=dry2',
   },
 ] as const
 
@@ -233,6 +233,15 @@ export const AQUA_VOICES = [
     preview: '/voices/rituel-preview.mp3?v=v3',
   },
   {
+    id: 'antoni',
+    photo: '/voices/damien.jpg',
+    label: 'Damien',
+    vibe: '',
+    objectPosition: '50% 12%',
+    ambiance: null,
+    preview: '/voices/damien-preview.mp3?v=d1',
+  },
+  {
     id: 'onde',
     photo: '/voices/sabrina.jpg',
     label: 'Sabrina',
@@ -240,15 +249,6 @@ export const AQUA_VOICES = [
     objectPosition: '50% 18%',
     ambiance: 'eau' as const,
     preview: '/voices/onde-preview.mp3?v=natural1',
-  },
-  {
-    id: 'antoni',
-    photo: '/voices/reformer.jpg',
-    label: 'Amandine',
-    vibe: '',
-    objectPosition: '50% 18%',
-    ambiance: null,
-    preview: '/voices/antoni.mp3?v=dry2',
   },
 ] as const
 

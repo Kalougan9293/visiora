@@ -1,5 +1,15 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { chunkSpeech, parseAnnexScript, resolveScript } from './script.ts'
+import {
+  TTS_PCM_FORMAT,
+  upsampleTts,
+  concatPcm,
+  encodeMp3,
+  loadBed,
+  mixLoopingBed,
+  pcmFromEleven,
+  silencePcm,
+} from './mix.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -10,10 +20,10 @@ const DEFAULT_VOICES: Record<string, string> = {
   /** Secrets ELEVENLABS_VOICE_* prioritaires */
   /** 1 · Vanessa — clone oiseaux + musique */
   rituel: '1zaEYJSYmxoQNiDl5C42',
-  /** 2 · Sabrina — clone fond eau */
+  /** 2 · Damien */
+  antoni: 'iYo3urNKUm5TVGCFojl0',
+  /** 3 · Sabrina — clone fond eau */
   onde: 'JQ2r7F93aKZaFxO6C5Tu',
-  /** 3 · Amandine */
-  antoni: 'nVPCtAFzgyMX3FZKNzH0',
   /** Anciens slots (séances déjà créées) */
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
   bella: 'EXAVITQu4vr4xnSDxMaL',
@@ -40,43 +50,6 @@ function resolveElevenVoiceId(appVoiceId: string | null): string {
   return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.rituel
 }
 
-function concatBytes(chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((n, c) => n + c.byteLength, 0)
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const chunk of chunks) {
-    out.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return out
-}
-
-function repeatBytes(unit: Uint8Array, times: number): Uint8Array {
-  const count = Math.max(1, Math.round(times))
-  return concatBytes(Array.from({ length: count }, () => unit))
-}
-
-function generatedSilence1s(): Uint8Array {
-  const samplesPerFrame = 1152
-  const sampleRate = 44100
-  const frameSize = 417
-  const frames = Math.max(1, Math.round(sampleRate / samplesPerFrame))
-  const frame = new Uint8Array(frameSize)
-  frame[0] = 0xff
-  frame[1] = 0xfb
-  frame[2] = 0x90
-  frame[3] = 0x04
-  return concatBytes(Array.from({ length: frames }, () => frame))
-}
-
-async function loadSilence1s(): Promise<Uint8Array> {
-  try {
-    return await Deno.readFile(new URL('./silence-1s.mp3', import.meta.url))
-  } catch {
-    return generatedSilence1s()
-  }
-}
-
 async function setProgress(admin: SupabaseClient, sessionId: string, pct: number) {
   const value = Math.round(Math.min(99, Math.max(1, pct)))
   const { error } = await admin
@@ -96,16 +69,16 @@ async function elevenTts(params: {
   previousRequestIds: string[]
 }): Promise<{ audio: Uint8Array; requestId: string | null }> {
   const key = params.appVoiceKey.toLowerCase()
-  /** Vanessa : rythme lent ; Sabrina / Amandine : tempo naturel */
+  /** Vanessa : rythme lent ; Damien / Sabrina : tempo naturel */
   const speed = key === 'rituel' ? 0.78 : key === 'onde' ? 1.0 : 0.95
   const ttsRes = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=mp3_44100_128`,
+    `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=${TTS_PCM_FORMAT}`,
     {
       method: 'POST',
       headers: {
         'xi-api-key': params.apiKey,
         'Content-Type': 'application/json',
-        Accept: 'audio/mpeg',
+        Accept: 'application/octet-stream',
       },
       body: JSON.stringify({
         text: params.text,
@@ -154,33 +127,41 @@ async function processJob(params: {
 
   await setProgress(params.admin, params.sessionId, 8)
 
-  const silence1s = await loadSilence1s()
-  const mp3Parts: Uint8Array[] = []
+  const pcmParts: Int16Array[] = []
   const previousRequestIds: string[] = []
+  const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
 
   for (const part of parts) {
     if (part.kind === 'silence') {
-      mp3Parts.push(repeatBytes(silence1s, part.seconds))
+      pcmParts.push(silencePcm(part.seconds))
       continue
     }
     for (const chunk of chunkSpeech(part.text)) {
       const { audio, requestId } = await elevenTts({
         apiKey: params.elevenKey,
         voiceId: resolveElevenVoiceId(params.voiceId),
-        appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
+        appVoiceKey,
         text: chunk,
         previousRequestIds,
       })
-      mp3Parts.push(audio)
+      pcmParts.push(pcmFromEleven(audio))
       if (requestId) previousRequestIds.push(requestId)
       doneSpeech += 1
       await setProgress(params.admin, params.sessionId, 8 + (doneSpeech / totalSpeech) * 80)
     }
   }
 
-  await setProgress(params.admin, params.sessionId, 92)
+  await setProgress(params.admin, params.sessionId, 90)
 
-  const audioBytes = concatBytes(mp3Parts)
+  let voicePcm = upsampleTts(concatPcm(pcmParts))
+  const bed = await loadBed(appVoiceKey)
+  if (bed) {
+    voicePcm = mixLoopingBed(voicePcm, bed.pcm, bed.gain)
+  }
+
+  await setProgress(params.admin, params.sessionId, 94)
+
+  const audioBytes = await encodeMp3(voicePcm)
   if (audioBytes.byteLength < 1000) {
     throw new Error('Fichier audio trop court')
   }

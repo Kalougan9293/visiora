@@ -326,7 +326,8 @@ function VoiceChoice({
     el.pause()
     releaseAmbiance()
     el.src = src
-    if (ambiance) holdAmbiance(ambiance)
+    // Vanessa : l'extrait MP3 contient déjà oiseaux+musique. La boucle Web Audio ajoutait un grésillement.
+    if (ambiance && id !== 'rituel') holdAmbiance(ambiance)
     try {
       await el.play()
       setPlayingId(id)

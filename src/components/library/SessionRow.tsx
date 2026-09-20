@@ -4,7 +4,6 @@ import { AudioPlayer } from '@/components/audio/AudioPlayer'
 import { useSessions } from '@/context/SessionsContext'
 import { useVariant } from '@/context/VariantContext'
 import { formatDateFr, cn } from '@/lib/utils'
-import { ambianceFromAnswers } from '@/services/ambiance'
 import type { VisualizationSession } from '@/types'
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
@@ -90,7 +89,6 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           compact
           src={session.audioUrl}
           title={session.title}
-          ambiance={ambianceFromAnswers(session.answers)}
           onPlayStart={() => markListened(session.id)}
         />
       ) : (

@@ -7,7 +7,7 @@ const corsHeaders = {
 
 const CURRENT: Record<string, string> = {
   zPy2sgLU4pZ7Xrjh87uz: 'rachel',
-  f37Tyb9RuhPPJKa60pUr: 'antoni',
+  iYo3urNKUm5TVGCFojl0: 'antoni',
   EXAVITQu4vr4xnSDxMaL: 'bella',
 }
 

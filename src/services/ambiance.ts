@@ -2,7 +2,7 @@
  * Fonds sonores sous la voix (eau / oiseaux / spa).
  * Liés à la voix choisie — pas de choix séparé dans le wizard.
  * Démarrés dans le même geste utilisateur que Play (Safari iPhone).
- * Certaines voix (ex. Amandine) n’ont pas encore de fond → null.
+ * Certaines voix (ex. Damien) n’ont pas encore de fond → null.
  */
 
 import { VOICES } from '@/data/wizard'
@@ -16,7 +16,7 @@ const VOICE_AMBIANCE: Record<string, AmbianceChoice> = Object.fromEntries(
 
 const LOOP_SRC: Record<AmbianceId, string> = {
   eau: '/voices/ambiance-eau.mp3',
-  oiseaux: '/voices/ambiance-oiseaux.mp3',
+  oiseaux: '/voices/ambiance-oiseaux.mp3?v=bed3',
   spa: '/voices/ambiance-spa.mp3',
 }
 

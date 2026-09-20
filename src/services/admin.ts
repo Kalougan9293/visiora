@@ -38,6 +38,18 @@ export function formatStorage(bytes: number): string {
   return `${Math.round(mo)} Mo`
 }
 
+/** Quotas Free. Audios calés sur 15 min @ 128 kbps (~14 Mo) dans 1 Go. */
+export const ADMIN_LIMITS = {
+  users: '50 000',
+  audios: '~70',
+  storage: '1 Go',
+} as const
+
+/** Comptes jetables de génération interne — pas des utilisateurs. */
+function isSystemEmail(email: string) {
+  return /^visiora\.gen\./i.test(email.trim())
+}
+
 export const adminService = {
   async loadDashboard(): Promise<{ rows: AdminUserRow[]; stats: AdminStats }> {
     if (!isSupabaseConfigured() || !supabase) {
@@ -55,14 +67,16 @@ export const adminService = {
     if (usersRes.error) throw usersRes.error
     if (statsRes.error) throw statsRes.error
 
-    const rows: AdminUserRow[] = ((usersRes.data as RpcUser[] | null) ?? []).map((u) => ({
-      id: u.id,
-      firstName: u.first_name ?? '',
-      lastName: u.last_name ?? '',
-      email: u.email ?? '',
-      audioCount: Number(u.audio_count) || 0,
-      lastSeenAt: u.last_seen_at,
-    }))
+    const rows: AdminUserRow[] = ((usersRes.data as RpcUser[] | null) ?? [])
+      .map((u) => ({
+        id: u.id,
+        firstName: u.first_name ?? '',
+        lastName: u.last_name ?? '',
+        email: u.email ?? '',
+        audioCount: Number(u.audio_count) || 0,
+        lastSeenAt: u.last_seen_at,
+      }))
+      .filter((u) => !isSystemEmail(u.email))
 
     const raw = (statsRes.data as RpcStats | null) ?? {
       users: 0,
@@ -73,8 +87,8 @@ export const adminService = {
     return {
       rows,
       stats: {
-        users: Number(raw.users) || rows.length,
-        audios: Number(raw.audios) || rows.reduce((n, r) => n + r.audioCount, 0),
+        users: rows.length,
+        audios: rows.reduce((n, r) => n + r.audioCount, 0),
         storageBytes: Number(raw.storage_bytes) || 0,
       },
     }

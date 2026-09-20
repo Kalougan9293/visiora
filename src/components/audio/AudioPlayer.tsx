@@ -22,7 +22,7 @@ export function AudioPlayer({
   onPlayStart,
   className,
   compact = false,
-  ambiance = 'eau',
+  ambiance = null,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)

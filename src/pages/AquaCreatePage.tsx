@@ -14,6 +14,7 @@ import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
+import { canDictate, startDictation, type DictationSession } from '@/services/dictation'
 
 type Answers = Record<string, string>
 
@@ -40,8 +41,9 @@ export function AquaCreatePage() {
     q12_registre: 'neutre',
   })
   const [listeningField, setListeningField] = useState<string | null>(null)
+  const [micHint, setMicHint] = useState('')
   const [inspireIndex, setInspireIndex] = useState(0)
-  const recognitionRef = useRef<{ stop: () => void } | null>(null)
+  const dictationRef = useRef<DictationSession | null>(null)
 
   useEffect(() => {
     if (phase !== 'intro') return
@@ -74,58 +76,54 @@ export function AquaCreatePage() {
     }))
   }
 
-  const toggleMic = (fieldId: string) => {
-    const W = window as Window & {
-      SpeechRecognition?: new () => {
-        lang: string
-        interimResults: boolean
-        continuous: boolean
-        start: () => void
-        stop: () => void
-        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
-        onerror: (() => void) | null
-        onend: (() => void) | null
-      }
-      webkitSpeechRecognition?: new () => {
-        lang: string
-        interimResults: boolean
-        continuous: boolean
-        start: () => void
-        stop: () => void
-        onresult: ((e: { results: { [i: number]: { [j: number]: { transcript: string } } } }) => void) | null
-        onerror: (() => void) | null
-        onend: (() => void) | null
-      }
-    }
-    const SR = W.SpeechRecognition || W.webkitSpeechRecognition
-
-    if (!SR) {
-      alert('La saisie vocale n’est pas supportée sur ce navigateur.')
-      return
-    }
-
-    if (listeningField === fieldId && recognitionRef.current) {
-      recognitionRef.current.stop()
-      setListeningField(null)
-      return
-    }
-
-    recognitionRef.current?.stop()
-
-    const rec = new SR()
-    recognitionRef.current = rec
-    rec.lang = 'fr-FR'
-    rec.interimResults = false
-    rec.continuous = false
-    rec.onresult = (event) => {
-      const text = event.results[0]?.[0]?.transcript
-      if (text) appendField(fieldId, text)
-    }
-    rec.onerror = () => setListeningField(null)
-    rec.onend = () => setListeningField(null)
-    setListeningField(fieldId)
-    rec.start()
+  const stopDictation = () => {
+    dictationRef.current?.stop()
+    dictationRef.current = null
+    setListeningField(null)
   }
+
+  const toggleMic = (fieldId: string) => {
+    if (listeningField === fieldId) {
+      stopDictation()
+      setMicHint('')
+      return
+    }
+
+    if (!canDictate()) {
+      setMicHint('La dictée n’est pas dispo ici — essaie Chrome ou Safari.')
+      return
+    }
+
+    stopDictation()
+    setMicHint('Parle — tes mots s’écrivent.')
+    setListeningField(fieldId)
+
+    const session = startDictation({
+      onTranscript: (text) => appendField(fieldId, text),
+      onError: (message) => {
+        if (dictationRef.current !== session) return
+        setMicHint(message)
+        setListeningField(null)
+        dictationRef.current = null
+      },
+      onEnd: () => {
+        if (dictationRef.current !== session) return
+        setListeningField(null)
+        dictationRef.current = null
+      },
+    })
+    dictationRef.current = session
+  }
+
+  useEffect(() => {
+    return () => dictationRef.current?.stop()
+  }, [])
+
+  useEffect(() => {
+    stopDictation()
+    setMicHint('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stop the mic when changing step
+  }, [stepIdx])
 
   const startWizard = () => {
     setPhase('wizard')
@@ -284,6 +282,9 @@ export function AquaCreatePage() {
                 />
               ))}
             </div>
+            {micHint && (
+              <p className="mt-3 text-xs text-[#7ed4df]/80">{micHint}</p>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -466,7 +467,8 @@ function AquaVoiceChoice({
     el.pause()
     releaseAmbiance()
     el.src = src
-    if (ambiance) holdAmbiance(ambiance)
+    // Vanessa : l'extrait MP3 contient déjà oiseaux+musique. La boucle Web Audio ajoutait un grésillement.
+    if (ambiance && id !== 'rituel') holdAmbiance(ambiance)
     try {
       await el.play()
       setPlayingId(id)

@@ -43,8 +43,8 @@ Mapping voix app → ElevenLabs :
 | App (`q12_voice`) | ElevenLabs Voice ID | Fond | Aperçu |
 |-------------------|---------------------|------|--------|
 | rituel (Vanessa) | `1zaEYJSYmxoQNiDl5C42` (`ELEVENLABS_VOICE_RITUEL`) | oiseaux (+ musique extrait) | `rituel.mp4` / `rituel-preview.mp3` |
+| antoni (Damien) | `iYo3urNKUm5TVGCFojl0` (`ELEVENLABS_VOICE_ANTONI`) | — | `damien.mp4` / `damien-preview.mp3` |
 | onde (Sabrina) | `JQ2r7F93aKZaFxO6C5Tu` (`ELEVENLABS_VOICE_ONDE`) | eau | gemini / `onde-preview.mp3` |
-| antoni (Amandine) | `nVPCtAFzgyMX3FZKNzH0` (`ELEVENLABS_VOICE_ANTONI`) | spa | `antoni.mp3` (extrait TTS) |
 
 Fonds sonores liés à la voix (pas de choix séparé). Boucles app : `public/voices/ambiance-*.mp3`.
 

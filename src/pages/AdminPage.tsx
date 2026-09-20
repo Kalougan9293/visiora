@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Trash2 } from 'lucide-react'
-import { adminService, formatStorage, type AdminUserRow } from '@/services/admin'
+import { ADMIN_LIMITS, adminService, formatStorage, type AdminUserRow } from '@/services/admin'
 import { isSupabaseConfigured, supabase } from '@/services/supabase'
 
 function formatDate(iso: string | null) {
@@ -231,9 +231,21 @@ export function AdminPage() {
         </div>
 
         <div className="mt-10 flex justify-center gap-3 sm:gap-4">
-          <StatSquare value={loading ? '…' : String(usersCount)} label="Utilisateurs" />
-          <StatSquare value={loading ? '…' : String(audios)} label="Audios" />
-          <StatSquare value={loading ? '…' : storageLabel} label="Stockage" />
+          <StatSquare
+            value={loading ? '…' : String(usersCount)}
+            label="Utilisateurs"
+            limit={ADMIN_LIMITS.users}
+          />
+          <StatSquare
+            value={loading ? '…' : String(audios)}
+            label="Audios"
+            limit={ADMIN_LIMITS.audios}
+          />
+          <StatSquare
+            value={loading ? '…' : storageLabel}
+            label="Stockage"
+            limit={ADMIN_LIMITS.storage}
+          />
         </div>
 
         {loadError && (
@@ -297,11 +309,22 @@ export function AdminPage() {
   )
 }
 
-function StatSquare({ value, label }: { value: string; label: string }) {
+function StatSquare({
+  value,
+  label,
+  limit,
+}: {
+  value: string
+  label: string
+  limit: string
+}) {
   return (
-    <div className="flex h-[5.5rem] w-[5.5rem] flex-col items-center justify-center gap-1 rounded-xl border border-white/15 bg-white/[0.05] sm:h-24 sm:w-24">
-      <p className="text-xl font-semibold tabular-nums text-[#f4fcfd] sm:text-2xl">{value}</p>
-      <p className="text-[9px] uppercase tracking-[0.12em] text-[#7ed4df]/75">{label}</p>
+    <div className="flex w-[5.5rem] flex-col items-center sm:w-24">
+      <div className="flex h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-white/15 bg-white/[0.05] sm:h-24">
+        <p className="text-xl font-semibold tabular-nums text-[#f4fcfd] sm:text-2xl">{value}</p>
+        <p className="text-[9px] uppercase tracking-[0.12em] text-[#7ed4df]/75">{label}</p>
+      </div>
+      <p className="mt-1.5 text-[9px] tabular-nums text-[#b8e4ea]/45">max {limit}</p>
     </div>
   )
 }
