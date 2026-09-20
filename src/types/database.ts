@@ -58,6 +58,7 @@ export interface Database {
           audio_bytes: number | null
           voice_id: string | null
           script: string | null
+          audio_job: Json | null
           health_ack_at: string | null
           created_at: string
           updated_at: string
@@ -75,6 +76,7 @@ export interface Database {
           audio_bytes?: number | null
           voice_id?: string | null
           script?: string | null
+          audio_job?: Json | null
           health_ack_at?: string | null
           created_at?: string
           updated_at?: string
@@ -92,6 +94,7 @@ export interface Database {
           audio_bytes?: number | null
           voice_id?: string | null
           script?: string | null
+          audio_job?: Json | null
           health_ack_at?: string | null
           created_at?: string
           updated_at?: string

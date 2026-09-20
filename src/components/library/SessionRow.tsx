@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { AudioPlayer } from '@/components/audio/AudioPlayer'
+import { GeneratingWaterProgress } from '@/components/library/GeneratingWaterProgress'
 import { ScriptReader } from '@/components/library/ScriptReader'
 import { useSessions } from '@/context/SessionsContext'
 import { useVariant } from '@/context/VariantContext'
@@ -13,15 +14,9 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
   const ready = session.status === 'ready' || Boolean(session.audioUrl)
+  const generating = session.status === 'generating'
   const pct = Math.min(99, Math.max(5, Math.round(session.audioProgress ?? 8)))
   const hasScript = Boolean(session.script?.trim()) || ready
-
-  const meta =
-    session.status === 'generating'
-      ? `${pct}%`
-      : session.status === 'draft' && !session.audioUrl
-        ? 'connexion'
-        : formatDateFr(session.createdAt)
 
   useEffect(() => {
     if (!confirmOpen) return
@@ -32,23 +27,29 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [confirmOpen])
 
+  const shellClass = cn(
+    'w-full min-w-0',
+    isAqua
+      ? 'aqua-glass rounded-xl'
+      : 'rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
+  )
+
+  if (generating) {
+    return <GeneratingWaterProgress serverPct={pct} isAqua={isAqua} />
+  }
+
   return (
     <>
-      <div
-        className={cn(
-          'flex h-11 w-full min-w-0 items-center gap-2 px-2.5',
-          isAqua
-            ? 'aqua-glass rounded-xl'
-            : 'rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
-        )}
-      >
+      <div className={cn(shellClass, 'flex h-11 items-center gap-2 px-2.5')}>
         <span
           className={cn(
             'w-[5.75rem] shrink-0 truncate text-left text-[11px]',
             isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/55 dark:text-champagne/85',
           )}
         >
-          {meta}
+          {session.status === 'draft' && !session.audioUrl
+            ? 'connexion'
+            : formatDateFr(session.createdAt)}
         </span>
 
         <p
@@ -60,7 +61,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           {session.title}
         </p>
 
-        {hasScript && (
+        {hasScript && ready && (
           <button
             type="button"
             aria-expanded={scriptOpen}
@@ -80,43 +81,43 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           </button>
         )}
 
-        {session.status === 'failed' && (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {session.status === 'failed' && (
+            <button
+              type="button"
+              onClick={() => void retryGeneration(session.id)}
+              className={cn(
+                'shrink-0 px-1 text-[10px] underline',
+                isAqua ? 'text-red-300' : 'text-red-600 dark:text-red-300',
+              )}
+            >
+              Réessayer
+            </button>
+          )}
+
           <button
             type="button"
-            onClick={() => void retryGeneration(session.id)}
+            aria-label="Supprimer"
+            onClick={() => setConfirmOpen(true)}
             className={cn(
-              'shrink-0 text-[10px] underline',
-              isAqua ? 'text-red-300' : 'text-red-600 dark:text-red-300',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+              isAqua
+                ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-red-300'
+                : 'text-ink/40 hover:bg-black/5 hover:text-red-500 dark:text-champagne/70 dark:hover:bg-white/5',
             )}
           >
-            Réessayer
+            <Trash2 size={14} />
           </button>
-        )}
 
-        <button
-          type="button"
-          aria-label="Supprimer"
-          onClick={() => setConfirmOpen(true)}
-          className={cn(
-            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-            isAqua
-              ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-red-300'
-              : 'text-ink/40 hover:bg-black/5 hover:text-red-500 dark:text-champagne/70 dark:hover:bg-white/5',
+          {ready && (
+            <AudioPlayer
+              compact
+              src={session.audioUrl}
+              title={session.title}
+              onPlayStart={() => markListened(session.id)}
+            />
           )}
-        >
-          <Trash2 size={14} />
-        </button>
-
-        {ready ? (
-          <AudioPlayer
-            compact
-            src={session.audioUrl}
-            title={session.title}
-            onPlayStart={() => markListened(session.id)}
-          />
-        ) : (
-          <span className="h-9 w-9 shrink-0" aria-hidden />
-        )}
+        </div>
       </div>
 
       {scriptOpen && (

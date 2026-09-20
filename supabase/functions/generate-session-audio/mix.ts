@@ -11,10 +11,12 @@ export async function loadBed(appVoiceKey: string): Promise<{ pcm: Int16Array; g
   const key = appVoiceKey.toLowerCase()
   try {
     if (key === 'rituel') {
-      return { pcm: pcmFromWav(b64ToBytes(RITUEL_WAV_B64)), gain: 0.32 }
+      /** Aligné sur le volume preview oiseaux (ambiance.ts ≈ 0.16). */
+      return { pcm: pcmFromWav(b64ToBytes(RITUEL_WAV_B64)), gain: 0.16 }
     }
     if (key === 'onde') {
-      return { pcm: pcmFromWav(b64ToBytes(ONDE_WAV_B64)), gain: 0.58 }
+      /** Aligné sur le volume preview eau (ambiance.ts ≈ 0.22). */
+      return { pcm: pcmFromWav(b64ToBytes(ONDE_WAV_B64)), gain: 0.2 }
     }
   } catch (err) {
     console.warn('[mix] bed missing', key, err)
@@ -113,24 +115,33 @@ export function upsampleTts(pcm: Int16Array): Int16Array {
   return resamplePcm(pcm, TTS_RATE, SAMPLE_RATE)
 }
 
-export function mixLoopingBed(voice: Int16Array, bed: Int16Array, gain: number): Int16Array {
-  if (!bed.length || gain <= 0) return voice
+export function mixLoopingBed(
+  voice: Int16Array,
+  bed: Int16Array,
+  gain: number,
+  bedOffset = 0,
+): { pcm: Int16Array; nextOffset: number } {
+  if (!bed.length || gain <= 0) return { pcm: voice, nextOffset: bedOffset }
   const out = new Int16Array(voice.length)
   const n = bed.length
   const fade = Math.min(SAMPLE_RATE, voice.length)
   const xfade = Math.min(Math.floor(n / 4), Math.round(0.12 * SAMPLE_RATE))
+  /** Légère baisse de la voix → évite le clip (= grésillement) quand le lit s’ajoute. */
+  const voiceScale = 0.9
+  let offset = ((bedOffset % n) + n) % n
   for (let i = 0; i < voice.length; i++) {
     const fadeGain = i < fade ? (i / fade) * gain : gain
-    const j = i % n
+    const j = offset
     let b = bed[j]!
     if (xfade > 0 && j < xfade) {
       const t = j / xfade
       b = bed[n - xfade + j]! * (1 - t) + b * t
     }
-    const mixed = voice[i]! + b * fadeGain
+    const mixed = voice[i]! * voiceScale + b * fadeGain
     out[i] = mixed > 32767 ? 32767 : mixed < -32768 ? -32768 : mixed
+    offset = (offset + 1) % n
   }
-  return out
+  return { pcm: out, nextOffset: offset }
 }
 
 type Mp3EncoderInstance = {

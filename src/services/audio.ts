@@ -1,7 +1,7 @@
 /**
  * Pipeline audio Visiora.
- * Le front déclenche le job et lit le statut en base.
- * Jamais de TTS live côté client à la lecture.
+ * Démo courte : 1 invoke sync → MP3 ready (mêmes clones, sans fond).
+ * Mode long : chunks + poll.
  */
 
 import { isSupabaseConfigured, supabase } from './supabase'
@@ -10,6 +10,8 @@ export interface EnqueueAudioResult {
   ok: boolean
   accepted?: boolean
   error?: string
+  orchestrated?: boolean
+  status?: string
 }
 
 type InvokePayload = {
@@ -17,16 +19,10 @@ type InvokePayload = {
   accepted?: boolean
   error?: string
   status?: string
-}
-
-function looksLikeTimeout(message: string): boolean {
-  return /timeout|timed out|504|546|network/i.test(message)
+  orchestrated?: boolean
 }
 
 export const audioService = {
-  /**
-   * Démarre le traitement audio (réponse 202). Le MP3 arrive plus tard en base.
-   */
   async enqueueGeneration(sessionId: string, force = false): Promise<EnqueueAudioResult> {
     if (!isSupabaseConfigured() || !supabase) {
       return { ok: false, error: 'Supabase non configuré' }
@@ -37,20 +33,26 @@ export const audioService = {
       { body: { sessionId, force } },
     )
 
+    if (data?.status === 'ready') {
+      return { ok: true, accepted: true, status: 'ready' }
+    }
+
+    if (data?.status === 'failed') {
+      return { ok: false, error: data.error ?? 'Génération échouée', status: 'failed' }
+    }
+
     if (error) {
-      const fromBody = data && typeof data === 'object' ? data.error : undefined
-      const message = fromBody || error.message
-      if (looksLikeTimeout(message)) {
-        return { ok: true, accepted: true }
-      }
-      console.warn('[audio] enqueue failed', error, data)
-      return { ok: false, error: message }
+      const message =
+        (data && typeof data === 'object' && data.error) || error.message || 'invoke error'
+      console.warn('[audio] enqueue soft — keep polling', message)
+      return { ok: true, accepted: true }
     }
 
-    if (data?.status === 'failed' || data?.error) {
-      return { ok: false, error: data.error ?? 'Génération échouée' }
+    return {
+      ok: true,
+      accepted: true,
+      status: data?.status,
+      orchestrated: Boolean(data?.orchestrated),
     }
-
-    return { ok: true, accepted: true }
   },
 }

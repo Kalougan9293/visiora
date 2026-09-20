@@ -3,6 +3,22 @@
  * [Mouvement …] = affichage seul, jamais lus au TTS.
  * [pause] ≈ 3 s · [pause longue] ≈ 9 s.
  */
+
+/** Démo client ~15 s audio (pas le livrable 15 min). */
+export const ANNEX_DEMO_SHORT_SCRIPT = `
+[Mouvement 1 — Intention]
+
+Installe-toi confortablement… et offre-toi simplement ce moment, rien que pour toi.
+
+Tu n'as rien à prouver ici, rien à forcer. Juste à te laisser guider.
+
+[pause]
+
+Commence par une grande respiration. Inspire lentement par le nez… et soupire en relâchant tout par la bouche.
+
+Encore une fois… inspire… et expire. Tu es prêt.
+`
+
 export const ANNEX_FIXTURE_SCRIPT = `
 [Mouvement 1 — Intention]
 

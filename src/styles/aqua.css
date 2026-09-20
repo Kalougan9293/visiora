@@ -295,3 +295,46 @@ html.variant-aqua .aqua-field-lit {
     line-height: 1.55 !important;
   }
 }
+
+@keyframes aqua-water-wave-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-8%);
+  }
+}
+
+.aqua-water-wave {
+  border-radius: 40% 60% 50% 50% / 60% 40% 60% 40%;
+  background: rgba(232, 247, 249, 0.35);
+  animation: aqua-water-wave-x 3.2s ease-in-out infinite alternate;
+}
+
+.aqua-water-wave-delay {
+  animation-delay: -1.4s;
+  background: rgba(126, 212, 223, 0.28);
+}
+
+@keyframes visiora-water-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.visiora-water-surface {
+  animation: visiora-water-drift 4.5s linear infinite;
+  will-change: transform;
+}
+
+.visiora-water-surface-slow {
+  animation-duration: 7.5s;
+  animation-direction: reverse;
+}
+
+.visiora-water-wave-fill {
+  filter: drop-shadow(0 1px 2px rgba(10, 74, 92, 0.35));
+}

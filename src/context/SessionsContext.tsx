@@ -15,7 +15,10 @@ import { sessionsService } from '@/services/sessions'
 import { progressService } from '@/services/progress'
 
 const POLL_MS = 1500
-const CLIENT_STALE_MS = 10 * 60 * 1000
+/** Seulement si vraiment mort (démo ~15 s devrait finir bien avant). */
+const CLIENT_STALE_MS = 8 * 60 * 1000
+/** Filet local seulement si N8N n’orchestre pas. */
+const CONTINUE_KICK_MS = 8_000
 
 interface SessionsContextValue {
   sessions: VisualizationSession[]
@@ -35,20 +38,26 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const userId = user?.id
   const [sessions, setSessions] = useState<VisualizationSession[]>([])
   const [stats, setStats] = useState<ProgressStats>(() => progressService.getLocalStats())
-  const [hydrated, setHydrated] = useState(false)
   const kickedRef = useRef(new Set<string>())
+  const inFlightRef = useRef(new Set<string>())
+  const lastKickAtRef = useRef<Record<string, number>>({})
+  /** Séances confiées à N8N : pas de re-kick agressif côté téléphone. */
+  const orchestratedRef = useRef(new Set<string>())
 
   useEffect(() => {
-    setHydrated(false)
+    kickedRef.current.clear()
+    inFlightRef.current.clear()
+    lastKickAtRef.current = {}
+    orchestratedRef.current.clear()
+    if (!userId) {
+      setSessions([])
+      sessionsService.clearLocal()
+      return
+    }
     void sessionsService.list(userId).then((rows) => {
       setSessions(rows)
-      setHydrated(true)
     })
   }, [userId])
-
-  useEffect(() => {
-    if (!userId && hydrated) sessionsService.persistLocal(sessions)
-  }, [sessions, userId, hydrated])
 
   useEffect(() => {
     progressService.persistLocal(stats)
@@ -75,18 +84,34 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const enqueueAudio = useCallback(async (sessionId: string, force = false) => {
-    if (!force && kickedRef.current.has(sessionId)) return
-    kickedRef.current.add(sessionId)
-    const result = await audioService.enqueueGeneration(sessionId, force)
-    if (!result.ok) {
-      kickedRef.current.delete(sessionId)
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId ? { ...s, status: 'failed', updatedAt: new Date().toISOString() } : s,
-        ),
-      )
+    /** Verrou sync immédiat : empêche 2 invokes parallèles sur la même séance. */
+    if (!force && kickedRef.current.has(sessionId)) {
+      const last = lastKickAtRef.current[sessionId] ?? 0
+      if (Date.now() - last < CONTINUE_KICK_MS) return
     }
-  }, [])
+    if (!force && inFlightRef.current.has(sessionId)) return
+    kickedRef.current.add(sessionId)
+    inFlightRef.current.add(sessionId)
+    lastKickAtRef.current[sessionId] = Date.now()
+    try {
+      const result = await audioService.enqueueGeneration(sessionId, force)
+      if (result.orchestrated) {
+        orchestratedRef.current.add(sessionId)
+      }
+      if (result.status === 'ready') {
+        const fresh = userId ? await sessionsService.get(sessionId, userId) : null
+        if (fresh) mergeSession(fresh)
+        kickedRef.current.delete(sessionId)
+        return
+      }
+      if (!result.ok) {
+        console.warn('[sessions] enqueue fail', result.error)
+        kickedRef.current.delete(sessionId)
+      }
+    } finally {
+      inFlightRef.current.delete(sessionId)
+    }
+  }, [userId, mergeSession])
 
   const generatingKey = sessions
     .filter((s) => s.status === 'generating')
@@ -105,12 +130,23 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         mergeSession(fresh)
         if (fresh.status === 'ready' || fresh.status === 'failed') {
           kickedRef.current.delete(id)
+          delete lastKickAtRef.current[id]
+          orchestratedRef.current.delete(id)
           continue
         }
         const age = Date.now() - new Date(fresh.updatedAt).getTime()
         if (fresh.status === 'generating' && age > CLIENT_STALE_MS) {
           kickedRef.current.delete(id)
           mergeSession({ ...fresh, status: 'failed' })
+          continue
+        }
+        /** Filet local seulement si N8N ne gère pas la boucle. */
+        if (
+          fresh.status === 'generating' &&
+          age > CONTINUE_KICK_MS &&
+          !orchestratedRef.current.has(id)
+        ) {
+          void enqueueAudio(id, false)
         }
       }
     }
@@ -121,12 +157,14 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [userId, generatingKey, mergeSession])
+  }, [userId, generatingKey, mergeSession, enqueueAudio])
 
   useEffect(() => {
     if (!userId || !generatingKey) return
+    /** Un seul kick initial par séance — le filet poll + chain serveur font le reste. */
     for (const id of generatingKey.split(',')) {
-      void enqueueAudio(id)
+      if (kickedRef.current.has(id)) continue
+      void enqueueAudio(id, false)
     }
   }, [userId, generatingKey, enqueueAudio])
 
@@ -134,26 +172,26 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     async (answers: VisualizationAnswers) => {
       const session = await sessionsService.create(answers, userId)
       setSessions((prev) => [session, ...prev.filter((s) => s.id !== session.id)])
-
-      if (userId && session.status === 'generating') {
-        void enqueueAudio(session.id, true)
-      }
-
+      /** Un seul kick via l’effet generatingKey — évite double TTS / même audio ×2. */
       return session
     },
-    [userId, enqueueAudio],
+    [userId],
   )
 
   const retryGeneration = useCallback(
     async (sessionId: string) => {
       if (!userId) return
       kickedRef.current.delete(sessionId)
+      delete lastKickAtRef.current[sessionId]
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === sessionId ? { ...s, status: 'generating', audioProgress: 5, updatedAt: new Date().toISOString() } : s,
+          s.id === sessionId
+            ? { ...s, status: 'generating', audioProgress: 5, updatedAt: new Date().toISOString() }
+            : s,
         ),
       )
-      await enqueueAudio(sessionId, true)
+      /** Reprise sans reset : segments déjà payés / uploadés sont réutilisés. */
+      await enqueueAudio(sessionId, false)
     },
     [userId, enqueueAudio],
   )

@@ -15,6 +15,7 @@ import { HealthScreen } from '@/components/create/HealthScreen'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
+import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { needsHealthScreen } from '@/services/healthGate'
@@ -169,8 +170,8 @@ export function CreatePage() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center text-center">
-      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-ink/45 dark:text-cream/45">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-xl flex-1 flex-col items-center text-center">
+      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-ink/50 dark:text-cream/50">
         <span>
           {healthGate ? 'Santé' : `Étape ${step.step} / ${step.total}`}
         </span>
@@ -191,14 +192,14 @@ export function CreatePage() {
             transition={{ duration: 0.28 }}
             className="my-auto w-full"
           >
-            <h1 className="font-display text-[1.65rem] leading-snug tracking-tight text-ink dark:text-cream sm:text-3xl">
+            <h1 className="font-display text-[1.7rem] leading-snug tracking-tight text-ink dark:text-cream sm:text-[1.95rem]">
               {step.title}
             </h1>
-            <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-ink/60 dark:text-cream/65">
+            <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-ink/65 dark:text-cream/70">
               {step.subtitle}
             </p>
 
-            <div className="mt-6 space-y-5">
+            <div className="mt-5 space-y-4">
               {step.fields.map((field) => (
                 <FieldBlock
                   key={field.id}
@@ -215,15 +216,15 @@ export function CreatePage() {
         )}
       </div>
 
-      <div className="flex w-full shrink-0 gap-2 pt-3 pb-1">
-        <Button variant="outline" className="flex-1 rounded-full" onClick={goBack}>
-          <ArrowLeft size={16} />
+      <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
+        <Button variant="outline" className="flex-1 rounded-full !py-2.5 text-[15px]" onClick={goBack}>
+          <ArrowLeft size={17} />
           Retour
         </Button>
         {!healthGate && (
-        <Button className="flex-1 rounded-full" disabled={!canContinue} onClick={goNext}>
+        <Button className="flex-1 rounded-full !py-2.5 text-[15px]" disabled={!canContinue} onClick={goNext}>
           {stepIdx === WIZARD_STEPS.length - 1 ? 'Générer' : 'Suivant'}
-          <ArrowRight size={16} />
+          <ArrowRight size={17} />
         </Button>
         )}
       </div>
@@ -245,11 +246,14 @@ function FieldBlock({
   setField: (id: string, v: string) => void
 }) {
   const inputClass = cn(
-    'mt-2.5 w-full rounded-2xl border px-4 py-3 text-center text-sm outline-none transition',
-    'border-black/[0.08] bg-white/70 text-ink placeholder:text-ink/30',
+    'mt-2 w-full rounded-2xl border px-3.5 py-2.5 text-center text-base leading-relaxed outline-none transition',
+    'border-black/[0.08] bg-white/70 text-ink placeholder:text-ink/35',
     'focus:border-olive/40 focus:ring-2 focus:ring-olive/10',
-    'dark:border-white/10 dark:bg-white/[0.05] dark:text-cream dark:placeholder:text-cream/30 dark:focus:border-gold/30 dark:focus:ring-gold/10',
+    'dark:border-white/10 dark:bg-white/[0.05] dark:text-cream dark:placeholder:text-cream/35 dark:focus:border-gold/30 dark:focus:ring-gold/10',
   )
+
+  /** Étape 2 (scène) : un peu plus haute au départ ; le reste reste compact. */
+  const growMinRows = field.id === 'q4' ? 4 : 2
 
   if (field.type === 'voice') {
     return (
@@ -264,10 +268,10 @@ function FieldBlock({
   if (field.type === 'choice-row') {
     return (
       <div className="w-full text-center">
-        <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
+        <p className="text-[14px] font-medium leading-snug text-ink/85 dark:text-cream/90">
           {field.label}
         </p>
-        <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
+        <div className="mt-2.5 flex flex-wrap justify-center gap-2">
           {field.choices?.map((c) => {
             const selected = value === c.id
             return (
@@ -276,7 +280,7 @@ function FieldBlock({
                 type="button"
                 onClick={() => onChange(c.id)}
                 className={cn(
-                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all',
+                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all sm:text-[14px]',
                   selected
                     ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
                     : 'bg-black/[0.04] text-ink/70 hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-cream/75 dark:hover:bg-white/10',
@@ -293,21 +297,21 @@ function FieldBlock({
 
   return (
     <div className="w-full text-center">
-      <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
+      <p className="text-[14px] font-medium leading-snug text-ink/85 dark:text-cream/90">
         {field.label}
       </p>
       {field.hint && (
-        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink/45 dark:text-cream/45">
+        <p className="mx-auto mt-1.5 max-w-md text-[12px] leading-relaxed text-ink/50 dark:text-cream/50 sm:text-[13px]">
           {field.hint}
         </p>
       )}
       {field.type === 'textarea' ? (
-        <textarea
+        <AutoGrowTextarea
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={onChange}
           placeholder={field.placeholder}
-          rows={3}
-          className={cn(inputClass, 'resize-none')}
+          minRows={growMinRows}
+          className={inputClass}
         />
       ) : (
         <input
@@ -373,12 +377,12 @@ function VoiceChoice({
 
   return (
     <div className="w-full text-center">
-      <p className="text-[13px] font-medium leading-snug text-ink/80 dark:text-cream/85">
+      <p className="text-[15px] font-medium leading-snug text-ink/85 dark:text-cream/90 sm:text-base">
         {fieldLabel}
       </p>
-      <p className="mt-1 text-xs text-ink/45 dark:text-cream/45">Écoute, puis choisis</p>
+      <p className="mt-2 text-[13px] text-ink/50 dark:text-cream/50 sm:text-sm">Écoute, puis choisis</p>
       <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
-      <div className="mt-3 flex flex-wrap justify-center gap-2">
+      <div className="mt-4 flex flex-wrap justify-center gap-2.5">
         {VOICES.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
@@ -386,7 +390,7 @@ function VoiceChoice({
             <div
               key={v.id}
               className={cn(
-                'inline-flex items-center gap-1 rounded-full pl-3.5 pr-1.5 py-1 transition-all',
+                'inline-flex items-center gap-1.5 rounded-full pl-4 pr-2 py-1.5 transition-all',
                 selected
                   ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
                   : 'bg-black/[0.04] text-ink/75 dark:bg-white/[0.06] dark:text-cream/80',
@@ -395,7 +399,7 @@ function VoiceChoice({
               <button
                 type="button"
                 onClick={() => onChange(v.id)}
-                className="text-[13px] font-semibold"
+                className="text-[14px] font-semibold sm:text-[15px]"
               >
                 {v.name}
               </button>
@@ -404,13 +408,13 @@ function VoiceChoice({
                 onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
                 aria-label={playing ? `Arrêter ${v.name}` : `Écouter ${v.name}`}
                 className={cn(
-                  'flex h-7 w-7 items-center justify-center rounded-full transition',
+                  'flex h-8 w-8 items-center justify-center rounded-full transition',
                   selected
                     ? 'bg-white/20 dark:bg-ink/10'
                     : 'bg-olive/10 text-olive dark:bg-white/10 dark:text-cream/80',
                 )}
               >
-                {playing ? <Pause size={11} className="fill-current" /> : <Play size={11} className="fill-current" />}
+                {playing ? <Pause size={12} className="fill-current" /> : <Play size={12} className="fill-current" />}
               </button>
             </div>
           )

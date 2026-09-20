@@ -1,11 +1,12 @@
 /** Parse le format Annexe 1 et découpe le texte pour la synthèse vocale. */
 
-import { ANNEX_FIXTURE_SCRIPT } from './annex.ts'
+import { ANNEX_DEMO_SHORT_SCRIPT, ANNEX_FIXTURE_SCRIPT } from './annex.ts'
 
 export const PAUSE_SHORT_SECONDS = 3
 /** CDC : pause longue ≈ 9 s */
 export const PAUSE_LONG_SECONDS = 9
-export const TTS_CHUNK_CHARS = 3500
+/** Morceaux TTS : équilibre entre # d’appels ElevenLabs et CPU encode. */
+export const TTS_CHUNK_CHARS = 1100
 
 export type ScriptPart =
   | { kind: 'speech'; text: string }
@@ -78,7 +79,17 @@ export function chunkSpeech(text: string, max = TTS_CHUNK_CHARS): string[] {
   return chunks
 }
 
+/**
+ * Mode démo ~15 s tant que VISIORA_AUDIO_DEMO_SHORT ≠ "0".
+ * Remettre le script complet : secrets set VISIORA_AUDIO_DEMO_SHORT=0
+ */
+export function isDemoShortMode(): boolean {
+  return Deno.env.get('VISIORA_AUDIO_DEMO_SHORT') !== '0'
+}
+
 export function resolveScript(session: { script?: string | null }): string {
+  if (isDemoShortMode()) return ANNEX_DEMO_SHORT_SCRIPT
+
   if (typeof session.script === 'string' && session.script.trim().length > 40) {
     return session.script.trim()
   }

@@ -54,17 +54,8 @@ async function withFreshAudioUrl(session: VisualizationSession): Promise<Visuali
   return url ? { ...session, audioUrl: url } : session
 }
 
-function readLocal(): VisualizationSession[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_KEY)
-    return raw ? (JSON.parse(raw) as VisualizationSession[]) : []
-  } catch {
-    return []
-  }
-}
-
 /**
- * Session persistence — localStorage (invité) ou Supabase `sessions` (connecté).
+ * Session persistence — Supabase `sessions` (compte requis).
  */
 export const sessionsService = {
   titleFromAnswers,
@@ -72,7 +63,8 @@ export const sessionsService = {
   voiceFromAnswers,
 
   async list(userId?: string): Promise<VisualizationSession[]> {
-    if (isSupabaseConfigured() && supabase && userId) {
+    if (!userId) return []
+    if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase
         .from('sessions')
         .select('*')
@@ -83,11 +75,12 @@ export const sessionsService = {
         return Promise.all(mapped.map(withFreshAudioUrl))
       }
     }
-    return readLocal()
+    return []
   },
 
   async get(id: string, userId?: string): Promise<VisualizationSession | null> {
-    if (isSupabaseConfigured() && supabase && userId) {
+    if (!userId) return null
+    if (isSupabaseConfigured() && supabase) {
       const { data, error } = await supabase
         .from('sessions')
         .select('*')
@@ -96,22 +89,22 @@ export const sessionsService = {
         .maybeSingle()
       if (!error && data) return withFreshAudioUrl(rowToSession(data))
     }
-    return readLocal().find((s) => s.id === id) ?? null
+    return null
   },
 
-  persistLocal(sessions: VisualizationSession[]) {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(sessions))
+  clearLocal() {
+    localStorage.removeItem(LOCAL_KEY)
   },
 
   async create(answers: VisualizationAnswers, userId?: string): Promise<VisualizationSession> {
+    if (!userId) throw new Error('Connexion requise pour créer une séance')
     const now = new Date().toISOString()
     const title = titleFromAnswers(answers)
     const durationMinutes = durationFromAnswers(answers)
     const voiceId = voiceFromAnswers(answers)
-    /** Connecté → génération audio prévue ; invité → brouillon local sans TTS */
-    const status = userId ? 'generating' : 'draft'
+    const status = 'generating' as const
 
-    if (isSupabaseConfigured() && supabase && userId) {
+    if (isSupabaseConfigured() && supabase) {
       const healthAckAt =
         typeof answers.health_ack_at === 'string' ? answers.health_ack_at : null
       const { data, error } = await supabase
@@ -123,7 +116,7 @@ export const sessionsService = {
           status,
           duration_minutes: durationMinutes,
           voice_id: voiceId,
-          audio_bytes: status === 'generating' ? 5 : null,
+          audio_bytes: 5,
           listens: 0,
           health_ack_at: healthAckAt,
         })
@@ -131,7 +124,8 @@ export const sessionsService = {
         .single()
 
       if (!error && data) return rowToSession(data)
-      console.warn('[sessions] insert failed, fallback local', error)
+      console.warn('[sessions] insert failed', error)
+      throw error ?? new Error('Impossible de créer la séance')
     }
 
     return {

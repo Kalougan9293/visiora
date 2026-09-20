@@ -14,6 +14,7 @@ import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { cn } from '@/lib/utils'
 import { HealthScreen } from '@/components/create/HealthScreen'
+import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { canDictate, startDictation, type DictationSession } from '@/services/dictation'
 import { needsHealthScreen } from '@/services/healthGate'
@@ -254,14 +255,14 @@ export function AquaCreatePage() {
   }
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-lg flex-1 flex-col items-center text-center">
-      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[10px] font-medium uppercase tracking-[0.14em] text-[#b8e4ea]/70">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-xl flex-1 flex-col items-center text-center">
+      <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-[#b8e4ea]/75">
         <span>
           {healthGate ? 'Santé' : `Étape ${step.step} / ${step.total}`}
         </span>
         <span>{step.percent}%</span>
       </div>
-      <div className="mb-2 h-1 w-full shrink-0 overflow-hidden rounded-full bg-white/10">
+      <div className="mb-2 h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-white/10">
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-[#3db8c5] to-[#e8f7f9]"
           initial={false}
@@ -283,21 +284,21 @@ export function AquaCreatePage() {
             className="my-auto w-full"
           >
             <h1
-              className="text-[1.65rem] leading-snug text-[#e8f7f9] sm:text-3xl"
+              className="text-[1.7rem] leading-snug text-[#e8f7f9] sm:text-[1.95rem]"
               style={{ fontFamily: 'var(--font-aqua-display)' }}
             >
               {step.title}
             </h1>
-            <p className="mx-auto mt-2 max-w-sm text-[13px] leading-relaxed text-[#b8e4ea]/80">
+            <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-[#b8e4ea]/85">
               {step.subtitle}
             </p>
             {step.step === 1 && (
-              <p className="mt-1.5 text-xs italic text-[#b8e4ea]/50">
+              <p className="mt-1.5 text-[12px] italic text-[#b8e4ea]/55 sm:text-[13px]">
                 Tout est strictement anonyme, lâchez-vous dans vos réponses
               </p>
             )}
 
-            <div className="mt-6 space-y-5">
+            <div className="mt-5 space-y-4">
               {step.fields.map((field) => (
                 <AquaField
                   key={field.id}
@@ -315,20 +316,20 @@ export function AquaCreatePage() {
               ))}
             </div>
             {micHint && (
-              <p className="mt-3 text-xs text-[#7ed4df]/80">{micHint}</p>
+              <p className="mt-3 text-sm text-[#7ed4df]/85">{micHint}</p>
             )}
           </motion.div>
         </AnimatePresence>
         )}
       </div>
 
-      <div className="flex w-full shrink-0 gap-2 pt-3 pb-1">
+      <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
         <button
           type="button"
           onClick={goBack}
-          className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/15 py-2.5 text-sm font-medium text-[#e8f7f9]/90 transition-colors hover:bg-white/10"
+          className="flex flex-1 items-center justify-center gap-2 rounded-full border border-white/15 py-2.5 text-[15px] font-medium text-[#e8f7f9]/90 transition-colors hover:bg-white/10"
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={17} />
           Retour
         </button>
         {!healthGate && (
@@ -336,10 +337,10 @@ export function AquaCreatePage() {
           type="button"
           disabled={!canContinue}
           onClick={goNext}
-          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#e8f7f9] py-2.5 text-sm font-semibold text-[#0d3d47] transition-opacity disabled:opacity-40"
+          className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#e8f7f9] py-2.5 text-[15px] font-semibold text-[#0d3d47] transition-opacity disabled:opacity-40"
         >
           {stepIdx === WIZARD_STEPS.length - 1 ? 'Générer' : 'Suivant'}
-          <ArrowRight size={16} />
+          <ArrowRight size={17} />
         </button>
         )}
       </div>
@@ -368,9 +369,10 @@ function AquaField({
 }) {
   const [focused, setFocused] = useState(false)
   const inputClass = cn(
-    'w-full rounded-2xl border border-white/12 bg-white/[0.07] px-4 py-3 text-center text-sm text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 outline-none transition',
+    'w-full rounded-2xl border border-white/12 bg-white/[0.07] px-3.5 py-2.5 text-center text-base leading-relaxed text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 outline-none transition',
     focused && 'aqua-field-lit border-[#7ed4df]/35',
   )
+  const growMinRows = field.id === 'q4' ? 4 : 2
 
   if (field.type === 'voice') {
     return (
@@ -385,8 +387,8 @@ function AquaField({
   if (field.type === 'choice-row') {
     return (
       <div className="w-full text-center">
-        <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{field.label}</p>
-        <div className="mt-2.5 flex flex-wrap justify-center gap-1.5">
+        <p className="text-[14px] font-medium leading-snug text-[#e8f7f9]/95">{field.label}</p>
+        <div className="mt-2.5 flex flex-wrap justify-center gap-2">
           {field.choices?.map((c) => {
             const selected = value === c.id
             return (
@@ -395,7 +397,7 @@ function AquaField({
                 type="button"
                 onClick={() => onChange(c.id)}
                 className={cn(
-                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all',
+                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all sm:text-[14px]',
                   selected
                     ? 'bg-[#e8f7f9] text-[#0d3d47]'
                     : 'bg-white/[0.06] text-[#e8f7f9]/80 hover:bg-white/10',
@@ -412,23 +414,23 @@ function AquaField({
 
   return (
     <div className="w-full text-center">
-      <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{field.label}</p>
+      <p className="text-[14px] font-medium leading-snug text-[#e8f7f9]/95">{field.label}</p>
       {field.hint && (
-        <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-[#b8e4ea]/55">
+        <p className="mx-auto mt-1.5 max-w-md text-[12px] leading-relaxed text-[#b8e4ea]/65 sm:text-[13px]">
           {field.hint}
         </p>
       )}
 
-      <div className="relative mt-2.5">
+      <div className="relative mt-2">
         {field.type === 'textarea' ? (
-          <textarea
+          <AutoGrowTextarea
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={onChange}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={placeholder ?? field.placeholder}
-            rows={3}
-            className={cn(inputClass, 'resize-none pr-11')}
+            minRows={growMinRows}
+            className={cn(inputClass, 'pr-12')}
           />
         ) : (
           <input
@@ -438,7 +440,7 @@ function AquaField({
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder={placeholder ?? field.placeholder}
-            className={cn(inputClass, 'pr-11')}
+            className={cn(inputClass, 'pr-12')}
           />
         )}
         <button
@@ -446,17 +448,17 @@ function AquaField({
           onClick={onMic}
           aria-label={listening ? 'Arrêter le micro' : 'Dicter au micro'}
           className={cn(
-            'absolute right-2.5 flex h-7 w-7 items-center justify-center rounded-full leading-none transition-all',
-            field.type === 'textarea' ? 'top-3' : 'top-1/2 -translate-y-1/2',
+            'absolute right-2.5 flex h-8 w-8 items-center justify-center rounded-full leading-none transition-all',
+            field.type === 'textarea' ? 'top-2.5' : 'top-1/2 -translate-y-1/2',
             listening
               ? 'bg-[#7ed4df] text-[#0d3d47] shadow-[0_0_16px_rgba(126,212,223,0.5)]'
               : 'bg-white/10 text-[#7ed4df] hover:bg-white/20',
           )}
         >
           {listening ? (
-            <MicOff size={13} strokeWidth={2.25} className="block translate-y-px" />
+            <MicOff size={14} strokeWidth={2.25} className="block translate-y-px" />
           ) : (
-            <Mic size={13} strokeWidth={2.25} className="block translate-y-px" />
+            <Mic size={14} strokeWidth={2.25} className="block translate-y-px" />
           )}
         </button>
       </div>
@@ -515,18 +517,20 @@ function AquaVoiceChoice({
 
   return (
     <div className="w-full text-center">
-      <p className="text-[13px] font-medium leading-snug text-[#e8f7f9]/90">{fieldLabel}</p>
-      <p className="mt-1 text-xs text-[#b8e4ea]/55">Écoute, puis choisis</p>
+      <p className="text-[15px] font-medium leading-snug text-[#e8f7f9]/95 sm:text-base">
+        {fieldLabel}
+      </p>
+      <p className="mt-2 text-[13px] text-[#b8e4ea]/60 sm:text-sm">Écoute, puis choisis</p>
       <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
-      <div className="mt-3 flex items-end justify-center gap-3">
+      <div className="mt-4 flex items-end justify-center gap-3.5">
         {AQUA_VOICES.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
           return (
-            <div key={v.id} className="flex w-[4.75rem] flex-col items-center gap-1.5 sm:w-[5.25rem]">
+            <div key={v.id} className="flex w-[5.25rem] flex-col items-center gap-2 sm:w-[5.75rem]">
               <div
                 className={cn(
-                  'relative h-[4.75rem] w-[4.75rem] overflow-hidden rounded-2xl transition-all sm:h-[5.25rem] sm:w-[5.25rem]',
+                  'relative h-[5.25rem] w-[5.25rem] overflow-hidden rounded-2xl transition-all sm:h-[5.75rem] sm:w-[5.75rem]',
                   selected
                     ? 'ring-2 ring-[#7ed4df] shadow-[0_0_14px_rgba(126,212,223,0.3)]'
                     : 'ring-1 ring-white/12',
@@ -570,7 +574,7 @@ function AquaVoiceChoice({
               </div>
               <span
                 className={cn(
-                  'text-[11px] font-medium',
+                  'text-[13px] font-medium',
                   selected ? 'text-[#7ed4df]' : 'text-[#b8e4ea]/75',
                 )}
               >

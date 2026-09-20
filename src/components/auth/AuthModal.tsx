@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRight, Check, X } from 'lucide-react'
+import { ArrowRight, Check, Eye, EyeOff, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useVariant } from '@/context/VariantContext'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   const [acceptCgu, setAcceptCgu] = useState(false)
   const [hint, setHint] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showLoginPass, setShowLoginPass] = useState(false)
+  const [showSignupPass, setShowSignupPass] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -71,6 +73,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
       setSignupPass('')
       setAcceptCgu(false)
       setBusy(false)
+      setShowLoginPass(false)
+      setShowSignupPass(false)
     }
   }, [open])
 
@@ -80,6 +84,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     setHint('')
     setSignupPass('')
     setAcceptCgu(false)
+    setShowLoginPass(false)
+    setShowSignupPass(false)
   }
 
   async function onLogin(e: FormEvent) {
@@ -152,10 +158,19 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   }
 
   const inputClass = cn(
-    'w-full rounded-2xl border px-3.5 py-3 text-left text-sm outline-none transition',
+    'w-full rounded-2xl border px-3.5 py-3 text-left text-base outline-none transition',
     isAqua
       ? 'border-white/15 bg-white/[0.07] text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 focus:border-[#7ed4df]/50 focus:bg-white/[0.1] focus:ring-2 focus:ring-[#7ed4df]/12'
       : 'border-black/10 bg-white/80 text-ink placeholder:text-ink/30 focus:border-olive/40 focus:ring-2 focus:ring-olive/12 dark:border-white/12 dark:bg-white/[0.06] dark:text-cream dark:placeholder:text-champagne/35 dark:focus:border-gold/35 dark:focus:ring-gold/12',
+  )
+
+  const passwordInputClass = cn(inputClass, 'pr-11')
+
+  const eyeBtnClass = cn(
+    'absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
+    isAqua
+      ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-[#7ed4df]'
+      : 'text-ink/40 hover:bg-black/5 hover:text-ink/70 dark:text-champagne/60 dark:hover:bg-white/5 dark:hover:text-champagne',
   )
 
   const labelClass = cn(
@@ -292,15 +307,26 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   />
                 </Field>
                 <Field label="Mot de passe" labelClass={labelClass} htmlFor="auth-pass">
-                  <input
-                    id="auth-pass"
-                    type="password"
-                    autoComplete="current-password"
-                    value={loginPass}
-                    onChange={(e) => setLoginPass(e.target.value)}
-                    className={inputClass}
-                    disabled={busy}
-                  />
+                  <div className="relative">
+                    <input
+                      id="auth-pass"
+                      type={showLoginPass ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={loginPass}
+                      onChange={(e) => setLoginPass(e.target.value)}
+                      className={passwordInputClass}
+                      disabled={busy}
+                    />
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      aria-label={showLoginPass ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                      onClick={() => setShowLoginPass((v) => !v)}
+                      className={eyeBtnClass}
+                    >
+                      {showLoginPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </Field>
 
                 <Hint text={hint} isAqua={isAqua} />
@@ -379,15 +405,28 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     transition={{ duration: 0.22 }}
                   >
                     <Field label="Mot de passe" labelClass={labelClass} htmlFor="auth-signup-pass">
-                      <input
-                        id="auth-signup-pass"
-                        type="password"
-                        autoComplete="new-password"
-                        value={signupPass}
-                        onChange={(e) => setSignupPass(e.target.value)}
-                        className={inputClass}
-                        disabled={busy}
-                      />
+                      <div className="relative">
+                        <input
+                          id="auth-signup-pass"
+                          type={showSignupPass ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          value={signupPass}
+                          onChange={(e) => setSignupPass(e.target.value)}
+                          className={passwordInputClass}
+                          disabled={busy}
+                        />
+                        <button
+                          type="button"
+                          tabIndex={-1}
+                          aria-label={
+                            showSignupPass ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+                          }
+                          onClick={() => setShowSignupPass((v) => !v)}
+                          className={eyeBtnClass}
+                        >
+                          {showSignupPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
                     </Field>
 
                     <ul className="space-y-2 rounded-2xl px-1 py-0.5">

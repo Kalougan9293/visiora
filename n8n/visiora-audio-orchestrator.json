@@ -1,0 +1,220 @@
+{
+  "name": "Visiora — orchestration audio",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "visiora-audio",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "visiora-audio"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.body.secret || $json.secret }}",
+              "value2": "={{ $env.VISIORA_ORCHESTRATOR_SECRET }}"
+            }
+          ]
+        }
+      },
+      "id": "check-secret",
+      "name": "Secret OK ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sid",
+              "name": "sessionId",
+              "value": "={{ $json.body.sessionId || $json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "i",
+              "name": "i",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-session",
+      "name": "Init boucle",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, -40]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/functions/v1/generate-session-audio",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+            },
+            {
+              "name": "x-visiora-orchestrator-secret",
+              "value": "={{ $env.VISIORA_ORCHESTRATOR_SECRET }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"sessionId\": \"{{ $json.sessionId }}\",\n  \"chain\": true\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "call-step",
+      "name": "Step audio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, -40]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "notEqual",
+              "value2": "ready"
+            },
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "notEqual",
+              "value2": "failed"
+            }
+          ]
+        }
+      },
+      "id": "still-running",
+      "name": "Encore en cours ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [880, -40]
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "id": "wait-2s",
+      "name": "Pause 2s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1100, -120]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "sid2",
+              "name": "sessionId",
+              "value": "={{ $('Init boucle').item.json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "i2",
+              "name": "i",
+              "value": "={{ ($('Init boucle').item.json.i || 0) + 1 }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bump-i",
+      "name": "Compteur",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1320, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.i }}",
+              "operation": "smaller",
+              "value2": 250
+            }
+          ]
+        }
+      },
+      "id": "max-iter",
+      "name": "i < 250 ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1540, -120]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Secret OK ?", "type": "main", "index": 0 }]]
+    },
+    "Secret OK ?": {
+      "main": [
+        [{ "node": "Init boucle", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Init boucle": {
+      "main": [[{ "node": "Step audio", "type": "main", "index": 0 }]]
+    },
+    "Step audio": {
+      "main": [[{ "node": "Encore en cours ?", "type": "main", "index": 0 }]]
+    },
+    "Encore en cours ?": {
+      "main": [
+        [{ "node": "Pause 2s", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Pause 2s": {
+      "main": [[{ "node": "Compteur", "type": "main", "index": 0 }]]
+    },
+    "Compteur": {
+      "main": [[{ "node": "i < 250 ?", "type": "main", "index": 0 }]]
+    },
+    "i < 250 ?": {
+      "main": [
+        [{ "node": "Step audio", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "Visiora: boucle les chunks generate-session-audio jusqu'à ready/failed. Variables env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VISIORA_ORCHESTRATOR_SECRET."
+  }
+}

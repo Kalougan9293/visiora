@@ -180,7 +180,7 @@ export function AdminPage() {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-sm text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
             style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
             disabled={busy}
           />
@@ -190,7 +190,7 @@ export function AdminPage() {
             placeholder="Mot de passe"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-sm text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
             style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
             disabled={busy}
           />
