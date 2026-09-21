@@ -80,6 +80,7 @@ begin
     ) as audio_count,
     p.last_seen_at
   from public.profiles p
+  where coalesce(p.is_admin, false) = false
   order by p.created_at desc;
 end;
 $$;
@@ -96,7 +97,7 @@ begin
   end if;
 
   return json_build_object(
-    'users', (select count(*)::bigint from public.profiles),
+    'users', (select count(*)::bigint from public.profiles where coalesce(is_admin, false) = false),
     'audios', (select count(*)::bigint from public.sessions),
     'storage_bytes', coalesce((select sum(audio_bytes)::bigint from public.sessions), 0)
   );

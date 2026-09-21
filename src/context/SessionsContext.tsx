@@ -15,8 +15,8 @@ import { sessionsService } from '@/services/sessions'
 import { progressService } from '@/services/progress'
 
 const POLL_MS = 1500
-/** Seulement si vraiment mort (démo ~15 s devrait finir bien avant). */
-const CLIENT_STALE_MS = 8 * 60 * 1000
+/** 15 min d’audio + file : ne pas crier à l’échec trop tôt. */
+const CLIENT_STALE_MS = 40 * 60 * 1000
 /** Filet local seulement si N8N n’orchestre pas. */
 const CONTINUE_KICK_MS = 8_000
 

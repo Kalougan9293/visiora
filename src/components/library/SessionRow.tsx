@@ -82,7 +82,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {session.status === 'failed' && (
+        {session.status === 'failed' && !ready && (
             <button
               type="button"
               onClick={() => void retryGeneration(session.id)}

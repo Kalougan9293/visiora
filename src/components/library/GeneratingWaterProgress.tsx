@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Réservoir d’eau : niveau = % serveur, vaguelettes en surface.
- * Palette eau uniquement (pas d’olive / or / sable).
+ * Réservoir d’eau : suit le serveur, et continue de monter doucement
+ * pendant un long TTS (évite le faux « bloqué à 33 % »).
  */
 export function GeneratingWaterProgress({
   serverPct,
@@ -12,24 +12,26 @@ export function GeneratingWaterProgress({
   serverPct: number
   isAqua: boolean
 }) {
-  const target = Math.min(99, Math.max(5, Math.round(serverPct)))
-  const [display, setDisplay] = useState(Math.max(5, target))
+  const server = Math.min(99, Math.max(5, Math.round(serverPct)))
+  const [display, setDisplay] = useState(server)
 
   useEffect(() => {
-    setDisplay((prev) => Math.max(prev, target))
-  }, [target])
+    setDisplay((prev) => Math.max(prev, server))
+  }, [server])
 
   useEffect(() => {
-    if (display >= target) return
     const timer = window.setInterval(() => {
       setDisplay((prev) => {
-        if (prev >= target) return prev
-        const step = Math.max(0.25, (target - prev) * 0.12)
-        return Math.min(target, prev + step)
+        const ceiling = Math.min(90, server + 6)
+        if (prev < server) {
+          return Math.min(server, prev + Math.max(0.5, (server - prev) * 0.18))
+        }
+        if (prev >= ceiling) return prev
+        return Math.min(ceiling, prev + 0.4)
       })
-    }, 160)
+    }, 1100)
     return () => window.clearInterval(timer)
-  }, [display, target])
+  }, [server])
 
   const shown = Math.min(99, Math.round(display))
   const waterH = Math.max(12, shown)

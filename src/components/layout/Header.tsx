@@ -9,14 +9,19 @@ import { cn } from '@/lib/utils'
 
 export function Header() {
   const { isAqua, toggleVariant } = useVariant()
-  const { user, profile, signOut } = useAuth()
+  const { user, profile, loading, signOut } = useAuth()
   const [authOpen, setAuthOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const label = user
-    ? profile?.first_name?.trim() || 'Profil'
-    : 'Connexion'
+  const metaName =
+    typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name.trim() : ''
+  const firstName = profile?.first_name?.trim() || metaName
+  const loggedIn = Boolean(user)
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [user?.id])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -80,8 +85,8 @@ export function Header() {
             </Link>
 
             <div className="absolute right-4 top-1/2 -translate-y-1/2">
-              <div className="relative flex flex-col items-center" ref={menuRef}>
-                {user ? (
+              <div className="relative flex flex-col items-end" ref={menuRef}>
+                {loggedIn ? (
                   <>
                     <button
                       type="button"
@@ -94,7 +99,7 @@ export function Header() {
                       )}
                     >
                       <User size={13} strokeWidth={1.75} />
-                      {label}
+                      {firstName || null}
                     </button>
 
                     {menuOpen && (
@@ -121,6 +126,18 @@ export function Header() {
                       </div>
                     )}
                   </>
+                ) : loading ? (
+                  <span
+                    className={cn(
+                      'inline-flex h-8 w-8 items-center justify-center rounded-full border',
+                      isAqua
+                        ? 'border-white/15 text-[#e8f7f9]/50'
+                        : 'border-black/10 text-ink/40 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-texte-faible)]',
+                    )}
+                    aria-hidden
+                  >
+                    <User size={13} strokeWidth={1.75} />
+                  </span>
                 ) : (
                   <button
                     type="button"

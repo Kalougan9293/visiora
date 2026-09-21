@@ -9,13 +9,17 @@ import {
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { isDemoShortMode, resolveScript } from './script.ts'
+import { isDemoShortMode, resolveScript, demoSessionParts } from './script.ts'
 import {
   TTS_PCM_FORMAT,
   upsampleTts,
   encodeMp3,
   pcmFromEleven,
   silencePcm,
+  loadBed,
+  mixLoopingBed,
+  concatPcm,
+  silenceBedMp3,
 } from './mix.ts'
 
 const corsHeaders = {
@@ -33,7 +37,7 @@ const DEFAULT_VOICES: Record<string, string> = {
 }
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
-const CLAIM_TTL_MS = 100_000
+const CLAIM_TTL_MS = 55_000
 
 declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined
 
@@ -56,19 +60,8 @@ function resolveElevenVoiceId(appVoiceId: string | null): string {
   return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.rituel
 }
 
-/** Texte démo : marqueurs retirés, une seule passe TTS (comme avant). */
-function demoSpeechText(script: string): string {
-  return script
-    .replace(/\[Mouvement[^\]]*\]/gi, ' ')
-    .replace(/\[pause longue\]/gi, '. ')
-    .replace(/\[pause\]/gi, '. ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 /**
- * Chemin démo (~15 s) : TTS MP3 direct, vitesse normale, **sans** lit d’ambiance.
- * Une piste musicale commune (basse) sera branchée plus tard.
+ * Chemin démo (~15 s) : TTS par phrase + blancs + lit d’ambiance, un seul MP3.
  */
 async function handleDemoShort(params: {
   admin: SupabaseClient
@@ -78,8 +71,11 @@ async function handleDemoShort(params: {
   voiceId: string | null
 }): Promise<Response> {
   const script = resolveScript({ script: null })
-  const text = demoSpeechText(script)
-  if (text.length < 20) {
+  const steps = demoSessionParts(script)
+  const speechChars = steps
+    .filter((s): s is { kind: 'speech'; text: string } => s.kind === 'speech')
+    .reduce((n, s) => n + s.text.length, 0)
+  if (speechChars < 20) {
     return json({ ok: false, error: 'Script démo vide', status: 'failed' }, 500)
   }
 
@@ -97,15 +93,39 @@ async function handleDemoShort(params: {
     })
     .eq('id', params.sessionId)
 
-  const tts = await elevenTtsMp3({
-    apiKey: params.elevenKey,
-    voiceId: resolveElevenVoiceId(params.voiceId),
-    appVoiceKey,
-    text,
-  })
+  const bed = await loadBed(appVoiceKey)
+  const pcmParts: Int16Array[] = []
+  const previousRequestIds: string[] = []
+  let bedOffset = 0
+
+  for (const step of steps) {
+    let pcm: Int16Array
+    if (step.kind === 'silence') {
+      pcm = upsampleTts(silencePcm(step.seconds))
+    } else {
+      const tts = await elevenTts({
+        apiKey: params.elevenKey,
+        voiceId: resolveElevenVoiceId(params.voiceId),
+        appVoiceKey,
+        text: step.text,
+        previousRequestIds,
+      })
+      pcm = upsampleTts(pcmFromEleven(tts.audio))
+      if (tts.requestId) previousRequestIds.push(tts.requestId)
+    }
+    if (bed) {
+      const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, bedOffset)
+      pcm = mixed.pcm
+      bedOffset = mixed.nextOffset
+    }
+    pcmParts.push(pcm)
+  }
+
+  const mp3 = await encodeMp3(concatPcm(pcmParts))
+  if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
 
   const path = `${params.userId}/${params.sessionId}.mp3`
-  const { error: uploadError } = await params.admin.storage.from('audios').upload(path, tts.audio, {
+  const { error: uploadError } = await params.admin.storage.from('audios').upload(path, mp3, {
     contentType: 'audio/mpeg',
     upsert: true,
   })
@@ -139,7 +159,7 @@ async function handleDemoShort(params: {
       script,
       audio_path: path,
       audio_url: signed.signedUrl,
-      audio_bytes: tts.audio.byteLength,
+      audio_bytes: mp3.byteLength,
       audio_job: null,
       voice_id: params.voiceId,
       updated_at: new Date().toISOString(),
@@ -151,43 +171,6 @@ async function handleDemoShort(params: {
   }
 
   return json({ ok: true, accepted: true, status: 'ready' }, 200)
-}
-
-async function elevenTtsMp3(params: {
-  apiKey: string
-  voiceId: string
-  appVoiceKey: string
-  text: string
-}): Promise<{ audio: Uint8Array }> {
-  const key = params.appVoiceKey.toLowerCase()
-  const ttsRes = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=mp3_44100_128`,
-    {
-      method: 'POST',
-      headers: {
-        'xi-api-key': params.apiKey,
-        'Content-Type': 'application/json',
-        Accept: 'audio/mpeg',
-      },
-      body: JSON.stringify({
-        text: params.text,
-        model_id: 'eleven_multilingual_v2',
-        language_code: 'fr',
-        voice_settings: {
-          stability: key === 'rituel' ? 0.8 : 0.72,
-          similarity_boost: 0.55,
-          style: 0,
-          use_speaker_boost: false,
-          speed: 1.0,
-        },
-      }),
-    },
-  )
-  if (!ttsRes.ok) {
-    const detail = await ttsRes.text()
-    throw new Error(`ElevenLabs ${ttsRes.status}: ${detail.slice(0, 240)}`)
-  }
-  return { audio: new Uint8Array(await ttsRes.arrayBuffer()) }
 }
 
 async function setProgress(admin: SupabaseClient, sessionId: string, pct: number, job: AudioJob) {
@@ -299,17 +282,31 @@ async function encodeStepMp3(params: {
   previousRequestIds: string[]
 }> {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
-  let pcm24: Int16Array
   let requestId: string | null = null
   const previousRequestIds = [...params.previousRequestIds]
+  const sampleRate = 44100
 
   if (params.step.kind === 'silence') {
-    /** Silence sec (sans lit) : beaucoup plus rapide ; le fond reprend sur le speech suivant. */
-    pcm24 = silencePcm(params.step.seconds)
-    const pcm = upsampleTts(pcm24)
+    const pre = await silenceBedMp3(appVoiceKey, params.step.seconds)
+    const bedForOffset = await loadBed(appVoiceKey)
+    const loopLen = Math.max(1, bedForOffset?.pcm.length ?? sampleRate * 12)
+    const nextOffset =
+      (params.bedOffset + Math.round(params.step.seconds * sampleRate)) % loopLen
+    if (pre && pre.byteLength >= 32) {
+      return { mp3: pre, requestId: null, bedOffset: nextOffset, previousRequestIds }
+    }
+    const bed = await loadBed(appVoiceKey)
+    let pcm = upsampleTts(silencePcm(params.step.seconds))
+    if (bed) {
+      const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
+      pcm = mixed.pcm
+      const mp3 = await encodeMp3(pcm)
+      if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
+      return { mp3, requestId: null, bedOffset: mixed.nextOffset, previousRequestIds }
+    }
     const mp3 = await encodeMp3(pcm)
     if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-    return { mp3, requestId: null, bedOffset: params.bedOffset, previousRequestIds }
+    return { mp3, requestId: null, bedOffset: nextOffset, previousRequestIds }
   }
 
   const text = params.speechText?.trim()
@@ -321,16 +318,22 @@ async function encodeStepMp3(params: {
     text,
     previousRequestIds,
   })
-  pcm24 = pcmFromEleven(tts.audio)
+  const pcm24 = pcmFromEleven(tts.audio)
   requestId = tts.requestId
   if (requestId) previousRequestIds.push(requestId)
 
-  const pcm = upsampleTts(pcm24)
-  /** Plus de lit oiseaux/eau (grésillement). Piste musicale unique à venir. */
+  let pcm = upsampleTts(pcm24)
+  let nextOffset = params.bedOffset
+  const bed = await loadBed(appVoiceKey)
+  if (bed) {
+    const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
+    pcm = mixed.pcm
+    nextOffset = mixed.nextOffset
+  }
 
   const mp3 = await encodeMp3(pcm)
   if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-  return { mp3, requestId, bedOffset: params.bedOffset, previousRequestIds }
+  return { mp3, requestId, bedOffset: nextOffset, previousRequestIds }
 }
 
 async function processOneStep(params: {
@@ -350,17 +353,15 @@ async function processOneStep(params: {
     return { job: await finalizeJob(params), done: true }
   }
 
-  let speechDone = false
-  let silenceBudget = 8
+  let didSpeech = false
+  let silenceBudget = 20
 
-  while (job.nextIndex < job.steps.length && !speechDone) {
+  while (job.nextIndex < job.steps.length) {
     const index = job.nextIndex
     const step = job.steps[index]
     if (!step) break
 
-    if (step.kind === 'speech' && silenceBudget < 8 && !step.partPath) {
-      break
-    }
+    if (step.kind === 'speech' && didSpeech) break
 
     const path = partPath(params.userId, params.sessionId, index)
 
@@ -378,7 +379,7 @@ async function processOneStep(params: {
       if (silenceBudget <= 0) break
       silenceBudget -= 1
     } else {
-      speechDone = true
+      didSpeech = true
     }
 
     const encoded = await encodeStepMp3({
@@ -631,7 +632,7 @@ Deno.serve(async (req) => {
     return json({ ok: true, accepted: true, status: 'ready' }, 202)
   }
 
-  /** Mode démo client : chemin simple sync (MP3 direct, pas de bed / chunks / N8N). */
+  /** Mode démo client : chemin simple sync (TTS + lit d’ambiance, pas de chunks / N8N). */
   if (isDemoShortMode()) {
     try {
       return await handleDemoShort({
@@ -738,7 +739,7 @@ Deno.serve(async (req) => {
           job: result.job,
         })
       }
-      if (!result.done && !n8nConfigured && !isOrchestrator) {
+      if (!result.done && !isOrchestrator) {
         scheduleContinue({
           supabaseUrl,
           anonKey,
@@ -753,6 +754,14 @@ Deno.serve(async (req) => {
         job.claimId = null
         job.claimedAt = null
       }
+      const { data: current } = await admin
+        .from('sessions')
+        .select('status, audio_path')
+        .eq('id', sessionId)
+        .maybeSingle()
+      if (current?.status === 'ready' || current?.audio_path) {
+        return
+      }
       await admin
         .from('sessions')
         .update({
@@ -761,6 +770,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq('id', sessionId)
+        .neq('status', 'ready')
     }
   }
 

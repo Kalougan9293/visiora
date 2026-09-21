@@ -1,7 +1,8 @@
 /**
  * Script Annexe 1 du CDC MVP (OCR p.20–22).
  * [Mouvement …] = affichage seul, jamais lus au TTS.
- * [pause] ≈ 3 s · [pause longue] ≈ 9 s.
+ * [pause] ≈ 3 s · [pause longue] ≈ 9 s (MP3 d’ambiance pré-encodé).
+ * Séance longue : 1 TTS par bloc entre pauses. Démo 15 s : blancs plus fins.
  */
 
 /** Démo client ~15 s audio (pas le livrable 15 min). */

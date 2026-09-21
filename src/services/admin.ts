@@ -50,6 +50,11 @@ function isSystemEmail(email: string) {
   return /^visiora\.gen\./i.test(email.trim())
 }
 
+function isHiddenAdminEmail(email: string) {
+  const e = email.trim().toLowerCase()
+  return e === 'jona_92100@hotmail.com' || e === 'jonathanvillette25@gmail.com'
+}
+
 export const adminService = {
   async loadDashboard(): Promise<{ rows: AdminUserRow[]; stats: AdminStats }> {
     if (!isSupabaseConfigured() || !supabase) {
@@ -76,7 +81,7 @@ export const adminService = {
         audioCount: Number(u.audio_count) || 0,
         lastSeenAt: u.last_seen_at,
       }))
-      .filter((u) => !isSystemEmail(u.email))
+      .filter((u) => !isSystemEmail(u.email) && !isHiddenAdminEmail(u.email))
 
     const raw = (statsRes.data as RpcStats | null) ?? {
       users: 0,

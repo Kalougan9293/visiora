@@ -8,8 +8,4 @@ where lower(email) in (
 
 select id, email, is_admin
 from public.profiles
-where lower(email) in (
-  'jona_92100@hotmail.com',
-  'jonathanvillette25@gmail.com'
-)
-or is_admin = true;
+where is_admin = true;

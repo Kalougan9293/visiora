@@ -1,10 +1,10 @@
 /** Plan de génération audio découpé (une étape = un invoc Edge Function). */
 
-import { chunkSpeech, parseAnnexScript, type ScriptPart } from './script.ts'
+import { chunkSpeech, longSessionParts, type ScriptPart } from './script.ts'
 
-export const JOB_VERSION = 2
-/** Silences découpés pour rester sous le budget CPU / invoke. */
-export const SILENCE_SLICE_SECONDS = 4
+export const JOB_VERSION = 6
+/** Une pause CDC = un step (MP3 pré-encodé, plus de découpe lame.js). */
+export const SILENCE_SLICE_SECONDS = 12
 
 /** Steps compacts (sans texte) → JSON léger, moins de risques d’échec d’update. */
 export type JobStep =
@@ -30,7 +30,7 @@ type FullStep =
   | { kind: 'silence'; seconds: number }
 
 export function buildFullSteps(script: string): FullStep[] {
-  const parts = parseAnnexScript(script)
+  const parts = longSessionParts(script)
   const steps: FullStep[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
