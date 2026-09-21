@@ -21,10 +21,9 @@ const LOOP_SRC: Record<AmbianceId, string> = {
 }
 
 const VOLUME: Record<AmbianceId, number> = {
-  eau: 0.22,
-  oiseaux: 0.16,
-  /** Pad doux — rester discret sous la voix */
-  spa: 0.14,
+  eau: 0.08,
+  oiseaux: 0.06,
+  spa: 0.05,
 }
 
 let ctx: AudioContext | null = null

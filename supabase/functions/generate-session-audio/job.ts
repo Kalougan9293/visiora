@@ -23,6 +23,7 @@ export type AudioJob = {
   claimId: string | null
   claimedAt: string | null
   phase: 'tts' | 'finalize' | 'done'
+  handedToN8n?: boolean
 }
 
 type FullStep =

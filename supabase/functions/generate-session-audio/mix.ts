@@ -39,9 +39,9 @@ const BED_SILENCE_B64: Record<string, { s3: string; s9: string }> = {
 
 /** Volume bas : tapis discret, sans clip avec la voix. */
 const BED_GAIN: Record<string, number> = {
-  rituel: 0.16,
-  onde: 0.14,
-  antoni: 0.12,
+  rituel: 0.05,
+  onde: 0.05,
+  antoni: 0.045,
 }
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number }

@@ -9,7 +9,18 @@ import {
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { isDemoShortMode, resolveScript, demoSessionParts } from './script.ts'
+import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript } from './script.ts'
+import {
+  canGenerateScript,
+  generateSessionScript,
+  hasStoredScript,
+  isDemoInProgress,
+  isN8nQueued,
+  isScriptInProgress,
+  demoClaimPayload,
+  n8nQueuePayload,
+  scriptClaimPayload,
+} from './generate-script.ts'
 import {
   TTS_PCM_FORMAT,
   upsampleTts,
@@ -48,6 +59,28 @@ function json(body: unknown, status = 200) {
   })
 }
 
+async function saveGeneratedScript(
+  admin: SupabaseClient,
+  sessionId: string,
+  answers: unknown,
+): Promise<string> {
+  const generated = await generateSessionScript(
+    answers && typeof answers === 'object' ? (answers as Record<string, unknown>) : {},
+  )
+  const { error } = await admin
+    .from('sessions')
+    .update({
+      script: generated,
+      audio_job: null,
+      audio_bytes: 12,
+      status: 'generating',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+  if (error) console.warn('[generate-session-audio] save script', error.message)
+  return generated
+}
+
 function resolveElevenVoiceId(appVoiceId: string | null): string {
   const key = (appVoiceId ?? 'rituel').toLowerCase()
   const envMap: Record<string, string | undefined> = {
@@ -69,14 +102,17 @@ async function handleDemoShort(params: {
   sessionId: string
   userId: string
   voiceId: string | null
+  answers?: unknown
+  script?: string | null
 }): Promise<Response> {
-  const script = resolveScript({ script: null })
-  const steps = demoSessionParts(script)
+  const fullScript = resolveScript({ script: params.script })
+  const audioScript = isDemoShortMode() ? shortAudioScript(fullScript) : fullScript
+  const steps = demoSessionParts(audioScript)
   const speechChars = steps
     .filter((s): s is { kind: 'speech'; text: string } => s.kind === 'speech')
     .reduce((n, s) => n + s.text.length, 0)
   if (speechChars < 20) {
-    return json({ ok: false, error: 'Script démo vide', status: 'failed' }, 500)
+    throw new Error('Script démo vide')
   }
 
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
@@ -84,9 +120,9 @@ async function handleDemoShort(params: {
     .from('sessions')
     .update({
       status: 'generating',
-      script,
+      script: fullScript,
       audio_bytes: 15,
-      audio_job: null,
+      audio_job: demoClaimPayload(),
       audio_path: null,
       audio_url: null,
       updated_at: new Date().toISOString(),
@@ -130,33 +166,21 @@ async function handleDemoShort(params: {
     upsert: true,
   })
   if (uploadError) {
-    await params.admin
-      .from('sessions')
-      .update({ status: 'failed', updated_at: new Date().toISOString() })
-      .eq('id', params.sessionId)
-    return json({ ok: false, error: `Storage: ${uploadError.message}`, status: 'failed' }, 500)
+    throw new Error(`Storage: ${uploadError.message}`)
   }
 
   const { data: signed, error: signedError } = await params.admin.storage
     .from('audios')
     .createSignedUrl(path, 60 * 60 * 24 * 7)
   if (signedError || !signed?.signedUrl) {
-    await params.admin
-      .from('sessions')
-      .update({ status: 'failed', updated_at: new Date().toISOString() })
-      .eq('id', params.sessionId)
-    return json({
-      ok: false,
-      error: `Signed URL: ${signedError?.message ?? 'missing'}`,
-      status: 'failed',
-    }, 500)
+    throw new Error(`Signed URL: ${signedError?.message ?? 'missing'}`)
   }
 
   const { error: updateError } = await params.admin
     .from('sessions')
     .update({
       status: 'ready',
-      script,
+      script: fullScript,
       audio_path: path,
       audio_url: signed.signedUrl,
       audio_bytes: mp3.byteLength,
@@ -167,7 +191,7 @@ async function handleDemoShort(params: {
     .eq('id', params.sessionId)
 
   if (updateError) {
-    return json({ ok: false, error: `DB: ${updateError.message}`, status: 'failed' }, 500)
+    throw new Error(`DB: ${updateError.message}`)
   }
 
   return json({ ok: true, accepted: true, status: 'ready' }, 200)
@@ -224,6 +248,36 @@ async function elevenTts(params: {
 
   if (!ttsRes.ok) {
     const detail = await ttsRes.text()
+    if (ttsRes.status === 429 || ttsRes.status >= 500) {
+      await new Promise((r) => setTimeout(r, 1500))
+      const retry = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=${TTS_PCM_FORMAT}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': params.apiKey,
+            'Content-Type': 'application/json',
+            Accept: 'application/octet-stream',
+          },
+          body: JSON.stringify({
+            text: params.text,
+            model_id: 'eleven_multilingual_v2',
+            language_code: 'fr',
+            voice_settings: {
+              stability: key === 'rituel' ? 0.8 : 0.72,
+              similarity_boost: 0.55,
+              style: 0,
+              use_speaker_boost: false,
+              speed: 1.0,
+            },
+          }),
+        },
+      )
+      if (retry.ok) {
+        const audio = new Uint8Array(await retry.arrayBuffer())
+        return { audio, requestId: retry.headers.get('request-id') }
+      }
+    }
     throw new Error(`ElevenLabs ${ttsRes.status}: ${detail.slice(0, 240)}`)
   }
 
@@ -584,15 +638,15 @@ Deno.serve(async (req) => {
   try {
     const body = (await req.json()) as {
       sessionId?: string
-      force?: boolean
-      reset?: boolean
-      chain?: boolean
+      force?: boolean | string
+      reset?: boolean | string
+      chain?: boolean | string
     }
     if (!body.sessionId) return json({ error: 'sessionId required' }, 400)
     sessionId = body.sessionId
-    force = Boolean(body.force)
-    reset = Boolean(body.reset)
-    chain = Boolean(body.chain)
+    force = body.force === true || body.force === 'true'
+    reset = body.reset === true || body.reset === 'true'
+    chain = body.chain === true || body.chain === 'true'
   } catch {
     return json({ error: 'Invalid JSON body' }, 400)
   }
@@ -632,25 +686,159 @@ Deno.serve(async (req) => {
     return json({ ok: true, accepted: true, status: 'ready' }, 202)
   }
 
-  /** Mode démo client : chemin simple sync (TTS + lit d’ambiance, pas de chunks / N8N). */
-  if (isDemoShortMode()) {
-    try {
-      return await handleDemoShort({
-        admin,
-        elevenKey,
-        sessionId,
-        userId: callerUserId!,
-        voiceId: (session.voice_id as string | null) ?? null,
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Generation failed'
-      console.error('[generate-session-audio] demo', message)
-      await admin
-        .from('sessions')
-        .update({ status: 'failed', updated_at: new Date().toISOString() })
-        .eq('id', sessionId)
-      return json({ ok: false, error: message, status: 'failed' }, 500)
+  if (session.status === 'failed' && !force && !reset) {
+    return json({
+      ok: false,
+      error: 'Generation failed',
+      status: 'failed',
+    }, isOrchestrator ? 200 : 409)
+  }
+
+  const canBackground = typeof EdgeRuntime !== 'undefined' && Boolean(EdgeRuntime?.waitUntil)
+
+  /** Script d'abord, hors du TTS : un seul appel OpenAI, pas de timeout client. */
+  if (!hasStoredScript(session.script) && canGenerateScript()) {
+    if (isScriptInProgress(session.audio_job)) {
+      return json({ ok: true, accepted: true, status: 'generating', progress: 8 }, 202)
     }
+
+    await admin
+      .from('sessions')
+      .update({
+        status: 'generating',
+        audio_bytes: 8,
+        audio_job: scriptClaimPayload(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId)
+
+    const runScript = async () => {
+      try {
+        await saveGeneratedScript(admin, sessionId, session.answers)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'script failed'
+        console.error('[generate-session-audio] script fallback annex', message)
+        const fallback = resolveScript({ script: null })
+        await admin
+          .from('sessions')
+          .update({
+            script: fallback,
+            audio_job: null,
+            audio_bytes: 12,
+            status: 'generating',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+      }
+      if (!isDemoShortMode() && n8nConfigured) {
+        await admin
+          .from('sessions')
+          .update({
+            audio_job: n8nQueuePayload(),
+            audio_bytes: 17,
+            status: 'generating',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+        const handed = await notifyN8n(sessionId)
+        if (handed) return
+      }
+      scheduleContinue({
+        supabaseUrl,
+        anonKey,
+        authHeader,
+        sessionId,
+      })
+    }
+
+    if (canBackground && !isOrchestrator) {
+      EdgeRuntime!.waitUntil(runScript())
+      return json({
+        ok: true,
+        accepted: true,
+        status: 'generating',
+        progress: 8,
+        orchestrated: n8nConfigured,
+      }, 202)
+    }
+
+    await runScript()
+    return json({
+      ok: true,
+      accepted: true,
+      status: 'generating',
+      progress: 8,
+      orchestrated: n8nConfigured,
+    }, 202)
+  }
+
+  /** Mode démo : TTS court en fond — le téléphone ne doit pas porter la requête. */
+  if (isN8nQueued(session.audio_job) && !isOrchestrator) {
+    return json({
+      ok: true,
+      accepted: true,
+      status: 'generating',
+      progress: 17,
+      orchestrated: true,
+    }, 202)
+  }
+
+  if (isDemoShortMode()) {
+    if (isDemoInProgress(session.audio_job)) {
+      return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
+    }
+
+    await admin
+      .from('sessions')
+      .update({
+        status: 'generating',
+        audio_bytes: 15,
+        audio_job: demoClaimPayload(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId)
+
+    const runDemo = async () => {
+      try {
+        await handleDemoShort({
+          admin,
+          elevenKey,
+          sessionId,
+          userId: callerUserId!,
+          voiceId: (session.voice_id as string | null) ?? null,
+          answers: session.answers,
+          script: session.script as string | null,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Generation failed'
+        console.error('[generate-session-audio] demo', message)
+        await admin
+          .from('sessions')
+          .update({ status: 'failed', updated_at: new Date().toISOString() })
+          .eq('id', sessionId)
+          .neq('status', 'ready')
+      }
+    }
+
+    /** Requête téléphone : 202 immédiat. Relance serveur (chain) : on attend le TTS. */
+    if (canBackground && !isOrchestrator && !chain) {
+      EdgeRuntime!.waitUntil(runDemo())
+      return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
+    }
+
+    await runDemo()
+    const { data: afterDemo } = await admin
+      .from('sessions')
+      .select('status')
+      .eq('id', sessionId)
+      .maybeSingle()
+    if (afterDemo?.status === 'ready') {
+      return json({ ok: true, accepted: true, status: 'ready' }, 200)
+    }
+    if (afterDemo?.status === 'failed') {
+      return json({ ok: false, error: 'Génération démo échouée', status: 'failed' }, 500)
+    }
+    return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
   }
 
   let job = isAudioJob(session.audio_job) ? (session.audio_job as AudioJob) : null
@@ -675,6 +863,7 @@ Deno.serve(async (req) => {
 
   if (!job) {
     job = createAudioJob(script, voiceKey)
+    if (isOrchestrator || n8nConfigured) job.handedToN8n = true
     const { error: initError } = await admin
       .from('sessions')
       .update({
@@ -698,6 +887,17 @@ Deno.serve(async (req) => {
    * → on confie la boucle longue à N8N (meilleure fiabilité 15 min).
    */
   if (!isOrchestrator && !chain && n8nConfigured) {
+    if (job.handedToN8n) {
+      return json({
+        ok: true,
+        accepted: true,
+        status: 'generating',
+        progress: progressPct(job),
+        orchestrated: true,
+      }, 202)
+    }
+    job.handedToN8n = true
+    await setProgress(admin, sessionId, progressPct(job), job)
     const handed = await notifyN8n(sessionId)
     if (handed) {
       return json({
@@ -708,6 +908,7 @@ Deno.serve(async (req) => {
         orchestrated: true,
       }, 202)
     }
+    job.handedToN8n = false
     /** Fallback si N8N down : on traite quand même un step ici. */
   }
 
@@ -771,6 +972,7 @@ Deno.serve(async (req) => {
         })
         .eq('id', sessionId)
         .neq('status', 'ready')
+      throw err
     }
   }
 
@@ -778,8 +980,7 @@ Deno.serve(async (req) => {
    * Réponse 202 immédiate + travail en arrière-plan.
    * Évite que le client (timeout invoke) marque « Réessayer » alors que le job tourne.
    */
-  const canBackground = typeof EdgeRuntime !== 'undefined' && Boolean(EdgeRuntime?.waitUntil)
-  if (canBackground && !isOrchestrator) {
+  if (canBackground && !isOrchestrator && !chain) {
     EdgeRuntime!.waitUntil(runWork())
     return json({
       ok: true,
@@ -801,7 +1002,11 @@ Deno.serve(async (req) => {
       return json({ ok: true, accepted: true, status: 'ready' }, 200)
     }
     if (fresh?.status === 'failed') {
-      return json({ ok: false, error: 'Generation failed', status: 'failed' }, 500)
+      return json({
+        ok: false,
+        error: 'Generation failed',
+        status: 'failed',
+      }, isOrchestrator ? 200 : 500)
     }
     const freshJob = isAudioJob(fresh?.audio_job) ? (fresh!.audio_job as AudioJob) : job
     return json({

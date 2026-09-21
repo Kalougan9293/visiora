@@ -184,10 +184,26 @@ export function isDemoShortMode(): boolean {
 }
 
 export function resolveScript(session: { script?: string | null }): string {
-  if (isDemoShortMode()) return ANNEX_DEMO_SHORT_SCRIPT
-
   if (typeof session.script === 'string' && session.script.trim().length > 40) {
     return session.script.trim()
   }
+  if (isDemoShortMode()) return ANNEX_DEMO_SHORT_SCRIPT
   return ANNEX_FIXTURE_SCRIPT
+}
+
+/** Démo ~15 s : on ne lit que le début du script généré. */
+export function shortAudioScript(script: string, maxSpeech = 420): string {
+  const raw = script.replace(/\r\n/g, '\n').trim()
+  if (!raw) return ANNEX_DEMO_SHORT_SCRIPT
+  let speech = 0
+  const kept: string[] = []
+  for (const line of raw.split('\n')) {
+    kept.push(line)
+    if (!/^\s*\[(pause|Mouvement)/i.test(line)) {
+      speech += line.trim().length
+    }
+    if (speech >= maxSpeech) break
+  }
+  const out = kept.join('\n').trim()
+  return out.length > 40 ? out : ANNEX_DEMO_SHORT_SCRIPT
 }

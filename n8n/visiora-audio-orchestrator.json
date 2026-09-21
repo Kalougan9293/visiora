@@ -17,11 +17,33 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "srk",
+              "name": "serviceRoleKey",
+              "value": "COLLE_ICI_LA_CLE_SERVICE_ROLE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "id": "config-keys",
+      "name": "cles",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
         "conditions": {
           "string": [
             {
-              "value1": "={{ $json.body.secret || $json.secret }}",
-              "value2": "={{ $env.VISIORA_ORCHESTRATOR_SECRET }}"
+              "value1": "={{ $('Webhook').item.json.body.secret || $('Webhook').item.json.secret }}",
+              "value2": "COLLE_ICI_LE_SECRET_ORCHESTRATEUR"
             }
           ]
         }
@@ -30,7 +52,7 @@
       "name": "Secret OK ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [220, 0]
+      "position": [440, 0]
     },
     {
       "parameters": {
@@ -39,7 +61,7 @@
             {
               "id": "sid",
               "name": "sessionId",
-              "value": "={{ $json.body.sessionId || $json.sessionId }}",
+              "value": "={{ $('Webhook').item.json.body.sessionId || $('Webhook').item.json.sessionId }}",
               "type": "string"
             },
             {
@@ -56,26 +78,26 @@
       "name": "Init boucle",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [440, -40]
+      "position": [660, -40]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SUPABASE_URL }}/functions/v1/generate-session-audio",
+        "url": "https://zhmgispzaggjhkbvrhwg.supabase.co/functions/v1/generate-session-audio",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              "value": "=Bearer {{ $('cles').item.json.serviceRoleKey }}"
             },
             {
               "name": "apikey",
-              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
+              "value": "={{ $('cles').item.json.serviceRoleKey }}"
             },
             {
               "name": "x-visiora-orchestrator-secret",
-              "value": "={{ $env.VISIORA_ORCHESTRATOR_SECRET }}"
+              "value": "COLLE_ICI_LE_SECRET_ORCHESTRATEUR"
             },
             {
               "name": "Content-Type",
@@ -85,16 +107,20 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"sessionId\": \"{{ $json.sessionId }}\",\n  \"chain\": true\n}",
+        "jsonBody": "={\n  \"sessionId\": \"{{ $('Init boucle').item.json.sessionId }}\",\n  \"chain\": true\n}",
         "options": {
-          "timeout": 120000
+          "timeout": 180000,
+          "retry": {
+            "maxTries": 1,
+            "waitBetweenTries": 8000
+          }
         }
       },
       "id": "call-step",
       "name": "Step audio",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, -40]
+      "position": [880, -40]
     },
     {
       "parameters": {
@@ -117,18 +143,18 @@
       "name": "Encore en cours ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [880, -40]
+      "position": [1100, -40]
     },
     {
       "parameters": {
-        "amount": 2,
+        "amount": 1,
         "unit": "seconds"
       },
       "id": "wait-2s",
       "name": "Pause 2s",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1100, -120]
+      "position": [1320, -120]
     },
     {
       "parameters": {
@@ -154,7 +180,7 @@
       "name": "Compteur",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1320, -120]
+      "position": [1540, -120]
     },
     {
       "parameters": {
@@ -172,11 +198,14 @@
       "name": "i < 250 ?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [1540, -120]
+      "position": [1760, -120]
     }
   ],
   "connections": {
     "Webhook": {
+      "main": [[{ "node": "cles", "type": "main", "index": 0 }]]
+    },
+    "cles": {
       "main": [[{ "node": "Secret OK ?", "type": "main", "index": 0 }]]
     },
     "Secret OK ?": {
@@ -215,6 +244,6 @@
   },
   "meta": {
     "templateCredsSetupCompleted": false,
-    "description": "Visiora: boucle les chunks generate-session-audio jusqu'à ready/failed. Variables env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VISIORA_ORCHESTRATOR_SECRET."
+    "description": "Starter OK, sans variables globales. Ouvre le nœud « cles » et colle la service_role à la place de COLLE_ICI_LA_CLE_SERVICE_ROLE. Ne pas committer cette clé."
   }
 }
