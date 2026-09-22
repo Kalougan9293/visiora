@@ -123,10 +123,28 @@ begin
     raise exception 'cannot delete own account from admin';
   end if;
 
-  delete from storage.objects
-  where bucket_id = 'audios'
-    and (storage.foldername(name))[1] = target_id::text;
+  if exists (
+    select 1 from public.profiles p
+    where p.id = target_id and coalesce(p.is_admin, false)
+  ) then
+    raise exception 'cannot delete an admin account';
+  end if;
 
+  begin
+    delete from storage.objects
+    where bucket_id = 'audios'
+      and name like target_id::text || '/%';
+  exception
+    when others then
+      null;
+  end;
+
+  if to_regclass('public.listens') is not null then
+    execute 'delete from public.listens where user_id = $1' using target_id;
+  end if;
+
+  delete from public.sessions where user_id = target_id;
+  delete from public.profiles where id = target_id;
   delete from auth.users where id = target_id;
 
   return true;

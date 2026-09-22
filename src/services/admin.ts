@@ -103,7 +103,13 @@ export const adminService = {
     if (!isSupabaseConfigured() || !supabase) {
       throw new Error('Supabase non configuré')
     }
-    const { error } = await supabase.rpc('admin_delete_user', { target_id: userId })
-    if (error) throw error
+    const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+      'admin-delete-user',
+      { body: { targetId: userId } },
+    )
+    if (!error && data?.ok) return
+    if (data?.error) throw new Error(data.error)
+    const { error: rpcError } = await supabase.rpc('admin_delete_user', { target_id: userId })
+    if (rpcError) throw new Error(data?.error || error?.message || rpcError.message)
   },
 }
