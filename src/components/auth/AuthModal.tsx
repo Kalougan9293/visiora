@@ -2,7 +2,6 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Check, Eye, EyeOff, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useVariant } from '@/context/VariantContext'
 import { cn } from '@/lib/utils'
 
 type Mode = 'login' | 'signup'
@@ -36,7 +35,6 @@ function mapAuthError(err: unknown): string {
 }
 
 export function AuthModal({ open, onClose }: AuthModalProps) {
-  const { isAqua } = useVariant()
   const { signIn, signUp, configured } = useAuth()
   const [mode, setMode] = useState<Mode>('login')
   const [signupStep, setSignupStep] = useState<SignupStep>(1)
@@ -127,7 +125,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
       return
     }
     if (!acceptCgu) {
-      setHint('Acceptez les CGU pour continuer')
+      setHint('Accepte les CGU pour continuer')
       return
     }
     if (!configured) {
@@ -159,30 +157,24 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
   const inputClass = cn(
     'w-full rounded-2xl border px-3.5 py-3 text-left text-base outline-none transition',
-    isAqua
-      ? 'border-white/15 bg-white/[0.07] text-[#e8f7f9] placeholder:text-[#b8e4ea]/40 focus:border-[#7ed4df]/50 focus:bg-white/[0.1] focus:ring-2 focus:ring-[#7ed4df]/12'
-      : 'border-black/10 bg-white/80 text-ink placeholder:text-ink/30 focus:border-olive/40 focus:ring-2 focus:ring-olive/12 dark:border-white/12 dark:bg-white/[0.06] dark:text-cream dark:placeholder:text-champagne/35 dark:focus:border-gold/35 dark:focus:ring-gold/12',
+    'border-[var(--vs-bordure)] bg-[var(--vs-surface)] text-ink placeholder:text-ink/30 focus:border-[var(--vs-azur)]/50 focus:ring-2 focus:ring-[var(--vs-azur)]/12 dark:text-[var(--vs-lunaire)] dark:placeholder:text-[var(--vs-brume)]',
   )
 
   const passwordInputClass = cn(inputClass, 'pr-11')
 
   const eyeBtnClass = cn(
     'absolute right-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full transition-colors',
-    isAqua
-      ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-[#7ed4df]'
-      : 'text-ink/40 hover:bg-black/5 hover:text-ink/70 dark:text-champagne/60 dark:hover:bg-white/5 dark:hover:text-champagne',
+    'text-ink/40 hover:bg-black/5 hover:text-ink/70 dark:text-champagne/60 dark:hover:bg-white/5 dark:hover:text-champagne',
   )
 
   const labelClass = cn(
     'mb-1.5 block text-left text-[10px] font-semibold uppercase tracking-[0.16em]',
-    isAqua ? 'text-[#7ed4df]/90' : 'text-ink/55 dark:text-champagne/70',
+    'text-ink/55 dark:text-champagne/70',
   )
 
   const linkClass = cn(
     'text-center text-xs transition',
-    isAqua
-      ? 'text-[#b8e4ea]/70 hover:text-[#7ed4df]'
-      : 'text-ink/55 hover:text-olive dark:text-champagne/70 dark:hover:text-gold',
+    'text-ink/55 hover:text-[var(--vs-azur)] dark:text-[var(--vs-brume)] dark:hover:text-[var(--vs-azur)]',
   )
 
   const title =
@@ -213,7 +205,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
             aria-label="Fermer"
             className={cn(
               'absolute inset-0 backdrop-blur-sm',
-              isAqua ? 'bg-[#06262c]/75' : 'bg-ink/50 dark:bg-black/60',
+              'bg-ink/50 dark:bg-black/60',
             )}
             onClick={onClose}
           />
@@ -227,21 +219,16 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'relative z-10 w-full max-w-[22.5rem] overflow-hidden rounded-[1.5rem] border p-6 shadow-2xl sm:p-7',
-              isAqua
-                ? 'aqua-glass border-white/20'
-                : 'border-black/8 bg-cream dark:border-white/10 dark:bg-ink-elevated',
+              'relative z-10 w-full max-w-[22.5rem] overflow-hidden rounded-[1.5rem] border p-6 sm:p-7',
+              'border-[var(--vs-bordure)] bg-[var(--vs-surface)]',
             )}
-            style={isAqua ? { fontFamily: 'var(--font-aqua-sans)' } : undefined}
           >
             <button
               type="button"
               onClick={onClose}
               className={cn(
                 'absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full transition',
-                isAqua
-                  ? 'text-[#e8f7f9]/55 hover:bg-white/10 hover:text-[#e8f7f9]'
-                  : 'text-ink/40 hover:bg-black/5 hover:text-ink dark:text-cream/50 dark:hover:bg-white/10 dark:hover:text-cream',
+                'text-ink/40 hover:bg-black/5 hover:text-ink dark:text-cream/50 dark:hover:bg-white/10 dark:hover:text-cream',
               )}
               aria-label="Fermer"
             >
@@ -256,13 +243,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     className={cn(
                       'h-1 rounded-full transition-all duration-300',
                       n === signupStep ? 'w-8' : 'w-3',
-                      n <= signupStep
-                        ? isAqua
-                          ? 'bg-[#7ed4df]'
-                          : 'bg-olive dark:bg-gold'
-                        : isAqua
-                          ? 'bg-white/20'
-                          : 'bg-black/12 dark:bg-white/15',
+                      n <= signupStep ? 'bg-[var(--vs-azur)]' : 'bg-black/12 dark:bg-[var(--vs-ardoise)]',
                     )}
                   />
                 ))}
@@ -273,20 +254,15 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
               <h2
                 className={cn(
                   'text-xl tracking-tight sm:text-[1.35rem]',
-                  isAqua ? 'text-[#f4fcfd]' : 'font-display text-ink dark:text-cream',
+                  'font-display text-ink dark:text-cream',
                 )}
-                style={
-                  isAqua
-                    ? { fontFamily: 'var(--font-aqua-display)', fontWeight: 450 }
-                    : undefined
-                }
               >
                 {title}
               </h2>
               <p
                 className={cn(
                   'mt-1.5 text-xs leading-relaxed',
-                  isAqua ? 'text-[#b8e4ea]/75' : 'text-ink/50 dark:text-champagne/65',
+                  'text-ink/50 dark:text-champagne/65',
                 )}
               >
                 {subtitle}
@@ -329,8 +305,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   </div>
                 </Field>
 
-                <Hint text={hint} isAqua={isAqua} />
-                <PrimaryButton isAqua={isAqua} label={busy ? '…' : 'Se connecter'} disabled={busy} />
+                <Hint text={hint} />
+                <PrimaryButton label={busy ? '…' : 'Se connecter'} disabled={busy} />
                 <button type="button" onClick={() => switchMode('signup')} className={cn(linkClass, 'w-full pt-1')}>
                   Pas de compte ? Créer un compte
                 </button>
@@ -380,9 +356,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                       />
                     </Field>
 
-                    <Hint text={hint} isAqua={isAqua} />
+                    <Hint text={hint} />
                     <PrimaryButton
-                      isAqua={isAqua}
                       label="Suivant"
                       icon={<ArrowRight size={16} strokeWidth={2.25} />}
                     />
@@ -438,22 +413,14 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                             className={cn(
                               'flex items-center gap-2.5 text-[12px] leading-snug transition-colors',
                               ok
-                                ? isAqua
-                                  ? 'text-[#8ee0a8]'
-                                  : 'font-medium text-emerald-600 dark:text-emerald-400'
-                                : isAqua
-                                  ? 'text-[#b8e4ea]/55'
-                                  : 'text-ink/45 dark:text-champagne/55',
+                                ? 'font-medium text-[var(--vs-azur)]'
+                                : 'text-ink/45 dark:text-[var(--vs-brume)]',
                             )}
                           >
                             <span
                               className={cn(
                                 'flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-colors',
-                                ok
-                                  ? 'bg-emerald-500 text-white'
-                                  : isAqua
-                                    ? 'bg-white/10'
-                                    : 'bg-black/[0.06] dark:bg-white/10',
+                                ok ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]' : 'bg-black/[0.06] dark:bg-[var(--vs-abysse)]',
                               )}
                             >
                               {ok ? <Check size={10} strokeWidth={3} /> : null}
@@ -467,7 +434,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     <label
                       className={cn(
                         'flex cursor-pointer items-start gap-2.5 rounded-2xl px-0.5 text-left text-[11px] leading-snug sm:text-xs',
-                        isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/60 dark:text-champagne/70',
+                        'text-ink/60 dark:text-champagne/70',
                       )}
                     >
                       <input
@@ -475,17 +442,16 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                         checked={acceptCgu}
                         onChange={(e) => setAcceptCgu(e.target.checked)}
                         className={cn(
-                          'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border accent-emerald-500',
-                          isAqua ? 'border-white/30' : 'border-black/20 dark:border-white/25',
+                          'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border accent-[var(--vs-azur)]',
+                          'border-black/20 dark:border-white/25',
                         )}
                         disabled={busy}
                       />
                       <span>J&apos;accepte les CGU et la politique de confidentialité</span>
                     </label>
 
-                    <Hint text={hint} isAqua={isAqua} />
+                    <Hint text={hint} />
                     <PrimaryButton
-                      isAqua={isAqua}
                       label={busy ? '…' : 'Créer mon compte'}
                       disabled={busy}
                     />
@@ -531,51 +497,25 @@ function Field({
   )
 }
 
-function Hint({ text, isAqua }: { text: string; isAqua: boolean }) {
+function Hint({ text }: { text: string }) {
   if (!text) return null
-  return (
-    <p
-      className={cn(
-        'text-center text-xs',
-        isAqua ? 'text-[#f0a0a0]' : 'text-red-600 dark:text-red-400',
-      )}
-    >
-      {text}
-    </p>
-  )
+  return <p className="text-center text-xs text-[var(--vs-or)]">{text}</p>
 }
 
 function PrimaryButton({
-  isAqua,
   label,
   disabled,
   icon,
 }: {
-  isAqua: boolean
   label: string
   disabled?: boolean
   icon?: React.ReactNode
 }) {
-  if (isAqua) {
-    return (
-      <button
-        type="submit"
-        disabled={disabled}
-        className="aqua-cta mt-2 w-full !py-3 text-sm disabled:opacity-60"
-      >
-        <span className="inline-flex items-center justify-center gap-2">
-          {label}
-          {icon}
-        </span>
-      </button>
-    )
-  }
-
   return (
     <button
       type="submit"
       disabled={disabled}
-      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-olive px-4 py-3 text-sm font-semibold text-cream shadow-[0_8px_20px_-8px_rgba(95,107,69,0.55)] transition hover:bg-olive/90 disabled:opacity-60 dark:bg-gold dark:text-ink dark:shadow-[0_8px_20px_-8px_rgba(212,175,55,0.4)] dark:hover:bg-gold-bright"
+      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[var(--vs-or)] px-4 py-3 text-sm font-semibold text-[var(--vs-nuit)] transition hover:brightness-105 disabled:opacity-60"
     >
       {label}
       {icon}

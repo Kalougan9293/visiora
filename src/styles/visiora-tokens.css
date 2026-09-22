@@ -1,7 +1,6 @@
 /* ==========================================================================
    VISIORA — jetons de design (version client)
-   Source : cahier des charges MVP, septembre 2026
-   Aqua (version test) n’utilise pas ce fichier.
+   Source : cahier des charges MVP + textes v1, septembre 2026
    ========================================================================== */
 
 .variant-classic {
@@ -42,38 +41,46 @@
   --ease-out-expo: var(--vs-courbe);
 }
 
-/* Sombre = charte client — textes un cran plus blancs pour la lecture */
+/* Sombre = charte — Lunaire / Écume / Brume sans mélange de blanc */
 .variant-classic.dark {
-  --vs-texte: color-mix(in srgb, var(--vs-lunaire) 42%, #ffffff);
-  --vs-texte-fort: color-mix(in srgb, var(--vs-ecume) 52%, #ffffff);
-  --vs-texte-faible: color-mix(in srgb, var(--vs-brume) 48%, #e4eef4);
+  --vs-texte: var(--vs-lunaire);
+  --vs-texte-fort: var(--vs-ecume);
+  --vs-texte-faible: var(--vs-brume);
 
   --color-ink: var(--vs-nuit);
   --color-ink-soft: var(--vs-abysse);
   --color-ink-elevated: var(--vs-abysse);
-  --color-cream: color-mix(in srgb, var(--vs-ecume) 38%, #ffffff);
-  --color-cream-soft: color-mix(in srgb, var(--vs-lunaire) 30%, #ffffff);
+  --color-cream: var(--vs-lunaire);
+  --color-cream-soft: var(--vs-lunaire);
   --color-cream-card: var(--vs-abysse);
   --color-gold: var(--vs-or);
-  --color-gold-bright: var(--vs-coeur);
-  --color-champagne: color-mix(in srgb, var(--vs-brume) 46%, #e8f0f5);
+  --color-gold-bright: var(--vs-or);
+  --color-champagne: var(--vs-brume);
   --color-olive: var(--vs-azur);
   --color-olive-soft: var(--vs-ecume);
 }
 
-/* Clair = version crème / olive — textes un cran plus encre */
+/* Clair = inversion des jetons — aucune couleur nouvelle */
 .variant-classic:not(.dark) {
-  --color-ink: #100e0c;
-  --color-ink-soft: #1a1714;
-  --color-ink-elevated: #241f1a;
-  --color-cream: #faf7f2;
-  --color-cream-soft: #f3eee6;
-  --color-cream-card: #ffffff;
-  --color-gold: #d4a574;
-  --color-gold-bright: #e8c49a;
-  --color-champagne: #5c5448;
-  --color-olive: #4f5a38;
-  --color-olive-soft: #7d8c68;
+  --vs-fond: var(--vs-lunaire);
+  --vs-surface: color-mix(in srgb, var(--vs-lunaire) 72%, #ffffff);
+  --vs-bordure: color-mix(in srgb, var(--vs-ardoise) 28%, transparent);
+  --vs-texte: var(--vs-nuit);
+  --vs-texte-faible: var(--vs-ardoise);
+  --vs-texte-fort: var(--vs-abysse);
+  --vs-accent-texte: var(--vs-nuit);
+
+  --color-ink: var(--vs-nuit);
+  --color-ink-soft: var(--vs-abysse);
+  --color-ink-elevated: var(--vs-abysse);
+  --color-cream: var(--vs-lunaire);
+  --color-cream-soft: color-mix(in srgb, var(--vs-lunaire) 78%, #ffffff);
+  --color-cream-card: color-mix(in srgb, var(--vs-lunaire) 62%, #ffffff);
+  --color-gold: var(--vs-or);
+  --color-gold-bright: var(--vs-or);
+  --color-champagne: var(--vs-ardoise);
+  --color-olive: var(--vs-azur);
+  --color-olive-soft: color-mix(in srgb, var(--vs-azur) 55%, var(--vs-lunaire));
 }
 
 .variant-classic.dark,
@@ -94,9 +101,9 @@
 }
 
 .variant-classic:not(.dark) body {
-  background-color: var(--color-cream);
-  background-image: none;
-  color: var(--color-ink);
+  background-color: var(--vs-fond);
+  background-image: var(--vs-lueur-centre);
+  color: var(--vs-texte);
   font-family: var(--vs-police-texte);
 }
 
@@ -119,7 +126,7 @@
 .variant-classic:not(.dark) h2,
 .variant-classic:not(.dark) h3,
 .variant-classic:not(.dark) .font-display {
-  color: var(--color-ink);
+  color: var(--vs-texte-fort);
 }
 
 .variant-classic.dark h1 .vs-titre-accent {
@@ -127,7 +134,7 @@
 }
 
 .variant-classic:not(.dark) h1 .vs-titre-accent {
-  color: var(--color-olive);
+  color: var(--vs-azur);
 }
 
 .variant-classic .vs-logotype {

@@ -23,14 +23,20 @@ type InvokePayload = {
 }
 
 export const audioService = {
-  async enqueueGeneration(sessionId: string, force = false): Promise<EnqueueAudioResult> {
+  async enqueueGeneration(
+    sessionId: string,
+    opts: boolean | { force?: boolean; reset?: boolean } = false,
+  ): Promise<EnqueueAudioResult> {
     if (!isSupabaseConfigured() || !supabase) {
       return { ok: false, error: 'Supabase non configuré' }
     }
 
+    const force = typeof opts === 'boolean' ? opts : Boolean(opts.force)
+    const reset = typeof opts === 'boolean' ? false : Boolean(opts.reset)
+
     const { data, error } = await supabase.functions.invoke<InvokePayload>(
       'generate-session-audio',
-      { body: { sessionId, force } },
+      { body: { sessionId, force, reset } },
     )
 
     if (data?.status === 'ready') {

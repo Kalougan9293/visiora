@@ -17,9 +17,9 @@ export default defineConfig({
       manifest: {
         name: 'Visiora AI',
         short_name: 'Visiora',
-        description: 'Visualisation mentale et méditation guidée personnalisée',
-        theme_color: '#1A1612',
-        background_color: '#1A1612',
+        description: 'Séances de visualisation guidée, écrites pour toi.',
+        theme_color: '#020C25',
+        background_color: '#020C25',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

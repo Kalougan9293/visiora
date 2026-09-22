@@ -1,6 +1,6 @@
 # Visiora AI
 
-Application web de visualisation mentale et méditation guidée (front-end + Supabase).
+Application web de visualisation guidée (front-end + Supabase).
 
 ## Stack
 

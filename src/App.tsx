@@ -1,66 +1,43 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { SessionsProvider } from '@/context/SessionsContext'
-import { VariantProvider, useVariant } from '@/context/VariantContext'
 import { AuthProvider } from '@/context/AuthContext'
 import { AppShell } from '@/components/layout/AppShell'
 import { HomePage } from '@/pages/HomePage'
-import { AquaHomePage } from '@/pages/AquaHomePage'
 import { CreatePage } from '@/pages/CreatePage'
-import { AquaCreatePage } from '@/pages/AquaCreatePage'
 import { LibraryPage } from '@/pages/LibraryPage'
-import { AquaLibraryPage } from '@/pages/AquaLibraryPage'
 import { ProgressPage } from '@/pages/ProgressPage'
-import { AquaProgressPage } from '@/pages/AquaProgressPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
 import { VoicesLabPage } from '@/pages/VoicesLabPage'
-
-function HomeSwitch() {
-  const { isAqua } = useVariant()
-  return isAqua ? <AquaHomePage /> : <HomePage />
-}
-
-function CreateSwitch() {
-  const { isAqua } = useVariant()
-  return isAqua ? <AquaCreatePage /> : <CreatePage />
-}
-
-function LibrarySwitch() {
-  const { isAqua } = useVariant()
-  return isAqua ? <AquaLibraryPage /> : <LibraryPage />
-}
-
-function ProgressSwitch() {
-  const { isAqua } = useVariant()
-  return isAqua ? <AquaProgressPage /> : <ProgressPage />
-}
+import { ModelsLabPage } from '@/pages/ModelsLabPage'
 
 export default function App() {
   return (
     <ThemeProvider>
-      <VariantProvider>
-        <AuthProvider>
-          <SessionsProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route path="admin" element={<AdminPage />} />
-                <Route element={<AppShell />}>
-                  <Route index element={<HomeSwitch />} />
-                  <Route path="creer" element={<CreateSwitch />} />
-                  <Route path="bibliotheque" element={<LibrarySwitch />} />
-                  <Route path="suivi" element={<ProgressSwitch />} />
-                  <Route path="profil" element={<ProfilePage />} />
-                  {import.meta.env.DEV && (
+      <AuthProvider>
+        <SessionsProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="admin" element={<AdminPage />} />
+              <Route element={<AppShell />}>
+                <Route index element={<HomePage />} />
+                <Route path="creer" element={<CreatePage />} />
+                <Route path="bibliotheque" element={<LibraryPage />} />
+                <Route path="suivi" element={<ProgressPage />} />
+                <Route path="profil" element={<ProfilePage />} />
+                {import.meta.env.DEV && (
+                  <>
                     <Route path="voix" element={<VoicesLabPage />} />
-                  )}
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </SessionsProvider>
-        </AuthProvider>
-      </VariantProvider>
+                    <Route path="modeles" element={<ModelsLabPage />} />
+                  </>
+                )}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </SessionsProvider>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

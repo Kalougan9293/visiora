@@ -3,6 +3,7 @@ import { Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
+import { hasListenedEnough } from '@/lib/listenThreshold'
 
 interface AudioPlayerProps {
   src?: string | null
@@ -61,14 +62,22 @@ export function AudioPlayer({
     const el = audioRef.current
     if (!el) return
 
+    const markIfEnough = (ended = false) => {
+      if (countedRef.current) return
+      if (!hasListenedEnough(el.currentTime, el.duration, ended)) return
+      countedRef.current = true
+      onPlayStart?.()
+    }
+
     const onTime = () => {
       if (!el.duration || Number.isNaN(el.duration)) return
       setProgress((el.currentTime / el.duration) * 100)
+      markIfEnough(false)
     }
     const onEnd = () => {
       setPlaying(false)
       setProgress(100)
-      countedRef.current = false
+      markIfEnough(true)
       dropBed()
     }
     const onPlay = () => setPlaying(true)
@@ -86,7 +95,7 @@ export function AudioPlayer({
       el.removeEventListener('play', onPlay)
       el.removeEventListener('pause', onPause)
     }
-  }, [src])
+  }, [src, onPlayStart])
 
   const toggle = async () => {
     const el = audioRef.current
@@ -100,13 +109,10 @@ export function AudioPlayer({
       if (el.ended || (el.duration && el.currentTime >= el.duration - 0.05)) {
         el.currentTime = 0
         setProgress(0)
+        countedRef.current = false
       }
       takeBed()
       await el.play()
-      if (!countedRef.current) {
-        countedRef.current = true
-        onPlayStart?.()
-      }
     } catch (err) {
       console.warn('[audio] play failed', err)
       setPlaying(false)
@@ -161,7 +167,7 @@ export function AudioPlayer({
           )}
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
             <div
-              className="h-full rounded-full bg-gold transition-[width] duration-200"
+              className="h-full rounded-full bg-[var(--vs-azur)] transition-[width] duration-200"
               style={{ width: `${src ? progress : 0}%` }}
             />
           </div>

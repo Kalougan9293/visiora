@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Check, Compass, Pause, Play } from 'lucide-react'
 import {
@@ -16,17 +16,21 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
+import { LegalFooter } from '@/components/layout/LegalFooter'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
-import { needsHealthScreen } from '@/services/healthGate'
+import { HEALTH_KEYWORDS, needsHealthScreen } from '@/services/healthGate'
+import { healthKeywordsService } from '@/services/healthKeywords'
 
 type Answers = Record<string, string>
 
 export function CreatePage() {
   const navigate = useNavigate()
-  const { addSession } = useSessions()
+  const [searchParams] = useSearchParams()
+  const adjustId = searchParams.get('adjust')
+  const { addSession, adjustSession, sessions, sessionsReady } = useSessions()
   const { user } = useAuth()
-  const [phase, setPhase] = useState<'intro' | 'wizard'>('intro')
+  const [phase, setPhase] = useState<'intro' | 'wizard'>(adjustId ? 'wizard' : 'intro')
   const [stepIdx, setStepIdx] = useState(0)
   const [authOpen, setAuthOpen] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
@@ -34,8 +38,42 @@ export function CreatePage() {
     q12_voice: 'rituel',
     q12_tutoiement: 'tu',
     q12_registre: 'neutre',
+    duration_minutes: '15',
   })
   const [healthGate, setHealthGate] = useState(false)
+  const [healthWords, setHealthWords] = useState<readonly string[]>(HEALTH_KEYWORDS)
+  const [adjustBusy, setAdjustBusy] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const hydratedAdjustRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    void healthKeywordsService.list().then(setHealthWords)
+  }, [])
+
+  useEffect(() => {
+    if (!adjustId) {
+      hydratedAdjustRef.current = null
+      return
+    }
+    if (hydratedAdjustRef.current === adjustId) return
+    const session = sessions.find((s) => s.id === adjustId)
+    if (!session) return
+    hydratedAdjustRef.current = adjustId
+    const next: Answers = {
+      q12_voice: 'rituel',
+      q12_tutoiement: 'tu',
+      q12_registre: 'neutre',
+      duration_minutes: String(session.durationMinutes || 15),
+    }
+    for (const [key, value] of Object.entries(session.answers)) {
+      next[key] = Array.isArray(value) ? value.join(', ') : String(value ?? '')
+    }
+    next.q12_tutoiement = 'tu'
+    setAnswers(next)
+    setPhase('wizard')
+    setStepIdx(0)
+    setSubmitError('')
+  }, [adjustId, sessions])
 
   const step = WIZARD_STEPS[stepIdx]
 
@@ -78,7 +116,7 @@ export function CreatePage() {
   const goNext = () => {
     if (stepIdx < WIZARD_STEPS.length - 1) {
       const next = stepIdx + 1
-      if (next === WIZARD_STEPS.length - 1 && needsHealthScreen(answers)) {
+      if (next === WIZARD_STEPS.length - 1 && needsHealthScreen(answers, healthWords)) {
         setHealthGate(true)
         window.scrollTo({ top: 0, behavior: 'smooth' })
         return
@@ -87,11 +125,23 @@ export function CreatePage() {
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
-    if (needsHealthScreen(answers)) {
+    if (needsHealthScreen(answers, healthWords)) {
       setHealthGate(true)
       return
     }
-    void addSession(answers).then(() => navigate('/bibliotheque'))
+    if (adjustBusy) return
+    setAdjustBusy(true)
+    setSubmitError('')
+    const payload: Answers = { ...answers, q12_tutoiement: 'tu' }
+    const run = adjustId
+      ? adjustSession(adjustId, payload)
+      : addSession(payload)
+    void run
+      .then(() => navigate('/bibliotheque'))
+      .catch((err: unknown) => {
+        setSubmitError(err instanceof Error ? err.message : 'Impossible d’enregistrer la séance')
+      })
+      .finally(() => setAdjustBusy(false))
   }
 
   const acceptHealth = () => {
@@ -111,10 +161,43 @@ export function CreatePage() {
       return
     }
     if (stepIdx === 0) {
+      if (adjustId) {
+        navigate('/bibliotheque')
+        return
+      }
       setPhase('intro')
       return
     }
     setStepIdx((s) => s - 1)
+  }
+
+  if (adjustId && !sessionsReady) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+        <p className="font-display text-xl text-ink dark:text-cream">Chargement de la séance…</p>
+        <p className="mt-2 text-sm text-ink/50 dark:text-cream/45">
+          Tes réponses reviennent dans un instant.
+        </p>
+      </div>
+    )
+  }
+
+  if (adjustId && sessionsReady && !sessions.some((s) => s.id === adjustId)) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+        <p className="font-display text-xl text-ink dark:text-cream">Séance introuvable</p>
+        <p className="mt-2 text-sm text-ink/50 dark:text-cream/45">
+          Elle n’est plus dans ta bibliothèque, ou le lien a expiré.
+        </p>
+        <button
+          type="button"
+          onClick={() => navigate('/bibliotheque')}
+          className="mt-6 rounded-full bg-[var(--vs-or)] px-6 py-3 text-sm font-medium text-[var(--vs-nuit)]"
+        >
+          Retour à la bibliothèque
+        </button>
+      </div>
+    )
   }
 
   if (phase === 'intro') {
@@ -127,8 +210,8 @@ export function CreatePage() {
             setPendingStart(false)
           }}
         />
-        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-olive/10 dark:bg-olive/15">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-olive text-cream dark:text-ink">
+        <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[var(--vs-azur)]/10">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--vs-azur)] text-[var(--vs-nuit)]">
             <Compass size={24} strokeWidth={1.75} />
           </div>
         </div>
@@ -141,7 +224,7 @@ export function CreatePage() {
         </p>
 
         <Card className="mt-8 w-full max-w-md !p-5 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-olive dark:text-olive">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--vs-azur)]">
             {CREATE_INTRO.detailsLabel}
           </p>
           <ul className="mx-auto mt-4 w-fit max-w-full space-y-2.5 text-left">
@@ -150,7 +233,7 @@ export function CreatePage() {
                 key={line}
                 className="flex items-start gap-2 text-sm text-ink/82 dark:text-cream/90"
               >
-                <Check size={16} className="mt-0.5 shrink-0 text-olive dark:text-olive" />
+                <Check size={16} className="mt-0.5 shrink-0 text-[var(--vs-azur)]" />
                 <span>{line}</span>
               </li>
             ))}
@@ -165,6 +248,7 @@ export function CreatePage() {
           {CREATE_INTRO.cta}
           <ArrowRight size={18} />
         </Button>
+        <LegalFooter />
       </div>
     )
   }
@@ -198,6 +282,11 @@ export function CreatePage() {
             <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-ink/65 dark:text-cream/70">
               {step.subtitle}
             </p>
+            {adjustId && (
+              <p className="mx-auto mt-2 max-w-md text-[12px] leading-relaxed text-ink/50 dark:text-cream/50">
+                Ajuster relance le script et la voix (crédits ElevenLabs). L’objectif et le suivi restent.
+              </p>
+            )}
 
             <div className="mt-5 space-y-4">
               {step.fields.map((field) => (
@@ -208,6 +297,7 @@ export function CreatePage() {
                   onChange={(v) => setField(field.id, v)}
                   answers={answers}
                   setField={setField}
+                  locked={Boolean(adjustId) && field.id === 'q1'}
                 />
               ))}
             </div>
@@ -216,18 +306,34 @@ export function CreatePage() {
         )}
       </div>
 
+      {submitError && (
+        <p className="w-full pb-1 text-center text-[12px] text-[var(--vs-or)]">{submitError}</p>
+      )}
       <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
         <Button variant="outline" className="flex-1 rounded-full !py-2.5 text-[15px]" onClick={goBack}>
           <ArrowLeft size={17} />
           Retour
         </Button>
         {!healthGate && (
-        <Button className="flex-1 rounded-full !py-2.5 text-[15px]" disabled={!canContinue} onClick={goNext}>
-          {stepIdx === WIZARD_STEPS.length - 1 ? 'Générer' : 'Suivant'}
+        <Button
+          className="flex-1 rounded-full !py-2.5 text-[15px]"
+          disabled={!canContinue || adjustBusy}
+          onClick={goNext}
+        >
+          {stepIdx === WIZARD_STEPS.length - 1
+            ? adjustBusy
+              ? adjustId
+                ? 'Regénération…'
+                : 'Création…'
+              : adjustId
+                ? 'Regénérer'
+                : 'Générer'
+            : 'Suivant'}
           <ArrowRight size={17} />
         </Button>
         )}
       </div>
+      <LegalFooter className="pt-3" />
     </div>
   )
 }
@@ -238,18 +344,20 @@ function FieldBlock({
   onChange,
   answers,
   setField,
+  locked = false,
 }: {
   field: WizardField
   value: string
   onChange: (v: string) => void
   answers: Answers
   setField: (id: string, v: string) => void
+  locked?: boolean
 }) {
   const inputClass = cn(
     'mt-2 w-full rounded-2xl border px-3.5 py-2.5 text-center text-base leading-relaxed outline-none transition',
-    'border-black/[0.08] bg-white/70 text-ink placeholder:text-ink/35',
-    'focus:border-olive/40 focus:ring-2 focus:ring-olive/10',
-    'dark:border-white/10 dark:bg-white/[0.05] dark:text-cream dark:placeholder:text-cream/35 dark:focus:border-gold/30 dark:focus:ring-gold/10',
+    'border-[var(--vs-bordure)] bg-[var(--vs-surface)] text-ink placeholder:text-ink/35',
+    'focus:border-[var(--vs-azur)]/50 focus:ring-2 focus:ring-[var(--vs-azur)]/12',
+    'dark:text-[var(--vs-lunaire)] dark:placeholder:text-[var(--vs-brume)]',
   )
 
   /** Étape 2 (scène) : un peu plus haute au départ ; le reste reste compact. */
@@ -282,8 +390,8 @@ function FieldBlock({
                 className={cn(
                   'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all sm:text-[14px]',
                   selected
-                    ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
-                    : 'bg-black/[0.04] text-ink/70 hover:bg-black/[0.07] dark:bg-white/[0.06] dark:text-cream/75 dark:hover:bg-white/10',
+                    ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
+                    : 'bg-black/[0.04] text-ink/70 hover:bg-black/[0.07] dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-lunaire)]/80 dark:hover:bg-[var(--vs-abysse)]',
                 )}
               >
                 {c.label}
@@ -311,7 +419,7 @@ function FieldBlock({
           onChange={onChange}
           placeholder={field.placeholder}
           minRows={growMinRows}
-          className={inputClass}
+          className={cn(inputClass, locked && 'opacity-70')}
         />
       ) : (
         <input
@@ -319,8 +427,15 @@ function FieldBlock({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className={inputClass}
+          className={cn(inputClass, locked && 'opacity-70')}
+          readOnly={locked}
+          disabled={locked}
         />
+      )}
+      {locked && (
+        <p className="mt-1.5 text-[12px] text-ink/45 dark:text-cream/45">
+          L’objectif reste — il porte le titre de la séance.
+        </p>
       )}
     </div>
   )
@@ -392,8 +507,8 @@ function VoiceChoice({
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full pl-4 pr-2 py-1.5 transition-all',
                 selected
-                  ? 'bg-olive text-cream dark:bg-gold dark:text-ink'
-                  : 'bg-black/[0.04] text-ink/75 dark:bg-white/[0.06] dark:text-cream/80',
+                  ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
+                  : 'bg-black/[0.04] text-ink/75 dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-lunaire)]/85',
               )}
             >
               <button
@@ -410,8 +525,8 @@ function VoiceChoice({
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full transition',
                   selected
-                    ? 'bg-white/20 dark:bg-ink/10'
-                    : 'bg-olive/10 text-olive dark:bg-white/10 dark:text-cream/80',
+                    ? 'bg-[var(--vs-nuit)]/15'
+                    : 'bg-[var(--vs-azur)]/10 text-[var(--vs-azur)]',
                 )}
               >
                 {playing ? <Pause size={12} className="fill-current" /> : <Play size={12} className="fill-current" />}

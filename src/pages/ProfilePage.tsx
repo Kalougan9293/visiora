@@ -1,14 +1,12 @@
 import { User } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { LegalFooter } from '@/components/layout/LegalFooter'
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
-import { useVariant } from '@/context/VariantContext'
-import { cn } from '@/lib/utils'
 
 export function ProfilePage() {
   const { sessions, stats } = useSessions()
   const { user, profile, signOut, configured } = useAuth()
-  const { isAqua } = useVariant()
 
   const display =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
@@ -18,32 +16,12 @@ export function ProfilePage() {
   return (
     <div className="flex w-full flex-col items-center space-y-6 pb-4">
       <div className="flex flex-col items-center gap-3">
-        <div
-          className={cn(
-            'flex h-16 w-16 items-center justify-center rounded-full',
-            isAqua
-              ? 'bg-white/10 text-[#7ed4df]'
-              : 'bg-olive/15 text-olive dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-azur)]',
-          )}
-        >
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--vs-azur)]/15 text-[var(--vs-azur)] dark:bg-[var(--vs-abysse)]">
           <User size={28} strokeWidth={1.5} />
         </div>
         <div>
-          <h1
-            className={cn(
-              'text-3xl tracking-tight',
-              isAqua ? 'text-[#f4fcfd]' : 'font-display',
-            )}
-            style={isAqua ? { fontFamily: 'var(--font-aqua-display)', fontWeight: 450 } : undefined}
-          >
-            {display}
-          </h1>
-          <p
-            className={cn(
-              'mt-1 text-sm',
-              isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/82 dark:text-champagne/90',
-            )}
-          >
+          <h1 className="font-display text-3xl tracking-tight">{display}</h1>
+          <p className="mt-1 text-sm text-ink/82 dark:text-champagne/90">
             {user
               ? profile?.email || user.email
               : configured
@@ -54,46 +32,30 @@ export function ProfilePage() {
       </div>
 
       <Card className="w-full !p-4 space-y-4">
-        <Row label="Séances créées" value={String(sessions.length)} isAqua={isAqua} />
-        <Row label="Série actuelle" value={`${stats.streakDays} j`} isAqua={isAqua} />
-        <Row label="Écoutes" value={String(stats.totalListens)} isAqua={isAqua} />
-        {profile?.cgu_accepted && (
-          <Row label="CGU" value="Acceptées" isAqua={isAqua} />
-        )}
+        <Row label="Séances créées" value={String(sessions.length)} />
+        <Row label="Jours de pratique" value={String(stats.daysCompletedTowardMilestone)} />
+        <Row label="Séances écoutées" value={String(stats.totalListens)} />
+        {profile?.cgu_accepted && <Row label="CGU" value="Acceptées" />}
       </Card>
 
       {user && (
         <button
           type="button"
           onClick={() => void signOut()}
-          className={cn(
-            'text-xs uppercase tracking-[0.14em] transition',
-            isAqua
-              ? 'text-[#b8e4ea]/55 hover:text-[#7ed4df]'
-              : 'text-ink/62 hover:text-olive dark:text-champagne/72 dark:hover:text-olive',
-          )}
+          className="text-xs uppercase tracking-[0.14em] text-ink/62 transition hover:text-[var(--vs-azur)] dark:text-[var(--vs-brume)] dark:hover:text-[var(--vs-azur)]"
         >
           Déconnexion
         </button>
       )}
+      <LegalFooter />
     </div>
   )
 }
 
-function Row({
-  label,
-  value,
-  isAqua,
-}: {
-  label: string
-  value: string
-  isAqua: boolean
-}) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col items-center gap-0.5 text-sm">
-      <span className={isAqua ? 'text-[#b8e4ea]/70' : 'text-ink/82 dark:text-champagne/92'}>
-        {label}
-      </span>
+      <span className="text-ink/82 dark:text-champagne/92">{label}</span>
       <span className="font-medium">{value}</span>
     </div>
   )

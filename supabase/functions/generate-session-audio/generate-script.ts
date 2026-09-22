@@ -24,10 +24,9 @@ function asText(value: unknown): string {
 }
 
 function q12Line(answers: SessionAnswers): string {
-  const tutoiement = asText(answers.q12_tutoiement)
   const registre = asText(answers.q12_registre)
   const voice = asText(answers.q12_voice)
-  const tu = tutoiement === 'vous' ? 'vouvoiement' : 'tutoiement'
+  const tu = 'tutoiement'
   const reg =
     registre === 'spirituel'
       ? 'spirituel ouvert'
@@ -52,6 +51,9 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
     lines.push(`${row.label} : ${value}`)
   }
   lines.push(q12Line(src))
+  const durationRaw = Number(src.duration_minutes)
+  const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
+  lines.push(`Durée cible de la séance : ${duration} minutes. Calibre le texte et les pauses pour tenir ce timing.`)
   lines.push('')
   lines.push('Génère le script de séance pour ce profil.')
   return lines.join('\n')
@@ -68,22 +70,32 @@ function looksLikeSessionScript(text: string): boolean {
   return text.length > 80 && (/\[Mouvement/i.test(text) || /\[pause/i.test(text))
 }
 
-function preferredModels(): string[] {
+function preferredModels(override?: string): string[] {
+  if (override?.trim()) return [override.trim()]
   const fromEnv = Deno.env.get('VISIORA_OPENAI_MODEL')?.trim()
   const list = [fromEnv, 'gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini']
   return [...new Set(list.filter((m): m is string => Boolean(m)))]
+}
+
+function isAnthropicModel(model: string) {
+  return model.startsWith('claude')
 }
 
 type OpenAiErrorBody = {
   error?: { message?: string; code?: string; type?: string }
 }
 
+export type ScriptUsage = { prompt: number; completion: number }
+
+export type ScriptGenOk = { ok: true; script: string; usage?: ScriptUsage }
+export type ScriptGenFail = { ok: false; status: number; detail: string }
+
 async function chatCompletion(
   apiKey: string,
   model: string,
   prompt: string,
   userContent: string,
-): Promise<{ ok: true; script: string } | { ok: false; status: number; detail: string }> {
+): Promise<ScriptGenOk | ScriptGenFail> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -115,14 +127,64 @@ async function chatCompletion(
     return { ok: false, status: res.status, detail }
   }
 
-  let data: { choices?: { message?: { content?: string | null } }[] }
+  let data: {
+    choices?: { message?: { content?: string | null } }[]
+    usage?: { prompt_tokens?: number; completion_tokens?: number }
+  }
   try {
-    data = JSON.parse(raw) as { choices?: { message?: { content?: string | null } }[] }
+    data = JSON.parse(raw) as typeof data
   } catch {
     return { ok: false, status: res.status, detail: 'réponse JSON invalide' }
   }
   const script = stripFences(data.choices?.[0]?.message?.content ?? '')
-  return { ok: true, script }
+  const usage =
+    typeof data.usage?.prompt_tokens === 'number'
+      ? { prompt: data.usage.prompt_tokens, completion: data.usage.completion_tokens ?? 0 }
+      : undefined
+  return { ok: true, script, usage }
+}
+
+async function anthropicCompletion(
+  apiKey: string,
+  model: string,
+  prompt: string,
+  userContent: string,
+): Promise<ScriptGenOk | ScriptGenFail> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 8000,
+      system: prompt,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+    signal: AbortSignal.timeout(90_000),
+  })
+  const raw = await res.text().catch(() => '')
+  if (!res.ok) {
+    return { ok: false, status: res.status, detail: `${res.status} ${raw}`.slice(0, 180) }
+  }
+  let data: {
+    content?: { type?: string; text?: string }[]
+    usage?: { input_tokens?: number; output_tokens?: number }
+  }
+  try {
+    data = JSON.parse(raw) as typeof data
+  } catch {
+    return { ok: false, status: res.status, detail: 'réponse JSON invalide' }
+  }
+  const text = data.content?.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n') ?? ''
+  const script = stripFences(text)
+  const usage =
+    typeof data.usage?.input_tokens === 'number'
+      ? { prompt: data.usage.input_tokens, completion: data.usage.output_tokens ?? 0 }
+      : undefined
+  return { ok: true, script, usage }
 }
 
 export function canGenerateScript(): boolean {
@@ -172,34 +234,51 @@ export function hasStoredScript(script: unknown): boolean {
   return typeof script === 'string' && script.trim().length > 40
 }
 
-export async function generateSessionScript(answers: SessionAnswers | null | undefined): Promise<string> {
+export async function generateSessionScriptDetailed(
+  answers: SessionAnswers | null | undefined,
+  modelOverride?: string,
+): Promise<{ script: string; model: string; usage?: ScriptUsage }> {
   const prompt = Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() ?? ''
-  const apiKey = Deno.env.get('OPENAI_API_KEY')?.trim() ?? ''
-  if (!prompt || !apiKey) {
-    throw new Error('Génération script : secrets manquants')
-  }
+  if (!prompt) throw new Error('Génération script : secrets manquants')
 
   const userContent = formatProfileFiche(answers)
-  const models = preferredModels()
+  const models = preferredModels(modelOverride)
   let lastDetail = 'aucun modèle tenté'
 
   for (const model of models) {
-    const result = await chatCompletion(apiKey, model, prompt, userContent)
+    const anthropic = isAnthropicModel(model)
+    const apiKey = anthropic
+      ? Deno.env.get('ANTHROPIC_API_KEY')?.trim() ?? ''
+      : Deno.env.get('OPENAI_API_KEY')?.trim() ?? ''
+    if (!apiKey) {
+      lastDetail = `${model}: clé ${anthropic ? 'Anthropic' : 'OpenAI'} manquante`
+      if (modelOverride) throw new Error(`Génération script : ${lastDetail}`)
+      continue
+    }
+    const result = anthropic
+      ? await anthropicCompletion(apiKey, model, prompt, userContent)
+      : await chatCompletion(apiKey, model, prompt, userContent)
     if (!result.ok) {
       lastDetail = `${model}: ${result.detail}`
-      console.error('[generate-session-audio] openai', lastDetail)
+      console.error('[generate-session-audio] llm', lastDetail)
       const retryable = result.status === 404 || result.status === 403
-      if (retryable) continue
-      throw new Error(`Génération script : OpenAI ${result.detail}`)
+      if (retryable && !modelOverride) continue
+      throw new Error(`Génération script : ${result.detail}`)
     }
     if (!looksLikeSessionScript(result.script)) {
       lastDetail = `${model}: sortie trop courte`
-      console.error('[generate-session-audio] openai', lastDetail)
+      console.error('[generate-session-audio] llm', lastDetail)
+      if (modelOverride) throw new Error(`Génération script : ${lastDetail}`)
       continue
     }
     console.log('[generate-session-audio] script ok', model, result.script.length)
-    return result.script
+    return { script: result.script, model, usage: result.usage }
   }
 
-  throw new Error(`Génération script : OpenAI ${lastDetail}`)
+  throw new Error(`Génération script : ${lastDetail}`)
+}
+
+export async function generateSessionScript(answers: SessionAnswers | null | undefined): Promise<string> {
+  const result = await generateSessionScriptDetailed(answers)
+  return result.script
 }

@@ -18,8 +18,8 @@ export function Card({
     <div
       className={cn(
         'glass rounded-2xl p-4 transition-all duration-300 ease-[var(--ease-out-expo)]',
-        interactive && 'cursor-pointer hover:border-gold/35',
-        selected && 'glow-gold border-gold/45 bg-gold/10',
+        interactive && 'cursor-pointer hover:border-[var(--vs-azur)]/40',
+        selected && 'border-[var(--vs-azur)]/45 bg-[var(--vs-azur)]/10',
         className,
       )}
       {...props}

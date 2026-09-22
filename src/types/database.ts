@@ -101,6 +101,48 @@ export interface Database {
         }
         Relationships: []
       }
+      listens: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          listened_on: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          listened_on?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          session_id?: string
+          listened_on?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      health_keywords: {
+        Row: {
+          id: string
+          word: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          word: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          word?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -135,6 +177,13 @@ export interface Database {
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>
   }
+}
+
+/** Table optionnelle — voir supabase/health_keywords.sql */
+export type HealthKeywordRow = {
+  id: string
+  word: string
+  created_at: string
 }
 
 export type ProfileRow = Database['public']['Tables']['profiles']['Row']

@@ -30,11 +30,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement
+    root.classList.add('variant-classic')
+    root.classList.remove('variant-aqua')
     root.classList.toggle('dark', theme === 'dark')
     root.classList.toggle('light', theme === 'light')
+    localStorage.removeItem('visiora-variant')
     localStorage.setItem(STORAGE_KEY, theme)
     const meta = document.querySelector('meta[name="theme-color"]')
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#020C25' : '#FAF7F2')
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#020C25' : '#E9EFF4')
   }, [theme])
 
   const setTheme = useCallback((next: Theme) => setThemeState(next), [])

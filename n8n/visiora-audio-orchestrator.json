@@ -109,10 +109,10 @@
         "specifyBody": "json",
         "jsonBody": "={\n  \"sessionId\": \"{{ $('Init boucle').item.json.sessionId }}\",\n  \"chain\": true\n}",
         "options": {
-          "timeout": 180000,
+          "timeout": 30000,
           "retry": {
-            "maxTries": 1,
-            "waitBetweenTries": 8000
+            "maxTries": 4,
+            "waitBetweenTries": 4000
           }
         }
       },

@@ -8,6 +8,7 @@ export type ScriptBlock =
   | { kind: 'pause'; long: boolean }
 
 const MOVEMENT = /^\[Mouvement\s+([^\]]+)\]$/i
+const ANNEX = /^\[Annexe[^\]]*\]$/i
 const PAUSE = /^\[pause(\s+longue)?\]$/i
 const INNER = /^[«"].+[»"]$/s
 
@@ -34,6 +35,10 @@ export function parseScriptForDisplay(raw: string): ScriptBlock[] {
       flush()
       continue
     }
+    if (ANNEX.test(trimmed)) {
+      flush()
+      continue
+    }
     const mov = trimmed.match(MOVEMENT)
     if (mov) {
       flush()
@@ -54,24 +59,34 @@ export function parseScriptForDisplay(raw: string): ScriptBlock[] {
 
 export function ScriptReader({
   script,
-  isAqua,
   className,
 }: {
   script?: string | null
-  isAqua?: boolean
   className?: string
 }) {
   const source = (script && script.trim().length > 40 ? script : ANNEX_SCRIPT).trim()
+  const isAnnexFallback = /\[Annexe/i.test(source)
   const blocks = parseScriptForDisplay(source)
 
   return (
     <article
       className={cn(
         'vs-seance mx-auto w-full max-w-[34rem] text-left',
-        isAqua ? 'text-[#e8f7f9]/92' : 'text-ink/85 dark:text-[var(--vs-lunaire)]',
+        'text-ink/85 dark:text-[var(--vs-lunaire)]',
         className,
       )}
     >
+      {isAnnexFallback && (
+        <p
+          className={cn(
+            'mb-4 text-[11px] leading-relaxed',
+            'text-ink/45 dark:text-[var(--vs-brume)]',
+          )}
+        >
+          Script de secours (annexe). Ce n’est pas le texte d’un autre compte — la
+          génération IA n’était pas disponible.
+        </p>
+      )}
       {blocks.map((b, i) => {
         if (b.kind === 'movement') {
           return (
@@ -79,7 +94,7 @@ export function ScriptReader({
               key={i}
               className={cn(
                 'mt-6 text-[11px] font-semibold uppercase tracking-[0.14em] first:mt-0',
-                isAqua ? 'text-[#7ed4df]/80' : 'text-ink/45 dark:text-[var(--vs-brume)]',
+                'text-ink/45 dark:text-[var(--vs-brume)]',
               )}
             >
               Mouvement {b.title}
@@ -111,11 +126,11 @@ export function ScriptReader({
       <p
         className={cn(
           'mt-8 text-[11px] leading-relaxed',
-          isAqua ? 'text-[#b8e4ea]/45' : 'text-ink/40 dark:text-[var(--vs-brume)]',
+          'text-ink/40 dark:text-[var(--vs-brume)]',
         )}
       >
-        Texte généré avec assistance — à écouter idéalement une fois par jour, au même
-        moment.
+        Texte généré avec assistance. Tu peux réécouter cette séance autant de fois que tu
+        veux.
       </p>
     </article>
   )

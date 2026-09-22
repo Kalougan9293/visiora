@@ -1,4 +1,5 @@
 import type { VisualizationAnswers, VisualizationSession } from '@/types'
+import { normalizeDuration } from '@/lib/sessionDuration'
 import { audioStorage } from './audioStorage'
 import { isSupabaseConfigured, supabase } from './supabase'
 import type { SessionRow } from '@/types/database'
@@ -18,8 +19,8 @@ function titleFromAnswers(answers: VisualizationAnswers): string {
   return 'Séance personnalisée'
 }
 
-function durationFromAnswers(_answers: VisualizationAnswers): number {
-  return 15
+function durationFromAnswers(answers: VisualizationAnswers): number {
+  return normalizeDuration(answers.duration_minutes)
 }
 
 function progressFromRow(row: SessionRow): number {
@@ -157,15 +158,77 @@ export const sessionsService = {
     }
   },
 
+  async adjust(
+    id: string,
+    answers: VisualizationAnswers,
+    userId: string,
+    keepTitle: string,
+  ): Promise<VisualizationSession> {
+    if (!isSupabaseConfigured() || !supabase) {
+      throw new Error('Connexion requise pour ajuster une séance')
+    }
+    const durationMinutes = durationFromAnswers(answers)
+    const voiceId = voiceFromAnswers(answers)
+    const { data, error } = await supabase
+      .from('sessions')
+      .update({
+        answers,
+        title: keepTitle,
+        duration_minutes: durationMinutes,
+        voice_id: voiceId,
+        script: null,
+        audio_job: null,
+        audio_path: null,
+        audio_url: null,
+        status: 'generating',
+        audio_bytes: 5,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('*')
+      .single()
+    if (error || !data) throw error ?? new Error('Impossible d’ajuster la séance')
+    try {
+      await audioStorage.clearGenerated(userId, id)
+    } catch (err) {
+      console.warn('[sessions] clear audio after adjust', err)
+    }
+    return rowToSession(data)
+  },
+
+  async listListenDays(userId?: string): Promise<{ dates: string[]; count: number } | null> {
+    if (!userId || !isSupabaseConfigured() || !supabase) return null
+    const { data, error } = await supabase
+      .from('listens')
+      .select('listened_on')
+      .eq('user_id', userId)
+    if (error || !data) {
+      if (error) console.warn('[sessions] listens', error.message)
+      return null
+    }
+    return {
+      dates: data.map((row) => String(row.listened_on)).filter(Boolean),
+      count: data.length,
+    }
+  },
+
   async markListened(id: string, nextListens: number, userId?: string): Promise<boolean> {
     if (isSupabaseConfigured() && supabase && userId) {
       const { data, error } = await supabase.rpc('record_listen', { p_session_id: id })
       if (!error) return Boolean(data)
       /** Fallback si la migration listens n’est pas encore appliquée */
       console.warn('[sessions] record_listen fallback', error.message)
+      const { data: row } = await supabase
+        .from('sessions')
+        .select('listens')
+        .eq('id', id)
+        .eq('user_id', userId)
+        .maybeSingle()
+      const next = Math.max(nextListens, (Number(row?.listens) || 0) + 1)
       const { error: upErr } = await supabase
         .from('sessions')
-        .update({ listens: nextListens, updated_at: new Date().toISOString() })
+        .update({ listens: next, updated_at: new Date().toISOString() })
         .eq('id', id)
         .eq('user_id', userId)
       if (upErr) throw upErr

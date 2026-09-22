@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils'
-import { useVariant } from '@/context/VariantContext'
 
 interface ProgressBarProps {
   value: number
@@ -9,7 +8,6 @@ interface ProgressBarProps {
 }
 
 export function ProgressBar({ value, max = 100, className, label }: ProgressBarProps) {
-  const { isAqua } = useVariant()
   const pct = Math.min(100, Math.max(0, (value / max) * 100))
 
   return (
@@ -21,12 +19,7 @@ export function ProgressBar({ value, max = 100, className, label }: ProgressBarP
       )}
       <div className="h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/8">
         <div
-          className={cn(
-            'h-full rounded-full transition-[width] duration-500 ease-[var(--ease-out-expo)]',
-            isAqua
-              ? 'bg-gradient-to-r from-olive via-gold to-gold-bright'
-              : 'bg-gold',
-          )}
+          className="h-full rounded-full bg-[var(--vs-azur)] transition-[width] duration-500 ease-[var(--ease-out-expo)]"
           style={{ width: `${pct}%` }}
         />
       </div>

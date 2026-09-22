@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { ADMIN_LIMITS, adminService, formatStorage, type AdminUserRow } from '@/services/admin'
+import { healthKeywordsService } from '@/services/healthKeywords'
 import { isSupabaseConfigured, supabase } from '@/services/supabase'
 
 function formatDate(iso: string | null) {
@@ -30,6 +31,12 @@ export function AdminPage() {
   const [loadError, setLoadError] = useState('')
   const [loading, setLoading] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [baseKeywords, setBaseKeywords] = useState<string[]>([])
+  const [extraKeywords, setExtraKeywords] = useState<string[]>([])
+  const [keywordDraft, setKeywordDraft] = useState('')
+  const [keywordHint, setKeywordHint] = useState('')
+  const [keywordBusy, setKeywordBusy] = useState(false)
+  const [tab, setTab] = useState<'users' | 'liste'>('users')
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -102,7 +109,47 @@ export function AdminPage() {
   useEffect(() => {
     if (!authed) return
     refresh()
+    void healthKeywordsService.snapshot().then((snap) => {
+      setBaseKeywords(snap.base)
+      setExtraKeywords(snap.extras)
+    })
   }, [authed, refresh])
+
+  async function onAddKeyword(e: FormEvent) {
+    e.preventDefault()
+    const draft = keywordDraft.trim()
+    if (!draft || keywordBusy) return
+    setKeywordBusy(true)
+    setKeywordHint('')
+    try {
+      const already = [...baseKeywords, ...extraKeywords].some(
+        (w) => healthKeywordsService.matchKey(w) === healthKeywordsService.matchKey(draft),
+      )
+      await healthKeywordsService.add(draft)
+      const snap = await healthKeywordsService.snapshot()
+      setBaseKeywords(snap.base)
+      setExtraKeywords(snap.extras)
+      setKeywordDraft('')
+      const label = healthKeywordsService.normalizeWord(draft)
+      setKeywordHint(already ? `« ${label} » est déjà dans la liste.` : `« ${label} » ajouté.`)
+    } finally {
+      setKeywordBusy(false)
+    }
+  }
+
+  async function onRemoveKeyword(word: string) {
+    setKeywordBusy(true)
+    setKeywordHint('')
+    try {
+      await healthKeywordsService.remove(word)
+      const snap = await healthKeywordsService.snapshot()
+      setBaseKeywords(snap.base)
+      setExtraKeywords(snap.extras)
+      setKeywordHint(`« ${word} » retiré.`)
+    } finally {
+      setKeywordBusy(false)
+    }
+  }
 
   async function onDelete(row: AdminUserRow) {
     const label = [row.firstName, row.lastName].filter(Boolean).join(' ') || row.email || 'ce profil'
@@ -164,7 +211,7 @@ export function AdminPage() {
 
   if (checking) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-aqua px-6 text-sm text-[#b8e4ea]/70">
+      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6 text-sm text-[var(--vs-brume)]/70">
         …
       </div>
     )
@@ -172,7 +219,7 @@ export function AdminPage() {
 
   if (!authed) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-aqua px-6">
+      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6">
         <form onSubmit={(e) => void onSubmit(e)} className="w-full max-w-[240px] space-y-3">
           <input
             type="email"
@@ -180,8 +227,7 @@ export function AdminPage() {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
-            style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[var(--vs-lunaire)] outline-none placeholder:text-[var(--vs-brume)]/45 focus:border-[var(--vs-azur)]/50"
             disabled={busy}
           />
           <input
@@ -190,16 +236,14 @@ export function AdminPage() {
             placeholder="Mot de passe"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[#e8f7f9] outline-none placeholder:text-[#b8e4ea]/45 focus:border-[#7ed4df]/50"
-            style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-[var(--vs-lunaire)] outline-none placeholder:text-[var(--vs-brume)]/45 focus:border-[var(--vs-azur)]/50"
             disabled={busy}
           />
-          {error && <p className="text-xs text-[#f0a0a0]">{error}</p>}
+          {error && <p className="text-xs text-[var(--vs-or)]">{error}</p>}
           <button
             type="submit"
             disabled={busy}
-            className="aqua-cta w-full !py-2.5 text-sm disabled:opacity-60"
-            style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+            className="w-full rounded-full bg-[var(--vs-or)] !py-2.5 text-sm font-semibold text-[var(--vs-nuit)] disabled:opacity-60"
           >
             <span>{busy ? '…' : 'OK'}</span>
           </button>
@@ -210,21 +254,17 @@ export function AdminPage() {
 
   return (
     <div
-      className="min-h-dvh bg-atmosphere-aqua px-4 py-10 text-[#e8f7f9] sm:px-6"
-      style={{ fontFamily: 'Figtree, Outfit, sans-serif' }}
+      className="min-h-dvh bg-atmosphere-dark px-4 py-10 text-[var(--vs-lunaire)] sm:px-6"
     >
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="mx-auto w-full max-w-4xl">
         <div className="relative flex items-center justify-center">
-          <h1
-            className="text-center text-2xl tracking-tight text-[#f4fcfd] sm:text-[1.75rem]"
-            style={{ fontFamily: 'Fraunces, Georgia, serif', fontWeight: 450 }}
-          >
+          <h1 className="text-center font-display text-2xl tracking-tight text-[var(--vs-ecume)] sm:text-[1.75rem]">
             Tableau de bord
           </h1>
           <button
             type="button"
             onClick={() => void logout()}
-            className="absolute right-0 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wider text-[#b8e4ea]/50 transition hover:text-[#7ed4df]"
+            className="absolute right-0 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wider text-[var(--vs-brume)]/50 transition hover:text-[var(--vs-azur)]"
           >
             Sortir
           </button>
@@ -248,14 +288,24 @@ export function AdminPage() {
           />
         </div>
 
-        {loadError && (
-          <p className="mt-4 text-center text-xs text-[#f0a0a0]">{loadError}</p>
+        {loadError && tab === 'users' && (
+          <p className="mt-4 text-center text-xs text-[var(--vs-or)]">{loadError}</p>
         )}
 
-        <div className="mt-10 overflow-x-auto rounded-2xl border border-white/15 bg-white/[0.04]">
+        <div className="mt-8 flex justify-center gap-2">
+          <TabBubble active={tab === 'users'} onClick={() => setTab('users')}>
+            Users
+          </TabBubble>
+          <TabBubble active={tab === 'liste'} onClick={() => setTab('liste')}>
+            Liste
+          </TabBubble>
+        </div>
+
+        {tab === 'users' && (
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-white/15 bg-white/[0.04]">
           <table className="w-full min-w-[580px] border-collapse text-center text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.14em] text-[#7ed4df]/80">
+              <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.14em] text-[var(--vs-azur)]/80">
                 <th className="px-3 py-3 font-medium">Prénom</th>
                 <th className="px-3 py-3 font-medium">Nom</th>
                 <th className="px-3 py-3 font-medium">Mail</th>
@@ -267,13 +317,13 @@ export function AdminPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-[#b8e4ea]/40">
+                  <td colSpan={6} className="px-3 py-8 text-[var(--vs-brume)]/40">
                     …
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-[#b8e4ea]/40">
+                  <td colSpan={6} className="px-3 py-8 text-[var(--vs-brume)]/40">
                     —
                   </td>
                 </tr>
@@ -282,9 +332,9 @@ export function AdminPage() {
                   <tr key={r.id} className="border-b border-white/[0.06] last:border-0">
                     <td className="px-3 py-3">{r.firstName || '—'}</td>
                     <td className="px-3 py-3">{r.lastName || '—'}</td>
-                    <td className="px-3 py-3 text-[#b8e4ea]/85">{r.email || '—'}</td>
+                    <td className="px-3 py-3 text-[var(--vs-brume)]/85">{r.email || '—'}</td>
                     <td className="px-3 py-3 tabular-nums">{r.audioCount}</td>
-                    <td className="px-3 py-3 tabular-nums text-[#b8e4ea]/55">
+                    <td className="px-3 py-3 tabular-nums text-[var(--vs-brume)]/55">
                       {formatDate(r.lastSeenAt)}
                     </td>
                     <td className="px-2 py-3">
@@ -293,7 +343,7 @@ export function AdminPage() {
                         onClick={() => void onDelete(r)}
                         disabled={deletingId === r.id}
                         aria-label="Supprimer"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#b8e4ea]/45 transition hover:bg-red-500/15 hover:text-red-400 disabled:opacity-40"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--vs-brume)]/45 transition hover:text-[var(--vs-or)] disabled:opacity-40"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -304,8 +354,125 @@ export function AdminPage() {
             </tbody>
           </table>
         </div>
+        )}
+
+        {tab === 'liste' && (
+        <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
+          <p className="text-center text-[12px] text-[var(--vs-brume)]/55">
+            Si quelqu’un écrit l’un de ces mots dans le questionnaire, l’écran santé s’affiche.
+          </p>
+
+          <form onSubmit={(e) => void onAddKeyword(e)} className="mt-4 flex gap-2">
+            <input
+              type="text"
+              value={keywordDraft}
+              onChange={(e) => {
+                setKeywordDraft(e.target.value)
+                if (keywordHint) setKeywordHint('')
+              }}
+              placeholder="Ajouter un mot"
+              className="flex-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-[var(--vs-lunaire)] outline-none placeholder:text-[var(--vs-brume)]/40 focus:border-[var(--vs-azur)]/50"
+              disabled={keywordBusy}
+            />
+            <button
+              type="submit"
+              disabled={keywordBusy || !keywordDraft.trim()}
+              className="rounded-xl bg-[var(--vs-lunaire)] px-3 py-2 text-xs font-semibold text-[var(--vs-nuit)] disabled:opacity-40"
+            >
+              Ajouter
+            </button>
+          </form>
+          {keywordHint && (
+            <p className="mt-2 text-center text-[11px] text-[var(--vs-azur)]/80">{keywordHint}</p>
+          )}
+
+          <KeywordGrid
+            words={baseKeywords}
+            busy={keywordBusy}
+            onRemove={onRemoveKeyword}
+          />
+          {extraKeywords.length > 0 && (
+            <>
+              <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-[var(--vs-azur)]/75">
+                Ajoutés
+              </p>
+              <KeywordGrid
+                words={extraKeywords}
+                busy={keywordBusy}
+                onRemove={onRemoveKeyword}
+                added
+              />
+            </>
+          )}
+        </div>
+        )}
       </div>
     </div>
+  )
+}
+
+function TabBubble({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? 'rounded-full bg-[var(--vs-lunaire)] px-4 py-1.5 text-xs font-semibold text-[var(--vs-nuit)]'
+          : 'rounded-full border border-white/15 bg-white/[0.04] px-4 py-1.5 text-xs text-[var(--vs-brume)]/80 hover:border-[var(--vs-azur)]/40 hover:text-[var(--vs-lunaire)]'
+      }
+    >
+      {children}
+    </button>
+  )
+}
+
+function KeywordGrid({
+  words,
+  busy,
+  onRemove,
+  added = false,
+}: {
+  words: string[]
+  busy: boolean
+  onRemove: (word: string) => void
+  added?: boolean
+}) {
+  if (!words.length) {
+    return <p className="mt-3 text-center text-[13px] text-[var(--vs-lunaire)]/45">—</p>
+  }
+  return (
+    <ul className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5">
+      {words.map((word) => (
+        <li
+          key={word}
+          className={
+            added
+              ? 'relative flex min-w-0 items-center justify-center rounded-lg border border-[var(--vs-azur)]/35 bg-[var(--vs-azur)]/10 px-5 py-2'
+              : 'relative flex min-w-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-5 py-2'
+          }
+        >
+          <span className="truncate text-center text-xs text-[var(--vs-lunaire)]">{word}</span>
+          <button
+            type="button"
+            onClick={() => onRemove(word)}
+            disabled={busy}
+            aria-label={`Retirer ${word}`}
+            className="absolute right-1 top-1/2 -translate-y-1/2 text-xs leading-none text-[var(--vs-brume)]/50 hover:text-[var(--vs-or)] disabled:opacity-40"
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -321,10 +488,10 @@ function StatSquare({
   return (
     <div className="flex w-[5.5rem] flex-col items-center sm:w-24">
       <div className="flex h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-white/15 bg-white/[0.05] sm:h-24">
-        <p className="text-xl font-semibold tabular-nums text-[#f4fcfd] sm:text-2xl">{value}</p>
-        <p className="text-[9px] uppercase tracking-[0.12em] text-[#7ed4df]/75">{label}</p>
+        <p className="text-xl font-semibold tabular-nums text-[var(--vs-ecume)] sm:text-2xl">{value}</p>
+        <p className="text-[9px] uppercase tracking-[0.12em] text-[var(--vs-azur)]/75">{label}</p>
       </div>
-      <p className="mt-1.5 text-[9px] tabular-nums text-[#b8e4ea]/45">max {limit}</p>
+      <p className="mt-1.5 text-[9px] tabular-nums text-[var(--vs-brume)]/45">max {limit}</p>
     </div>
   )
 }

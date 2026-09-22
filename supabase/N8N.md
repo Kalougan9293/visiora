@@ -20,7 +20,7 @@ App Visiora
 
 N8N (boucle)
   → POST generate-session-audio (service role + secret orchestrateur)
-  → 1 chunk TTS / silences
+  → jusqu’à 4 phrases TTS en parallèle + silences
   → si generating → wait 2s → recommence
   → si ready / failed → stop
 
@@ -39,6 +39,9 @@ npx supabase secrets set VISIORA_ORCHESTRATOR_SECRET=ton_secret_long
 npx supabase secrets set N8N_WEBHOOK_URL=https://TON_N8N/webhook/visiora-audio
 
 npx supabase functions deploy generate-session-audio
+
+# Comparaison de modèles (page DEV /modeles) — optionnel
+npx supabase secrets set ANTHROPIC_API_KEY=ta_cle_anthropic
 ```
 
 Sans `N8N_WEBHOOK_URL`, l’app retombe sur le mode Edge seul (filet front).

@@ -1,33 +1,28 @@
 @import "tailwindcss";
 @import "./styles/visiora-tokens.css";
-@import "./styles/aqua.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-display: "Cormorant Garamond", Georgia, serif;
-  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Marcellus", Georgia, serif;
+  --font-sans: "Karla", ui-sans-serif, system-ui, sans-serif;
 
-  /* Nuit chaude — espresso / crépuscule (pas de noir froid) */
-  --color-ink: #1a1612;
-  --color-ink-soft: #221e19;
-  --color-ink-elevated: #2c2620;
+  --color-ink: #020c25;
+  --color-ink-soft: #0b1e44;
+  --color-ink-elevated: #0b1e44;
 
-  /* Jour — crème apaisante */
-  --color-cream: #faf7f2;
-  --color-cream-soft: #f3eee6;
-  --color-cream-card: #ffffff;
+  --color-cream: #e9eff4;
+  --color-cream-soft: #e9eff4;
+  --color-cream-card: #eff3f7;
 
-  /* Accent chaud : ambre / miel (bougie) — remplace l’or “luxe” */
-  --color-gold: #d4a574;
-  --color-gold-bright: #e8c49a;
-  --color-champagne: #f0e6d6;
+  --color-gold: #e09a38;
+  --color-gold-bright: #e09a38;
+  --color-champagne: #8fa3b8;
 
-  /* Nature / respiration — sauge */
-  --color-olive: #5f6b45;
-  --color-olive-soft: #9aab82;
+  --color-olive: #5797b4;
+  --color-olive-soft: #5797b4;
 
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
@@ -43,8 +38,8 @@
     @apply font-sans antialiased text-center;
     margin: 0;
     min-height: 100dvh;
-    background: var(--color-ink);
-    color: #faf4eb;
+    background: var(--vs-fond, #020c25);
+    color: var(--vs-texte, #e9eff4);
   }
 
   #root {
@@ -77,20 +72,14 @@
   }
 
   .variant-classic:not(.dark) .glass {
-    background: color-mix(in srgb, #ffffff 88%, transparent);
-    border: 1px solid color-mix(in srgb, #1a1814 8%, transparent);
+    background: var(--vs-surface);
+    border: 1px solid var(--vs-bordure);
     box-shadow: none;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .glow-gold {
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--color-gold) 30%, transparent),
-      0 10px 36px color-mix(in srgb, var(--color-gold) 14%, transparent);
-  }
-
-  .variant-classic .glow-gold {
     box-shadow: none;
     border-color: var(--vs-bordure-active);
   }
@@ -99,13 +88,9 @@
     padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
   }
 
-  /* Atmosphère nuit : lueur ambre + sauge douce */
   .bg-atmosphere-dark {
-    background:
-      radial-gradient(ellipse 90% 55% at 50% -8%, color-mix(in srgb, #d4a574 16%, transparent), transparent 58%),
-      radial-gradient(ellipse 55% 40% at 0% 70%, color-mix(in srgb, #9aab82 10%, transparent), transparent 50%),
-      radial-gradient(ellipse 50% 35% at 100% 40%, color-mix(in srgb, #c47d6a 7%, transparent), transparent 48%),
-      var(--color-ink);
+    background-color: var(--vs-fond, #020c25);
+    background-image: var(--vs-lueur-centre);
   }
 
   .variant-classic .bg-atmosphere-dark {
@@ -113,11 +98,10 @@
     background-image: var(--vs-lueur-centre);
   }
 
+  .variant-classic .bg-atmosphere-light,
   .bg-atmosphere-light {
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in srgb, var(--color-olive) 8%, transparent), transparent 55%),
-      radial-gradient(ellipse 50% 40% at 100% 20%, color-mix(in srgb, #c4b8a0 12%, transparent), transparent 50%),
-      var(--color-cream);
+    background-color: var(--vs-lunaire, #e9eff4);
+    background-image: var(--vs-lueur-centre, none);
   }
 
   .texture-paper {
@@ -145,13 +129,8 @@
     color: color-mix(in srgb, #c2f6fc 85%, #fff);
   }
   .variant-classic:not(.dark) .vs-voix-interieure {
-    border-left-color: var(--color-olive);
-    background: color-mix(in srgb, var(--color-olive) 8%, #fff);
-    color: var(--color-ink);
-  }
-  .variant-aqua .vs-voix-interieure {
-    border-left-color: #7ed4df;
-    background: color-mix(in srgb, #0d3d47 70%, transparent);
-    color: #e8f7f9;
+    border-left-color: var(--vs-azur);
+    background: color-mix(in srgb, var(--vs-lunaire) 78%, var(--vs-azur) 8%);
+    color: var(--vs-nuit);
   }
 }

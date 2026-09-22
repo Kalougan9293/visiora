@@ -1,18 +1,44 @@
-import { useEffect, useState } from 'react'
-import { ChevronDown, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronDown, Download, Pencil, Trash2 } from 'lucide-react'
+import { audioStorage } from '@/services/audioStorage'
 import { AudioPlayer } from '@/components/audio/AudioPlayer'
 import { GeneratingWaterProgress } from '@/components/library/GeneratingWaterProgress'
 import { ScriptReader } from '@/components/library/ScriptReader'
 import { useSessions } from '@/context/SessionsContext'
-import { useVariant } from '@/context/VariantContext'
+import { APP_COPY } from '@/data/uiCopy'
 import { formatDateFr, cn } from '@/lib/utils'
 import type { VisualizationSession } from '@/types'
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
-  const { isAqua } = useVariant()
+  const navigate = useNavigate()
   const { removeSession, markListened, retryGeneration } = useSessions()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const onHeardEnough = useCallback(() => markListened(session.id), [markListened, session.id])
+
+  const downloadAudio = useCallback(async () => {
+    if ((!session.audioUrl && !session.audioStoragePath) || downloading) return
+    setDownloading(true)
+    try {
+      const slug = session.title
+        .toLowerCase()
+        .replace(/[^a-z0-9àâäéèêëïîôùûüç]+/gi, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 40)
+      const freshUrl = session.audioStoragePath
+        ? await audioStorage.refreshSessionUrl(session.audioStoragePath)
+        : null
+      const url = freshUrl || session.audioUrl
+      if (!url) return
+      await audioStorage.downloadMp3(url, `visiora-${slug || 'seance'}.mp3`)
+    } catch (err) {
+      console.warn('[session] download', err)
+    } finally {
+      setDownloading(false)
+    }
+  }, [session.audioUrl, session.audioStoragePath, session.title, downloading])
   const ready = session.status === 'ready' || Boolean(session.audioUrl)
   const generating = session.status === 'generating'
   const pct = Math.min(99, Math.max(5, Math.round(session.audioProgress ?? 8)))
@@ -27,39 +53,45 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [confirmOpen])
 
-  const shellClass = cn(
-    'w-full min-w-0',
-    isAqua
-      ? 'aqua-glass rounded-xl'
-      : 'rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]',
-  )
+  const shellClass =
+    'w-full min-w-0 rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]'
 
   if (generating) {
-    return <GeneratingWaterProgress serverPct={pct} isAqua={isAqua} />
+    return <GeneratingWaterProgress serverPct={pct} />
   }
 
   return (
     <>
-      <div className={cn(shellClass, 'flex h-11 items-center gap-2 px-2.5')}>
-        <span
-          className={cn(
-            'w-[5.75rem] shrink-0 truncate text-left text-[11px]',
-            isAqua ? 'text-[#b8e4ea]/85' : 'text-ink/55 dark:text-champagne/85',
-          )}
-        >
-          {session.status === 'draft' && !session.audioUrl
-            ? 'connexion'
-            : formatDateFr(session.createdAt)}
-        </span>
-
-        <p
-          className={cn(
-            'min-w-0 flex-1 truncate text-center text-sm font-medium',
-            isAqua ? 'text-[#e8f7f9]' : 'text-ink dark:text-cream',
-          )}
-        >
-          {session.title}
-        </p>
+      <div className={cn(shellClass, 'flex min-h-11 items-center gap-2 px-2.5 py-1.5')}>
+        <div className="flex min-w-0 flex-1 flex-col items-start text-left">
+          <span
+            className={cn(
+              'truncate text-[11px]',
+              'text-ink/55 dark:text-champagne/85',
+            )}
+          >
+            {session.status === 'draft' && !session.audioUrl
+              ? 'connexion'
+              : formatDateFr(session.createdAt)}
+          </span>
+          <p
+            className={cn(
+              'w-full truncate text-sm font-medium',
+              'text-ink dark:text-cream',
+            )}
+          >
+            {session.title}
+          </p>
+          <span
+            className={cn(
+              'truncate text-[10px]',
+              'text-ink/45 dark:text-champagne/70',
+            )}
+          >
+            {session.durationMinutes} min · {session.listens} écoute
+            {session.listens !== 1 ? 's' : ''}
+          </span>
+        </div>
 
         {hasScript && ready && (
           <button
@@ -69,9 +101,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             onClick={() => setScriptOpen((v) => !v)}
             className={cn(
               'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-              isAqua
-                ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-[#7ed4df]'
-                : 'text-ink/40 hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5',
+              'text-ink/40 hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5',
             )}
           >
             <ChevronDown
@@ -87,11 +117,37 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               type="button"
               onClick={() => void retryGeneration(session.id)}
               className={cn(
-                'shrink-0 px-1 text-[10px] underline',
-                isAqua ? 'text-red-300' : 'text-red-600 dark:text-red-300',
+                'max-w-[12.5rem] shrink-0 text-left text-[10px] leading-snug underline',
+                'text-[var(--vs-or)]',
               )}
             >
-              Réessayer
+              {APP_COPY.generateError}
+            </button>
+          )}
+
+          {ready && (session.audioUrl || session.audioStoragePath) && (
+            <button
+              type="button"
+              aria-label="Télécharger le MP3"
+              disabled={downloading}
+              onClick={() => void downloadAudio()}
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
+                'text-ink/40 hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5 disabled:opacity-40',
+              )}
+            >
+              <Download size={14} />
+            </button>
+          )}
+
+          {ready && (
+            <button
+              type="button"
+              aria-label="Ajuster"
+              onClick={() => navigate(`/creer?adjust=${session.id}`)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5"
+            >
+              <Pencil size={14} />
             </button>
           )}
 
@@ -101,9 +157,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             onClick={() => setConfirmOpen(true)}
             className={cn(
               'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
-              isAqua
-                ? 'text-[#b8e4ea]/70 hover:bg-white/10 hover:text-red-300'
-                : 'text-ink/40 hover:bg-black/5 hover:text-red-500 dark:text-champagne/70 dark:hover:bg-white/5',
+              'text-ink/40 hover:bg-black/5 hover:text-[var(--vs-or)] dark:text-champagne/70 dark:hover:bg-white/5',
             )}
           >
             <Trash2 size={14} />
@@ -114,7 +168,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               compact
               src={session.audioUrl}
               title={session.title}
-              onPlayStart={() => markListened(session.id)}
+              onPlayStart={onHeardEnough}
             />
           )}
         </div>
@@ -124,12 +178,10 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
         <div
           className={cn(
             'mt-1 rounded-2xl px-4 py-4',
-            isAqua
-              ? 'border border-white/10 bg-white/[0.04]'
-              : 'border border-black/8 bg-cream-card/60 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]/80',
+            'border border-black/8 bg-cream-card/60 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]/80',
           )}
         >
-          <ScriptReader script={session.script} isAqua={isAqua} />
+          <ScriptReader script={session.script} />
         </div>
       )}
 
@@ -148,19 +200,17 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           />
           <div
             className={cn(
-              'relative w-full max-w-[17rem] rounded-2xl border px-5 py-5 text-center shadow-xl',
-              isAqua
-                ? 'border-white/15 bg-[#0d3d47] text-[#e8f7f9]'
-                : 'border-black/10 bg-cream text-ink dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-ecume)]',
+              'relative w-full max-w-[17rem] rounded-2xl border px-5 py-5 text-center',
+              'border-[var(--vs-bordure)] bg-[var(--vs-surface)] text-ink dark:text-[var(--vs-ecume)]',
             )}
           >
             <p id={`confirm-del-${session.id}`} className="text-sm font-medium">
-              Êtes-vous sûr ?
+              Es-tu sûr ?
             </p>
             <p
               className={cn(
                 'mt-1 truncate text-xs',
-                isAqua ? 'text-[#b8e4ea]/80' : 'text-ink/55 dark:text-champagne/80',
+                'text-ink/55 dark:text-champagne/80',
               )}
             >
               {session.title}
@@ -171,9 +221,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
                 onClick={() => setConfirmOpen(false)}
                 className={cn(
                   'flex-1 rounded-xl border px-3 py-2 text-xs font-medium',
-                  isAqua
-                    ? 'border-white/20 text-[#e8f7f9]/90'
-                    : 'border-black/12 text-ink/80 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)]',
+                  'border-black/12 text-ink/80 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)]',
                 )}
               >
                 Annuler
@@ -186,9 +234,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
                 }}
                 className={cn(
                   'flex-1 rounded-xl px-3 py-2 text-xs font-medium',
-                  isAqua
-                    ? 'bg-red-500/90 text-white'
-                    : 'bg-red-600 text-white dark:bg-red-500',
+                  'bg-[var(--vs-or)] text-[var(--vs-nuit)]',
                 )}
               >
                 Supprimer

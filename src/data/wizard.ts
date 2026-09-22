@@ -1,15 +1,15 @@
 /** Contenu exact du questionnaire MVP Visiora — ne pas altérer le texte */
 
 export const CREATE_INTRO = {
-  title: 'Concepteur de visualisations',
-  body: "Notre questionnaire scientifique va cartographier vos aspirations, vos forces actives, vos freins conscients et votre canal sensoriel dominant afin d'engendrer un script d'imagerie sur mesure de 15 minutes.",
-  detailsLabel: "DÉTAILS DE L'AVENTURE :",
+  title: 'Ta séance sur mesure',
+  body: "Quelques questions pour cerner ton objectif, ce qui te freine et ce que tu veux ressentir. À partir de tes réponses, Visiora écrit une séance de quinze minutes qui n'existera que pour toi.",
+  detailsLabel: 'CE QUI T’ATTEND',
   details: [
-    '13 questions précises et structurantes.',
-    'Adaptation subliminale de votre vocabulaire sensoriel.',
-    "Génération de voix naturelle et mixage d'ondes binaurales.",
+    '13 questions, une dizaine de minutes.',
+    'Un texte écrit à partir de tes mots, adapté à ta façon de ressentir.',
+    'Une voix naturelle et une ambiance sonore, prêtes à écouter.',
   ],
-  cta: 'Commencer le questionnaire',
+  cta: 'Commencer',
 } as const
 
 export type FieldType = 'text' | 'textarea' | 'voice' | 'choice-row'
@@ -41,7 +41,7 @@ export const WIZARD_STEPS: WizardStep[] = [
     total: 5,
     percent: 20,
     title: 'Définis ton objectif précis',
-    subtitle: 'Établissons ensemble le socle de ta séance de visualisation.',
+    subtitle: 'On pose ensemble le socle de ta séance de visualisation.',
     fields: [
       {
         id: 'q1',
@@ -68,7 +68,7 @@ export const WIZARD_STEPS: WizardStep[] = [
     total: 5,
     percent: 40,
     title: 'Imagine ta réussite',
-    subtitle: 'Le cerveau traite les images vécues et imaginées de la même manière.',
+    subtitle: 'Décris la scène comme si tu y étais. Ton cerveau s’entraîne, même sans mouvement.',
     fields: [
       {
         id: 'q4',
@@ -148,17 +148,8 @@ export const WIZARD_STEPS: WizardStep[] = [
     total: 5,
     percent: 100,
     title: 'Paramètres audio de la séance',
-    subtitle: 'Choisissons la texture vocale et littéraire de ton voyage.',
+    subtitle: 'Choisis la texture vocale et littéraire de ta séance.',
     fields: [
-      {
-        id: 'q12_tutoiement',
-        label: 'Formulation',
-        type: 'choice-row',
-        choices: [
-          { id: 'tu', label: 'Tutoiement' },
-          { id: 'vous', label: 'Vouvoiement' },
-        ],
-      },
       {
         id: 'q12_registre',
         label: 'Registre',
@@ -175,6 +166,16 @@ export const WIZARD_STEPS: WizardStep[] = [
         placeholder: 'Ex: Marie, Julien...',
         type: 'text',
         optional: true,
+      },
+      {
+        id: 'duration_minutes',
+        label: 'Durée de la séance',
+        type: 'choice-row',
+        choices: [
+          { id: '15', label: '15 min' },
+          { id: '10', label: '10 min' },
+          { id: '3', label: '3 min' },
+        ],
       },
       {
         id: 'q12_voice',
@@ -221,49 +222,3 @@ export const AMBIANCES = [
   { id: 'spa', label: 'Spa', description: 'Pad calme' },
 ] as const
 
-/** Voix Aqua : portraits carrés (sans noms) — placer les images dans /public/voices/ */
-export const AQUA_VOICES = [
-  {
-    id: 'rituel',
-    photo: '/voices/yoga.jpg',
-    label: 'Vanessa',
-    vibe: '',
-    objectPosition: '50% 12%',
-    ambiance: 'oiseaux' as const,
-    preview: '/voices/rituel-preview.mp3?v=v3',
-  },
-  {
-    id: 'antoni',
-    photo: '/voices/damien.jpg',
-    label: 'Damien',
-    vibe: '',
-    objectPosition: '50% 12%',
-    ambiance: null,
-    preview: '/voices/damien-preview.mp3?v=d1',
-  },
-  {
-    id: 'onde',
-    photo: '/voices/sabrina.jpg',
-    label: 'Sabrina',
-    vibe: '',
-    objectPosition: '50% 18%',
-    ambiance: 'eau' as const,
-    preview: '/voices/onde-preview.mp3?v=natural1',
-  },
-] as const
-
-/** Placeholders Aqua uniquement — n’altère pas la version client. */
-export const AQUA_FIELD_PLACEHOLDERS: Record<string, string> = {
-  q1: 'Ex : Défi sportif, entretien, stress…',
-  q2: 'Ex : Une date précise — ou « aucune » si tu n’as pas d’échéance',
-  q3: 'Ex : Pour me sentir à ma place, avancer sans me freiner…',
-  q4: 'Ex : Je vois des visages apaisés, j’entends mon souffle, je sens mon corps stable…',
-  q5: 'Ex : Une paix profonde, une fierté calme, une confiance tranquille…',
-  q6: 'Ex : Tendu, impatient, déjà un peu plus léger…',
-  q7: 'Ex : La peur de ne pas être à la hauteur — je voudrais la voir comme un signal d’apprentissage…',
-  q8: 'Ex : Gorge nouée, ventre serré, épaules crispées… (tu peux laisser vide)',
-  q9: 'Ex : Je prépare, je m’entraîne, j’en parle à quelqu’un de confiance…',
-  q10: 'Ex : Envoyer un message, 5 minutes de pratique, trois respirations profondes…',
-  q11: 'Ex : J’ai ma place. Je suis capable. Je peux y arriver.',
-  q13: 'Ex : Ton prénom — ou laisse vide',
-}

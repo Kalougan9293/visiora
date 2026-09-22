@@ -21,9 +21,34 @@ export type ScriptPart =
 const MARKER = /\[pause longue\]|\[pause\]/gi
 /** Titres de mouvement : affichage seul, jamais lus */
 const MOVEMENT_LINE = /\[Mouvement[^\]]*\]/gi
+/** Marqueur fallback annexe : affichage seul, jamais lu */
+const ANNEX_MARK = /\[Annexe[^\]]*\]/gi
+
+export const ANNEX_FALLBACK_MARK = '[Annexe — texte de secours]'
 
 function stripDisplayOnly(raw: string): string {
-  return raw.replace(MOVEMENT_LINE, ' ')
+  return raw.replace(MOVEMENT_LINE, ' ').replace(ANNEX_MARK, ' ')
+}
+
+function asAnswerText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** Fallback commun si GPT plante : même canevas, prénom / objectif du user si on les a. */
+export function personalizeAnnex(
+  script: string,
+  answers?: Record<string, unknown> | null,
+): string {
+  const src = answers && typeof answers === 'object' ? answers : {}
+  const name = asAnswerText(src.q13)
+  let out = script
+  if (name.length >= 2) {
+    out = out.replace(/\bThomas\b/g, name)
+  }
+  if (!/\[Annexe/i.test(out)) {
+    out = `${ANNEX_FALLBACK_MARK}\n\n${out}`
+  }
+  return out
 }
 
 /** Garde les sauts de paragraphe, compacte le reste. */

@@ -22,8 +22,10 @@ const CONTINUE_KICK_MS = 8_000
 
 interface SessionsContextValue {
   sessions: VisualizationSession[]
+  sessionsReady: boolean
   stats: ProgressStats
   addSession: (answers: VisualizationAnswers) => Promise<VisualizationSession>
+  adjustSession: (sessionId: string, answers: VisualizationAnswers) => Promise<VisualizationSession>
   removeSession: (id: string) => void
   markListened: (id: string) => void
   retryGeneration: (sessionId: string) => Promise<void>
@@ -34,9 +36,10 @@ interface SessionsContextValue {
 const SessionsContext = createContext<SessionsContextValue | null>(null)
 
 export function SessionsProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const userId = user?.id
   const [sessions, setSessions] = useState<VisualizationSession[]>([])
+  const [sessionsReady, setSessionsReady] = useState(false)
   const [stats, setStats] = useState<ProgressStats>(() => progressService.getLocalStats())
   const kickedRef = useRef(new Set<string>())
   const inFlightRef = useRef(new Set<string>())
@@ -49,15 +52,40 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     inFlightRef.current.clear()
     lastKickAtRef.current = {}
     orchestratedRef.current.clear()
+    if (authLoading) {
+      setSessionsReady(false)
+      return
+    }
     if (!userId) {
       setSessions([])
+      setSessionsReady(true)
       sessionsService.clearLocal()
       return
     }
-    void sessionsService.list(userId).then((rows) => {
-      setSessions(rows)
+    let cancelled = false
+    setSessionsReady(false)
+    void sessionsService
+      .list(userId)
+      .then((rows) => {
+        if (cancelled) return
+        setSessions(rows)
+        setSessionsReady(true)
+      })
+      .catch((err) => {
+        console.warn('[sessions] list failed', err)
+        if (cancelled) return
+        setSessions([])
+        setSessionsReady(true)
+      })
+    void sessionsService.listListenDays(userId).then((listens) => {
+      if (cancelled || !listens) return
+      const next = progressService.fromListenRows(listens.dates, listens.count)
+      setStats(next)
     })
-  }, [userId])
+    return () => {
+      cancelled = true
+    }
+  }, [userId, authLoading])
 
   useEffect(() => {
     progressService.persistLocal(stats)
@@ -73,7 +101,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         current.audioUrl === fresh.audioUrl &&
         current.audioStoragePath === fresh.audioStoragePath &&
         current.audioProgress === fresh.audioProgress &&
-        current.script === fresh.script
+        current.script === fresh.script &&
+        current.title === fresh.title &&
+        current.listens === fresh.listens &&
+        current.durationMinutes === fresh.durationMinutes
       ) {
         return prev
       }
@@ -83,18 +114,23 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const enqueueAudio = useCallback(async (sessionId: string, force = false) => {
+  const enqueueAudio = useCallback(async (
+    sessionId: string,
+    opts: boolean | { force?: boolean; reset?: boolean } = false,
+  ) => {
+    const force = typeof opts === 'boolean' ? opts : Boolean(opts.force)
+    const reset = typeof opts === 'boolean' ? false : Boolean(opts.reset)
     /** Verrou sync immédiat : empêche 2 invokes parallèles sur la même séance. */
-    if (!force && kickedRef.current.has(sessionId)) {
+    if (!force && !reset && kickedRef.current.has(sessionId)) {
       const last = lastKickAtRef.current[sessionId] ?? 0
       if (Date.now() - last < CONTINUE_KICK_MS) return
     }
-    if (!force && inFlightRef.current.has(sessionId)) return
+    if (!force && !reset && inFlightRef.current.has(sessionId)) return
     kickedRef.current.add(sessionId)
     inFlightRef.current.add(sessionId)
     lastKickAtRef.current[sessionId] = Date.now()
     try {
-      const result = await audioService.enqueueGeneration(sessionId, force)
+      const result = await audioService.enqueueGeneration(sessionId, { force, reset })
       if (result.orchestrated) {
         orchestratedRef.current.add(sessionId)
       }
@@ -178,6 +214,31 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [userId],
   )
 
+  const adjustSession = useCallback(
+    async (sessionId: string, answers: VisualizationAnswers) => {
+      if (!userId) throw new Error('Connexion requise')
+      const current = sessions.find((s) => s.id === sessionId)
+      const keepTitle = current?.title || sessionsService.titleFromAnswers(answers)
+      const q1 = current?.answers.q1
+      const merged: VisualizationAnswers = {
+        ...answers,
+        ...(typeof q1 === 'string' && q1.trim() ? { q1 } : {}),
+      }
+      const updated = await sessionsService.adjust(sessionId, merged, userId, keepTitle)
+      kickedRef.current.delete(sessionId)
+      delete lastKickAtRef.current[sessionId]
+      orchestratedRef.current.delete(sessionId)
+      setSessions((prev) => {
+        const exists = prev.some((s) => s.id === sessionId)
+        if (!exists) return [updated, ...prev]
+        return prev.map((s) => (s.id === sessionId ? { ...s, ...updated } : s))
+      })
+      await enqueueAudio(sessionId, { force: true, reset: true })
+      return updated
+    },
+    [userId, sessions, enqueueAudio],
+  )
+
   const retryGeneration = useCallback(
     async (sessionId: string) => {
       if (!userId) return
@@ -217,7 +278,12 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
             setSessions((prev) =>
               prev.map((s) => (s.id === id ? { ...s, listens: s.listens + 1 } : s)),
             )
-            setStats((prev) => progressService.recordListen(prev))
+            const listens = await sessionsService.listListenDays(userId)
+            setStats((prev) =>
+              listens
+                ? progressService.fromListenRows(listens.dates, listens.count)
+                : progressService.recordListen(prev),
+            )
             return
           }
           /** Invité : 1 jour validé max (journal local) */
@@ -249,8 +315,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       sessions,
+      sessionsReady,
       stats,
       addSession,
+      adjustSession,
       removeSession,
       markListened,
       retryGeneration,
@@ -259,8 +327,10 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     }),
     [
       sessions,
+      sessionsReady,
       stats,
       addSession,
+      adjustSession,
       removeSession,
       markListened,
       retryGeneration,

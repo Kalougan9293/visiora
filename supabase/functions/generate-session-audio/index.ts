@@ -9,10 +9,11 @@ import {
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript } from './script.ts'
+import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript, personalizeAnnex } from './script.ts'
 import {
   canGenerateScript,
   generateSessionScript,
+  generateSessionScriptDetailed,
   hasStoredScript,
   isDemoInProgress,
   isN8nQueued,
@@ -48,7 +49,13 @@ const DEFAULT_VOICES: Record<string, string> = {
 }
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
-const CLAIM_TTL_MS = 55_000
+const CLAIM_TTL_MS = 90_000
+/** Phrases TTS lancées ensemble dans un même invoke. */
+const PARALLEL_SPEECH = 4
+
+function elevenModelId(): string {
+  return Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_multilingual_v2'
+}
 
 declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined
 
@@ -134,11 +141,13 @@ async function handleDemoShort(params: {
   const previousRequestIds: string[] = []
   let bedOffset = 0
 
-  for (const step of steps) {
-    let pcm: Int16Array
-    if (step.kind === 'silence') {
-      pcm = upsampleTts(silencePcm(step.seconds))
-    } else {
+  const speechIndexes = steps
+    .map((step, i) => (step.kind === 'speech' ? i : -1))
+    .filter((i) => i >= 0)
+  const ttsByIndex = new Map<number, { pcm: Int16Array; requestId: string | null }>()
+  const ttsBatch = await Promise.all(
+    speechIndexes.map(async (i) => {
+      const step = steps[i] as { kind: 'speech'; text: string }
       const tts = await elevenTts({
         apiKey: params.elevenKey,
         voiceId: resolveElevenVoiceId(params.voiceId),
@@ -146,8 +155,21 @@ async function handleDemoShort(params: {
         text: step.text,
         previousRequestIds,
       })
-      pcm = upsampleTts(pcmFromEleven(tts.audio))
-      if (tts.requestId) previousRequestIds.push(tts.requestId)
+      return { i, pcm: upsampleTts(pcmFromEleven(tts.audio)), requestId: tts.requestId }
+    }),
+  )
+  for (const row of ttsBatch) ttsByIndex.set(row.i, row)
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i]!
+    let pcm: Int16Array
+    if (step.kind === 'silence') {
+      pcm = upsampleTts(silencePcm(step.seconds))
+    } else {
+      const got = ttsByIndex.get(i)
+      if (!got) throw new Error('TTS démo manquant')
+      pcm = got.pcm
+      if (got.requestId) previousRequestIds.push(got.requestId)
     }
     if (bed) {
       const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, bedOffset)
@@ -230,7 +252,7 @@ async function elevenTts(params: {
       },
       body: JSON.stringify({
         text: params.text,
-        model_id: 'eleven_multilingual_v2',
+        model_id: elevenModelId(),
         language_code: 'fr',
         ...(params.previousRequestIds.length
           ? { previous_request_ids: params.previousRequestIds.slice(-3) }
@@ -261,7 +283,7 @@ async function elevenTts(params: {
           },
           body: JSON.stringify({
             text: params.text,
-            model_id: 'eleven_multilingual_v2',
+            model_id: elevenModelId(),
             language_code: 'fr',
             voice_settings: {
               stability: key === 'rituel' ? 0.8 : 0.72,
@@ -407,18 +429,11 @@ async function processOneStep(params: {
     return { job: await finalizeJob(params), done: true }
   }
 
-  let didSpeech = false
-  let silenceBudget = 20
-
   while (job.nextIndex < job.steps.length) {
     const index = job.nextIndex
     const step = job.steps[index]
     if (!step) break
-
-    if (step.kind === 'speech' && didSpeech) break
-
     const path = partPath(params.userId, params.sessionId, index)
-
     if (step.partPath || (await partExists(params.admin, params.userId, params.sessionId, index))) {
       if (step.kind === 'speech') {
         job.steps[index] = { kind: 'speech', partPath: path, requestId: step.requestId }
@@ -428,43 +443,96 @@ async function processOneStep(params: {
       job.nextIndex = index + 1
       continue
     }
+    break
+  }
 
-    if (step.kind === 'silence') {
-      if (silenceBudget <= 0) break
-      silenceBudget -= 1
-    } else {
-      didSpeech = true
+  if (job.nextIndex >= job.steps.length) {
+    job.phase = 'finalize'
+    job.claimId = null
+    job.claimedAt = null
+    return { job: await finalizeJob({ ...params, job }), done: true }
+  }
+
+  const window: { index: number; step: JobStep }[] = []
+  let speechCount = 0
+  for (let i = job.nextIndex; i < job.steps.length; i++) {
+    const step = job.steps[i]
+    if (!step) break
+    if (step.kind === 'speech') {
+      if (speechCount >= PARALLEL_SPEECH) break
+      speechCount += 1
     }
+    window.push({ index: i, step })
+  }
 
-    const encoded = await encodeStepMp3({
-      step,
-      speechText: step.kind === 'speech' ? speechTextAt(params.script, index) : undefined,
-      elevenKey: params.elevenKey,
-      voiceId: params.voiceId,
-      previousRequestIds: job.previousRequestIds,
-      bedOffset: job.bedOffset,
-    })
+  const speechItems = window.filter((item) => item.step.kind === 'speech')
+  const ttsByIndex = new Map<number, { pcm: Int16Array; requestId: string | null }>()
+  if (speechItems.length) {
+    const batch = await Promise.all(
+      speechItems.map(async (item) => {
+        const text = speechTextAt(params.script, item.index)
+        const tts = await elevenTts({
+          apiKey: params.elevenKey,
+          voiceId: resolveElevenVoiceId(params.voiceId),
+          appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
+          text,
+          previousRequestIds: job.previousRequestIds,
+        })
+        return {
+          index: item.index,
+          pcm: upsampleTts(pcmFromEleven(tts.audio)),
+          requestId: tts.requestId,
+        }
+      }),
+    )
+    for (const row of batch) ttsByIndex.set(row.index, row)
+  }
 
-    await uploadPart(params.admin, path, encoded.mp3)
+  for (const item of window) {
+    const { index, step } = item
+    const path = partPath(params.userId, params.sessionId, index)
 
     if (step.kind === 'speech') {
+      const got = ttsByIndex.get(index)
+      if (!got) throw new Error(`TTS manquant à l’index ${index}`)
+      let pcm = got.pcm
+      let nextOffset = job.bedOffset
+      const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase())
+      if (bed) {
+        const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, job.bedOffset)
+        pcm = mixed.pcm
+        nextOffset = mixed.nextOffset
+      }
+      const mp3 = await encodeMp3(pcm)
+      if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
+      await uploadPart(params.admin, path, mp3)
+      const previousRequestIds = [...job.previousRequestIds]
+      if (got.requestId) previousRequestIds.push(got.requestId)
       job.steps[index] = {
         kind: 'speech',
         partPath: path,
-        ...(encoded.requestId ? { requestId: encoded.requestId } : {}),
+        ...(got.requestId ? { requestId: got.requestId } : {}),
       }
+      job.bedOffset = nextOffset
+      job.previousRequestIds = previousRequestIds
     } else {
+      const encoded = await encodeStepMp3({
+        step,
+        elevenKey: params.elevenKey,
+        voiceId: params.voiceId,
+        previousRequestIds: job.previousRequestIds,
+        bedOffset: job.bedOffset,
+      })
+      await uploadPart(params.admin, path, encoded.mp3)
       job.steps[index] = { kind: 'silence', seconds: step.seconds, partPath: path }
+      job.bedOffset = encoded.bedOffset
+      job.previousRequestIds = encoded.previousRequestIds
     }
-    job.bedOffset = encoded.bedOffset
-    job.previousRequestIds = encoded.previousRequestIds
-    job.nextIndex = index + 1
 
+    job.nextIndex = index + 1
     job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
-    const snapshot = { ...job, claimId: null, claimedAt: null }
-    await setProgress(params.admin, params.sessionId, progressPct(snapshot), snapshot)
-    job.claimId = null
-    job.claimedAt = null
+    /** Garde le claim pendant toute la fenêtre parallèle — sinon n8n / le filet relancent trop tôt. */
+    await setProgress(params.admin, params.sessionId, progressPct(job), job)
   }
 
   if (job.nextIndex >= job.steps.length) job.phase = 'finalize'
@@ -641,12 +709,54 @@ Deno.serve(async (req) => {
       force?: boolean | string
       reset?: boolean | string
       chain?: boolean | string
+      compare?: boolean | string
+      model?: string
     }
     if (!body.sessionId) return json({ error: 'sessionId required' }, 400)
     sessionId = body.sessionId
     force = body.force === true || body.force === 'true'
     reset = body.reset === true || body.reset === 'true'
     chain = body.chain === true || body.chain === 'true'
+
+    if (body.compare === true || body.compare === 'true') {
+      const model = body.model?.trim()
+      if (!model) return json({ error: 'model required' }, 400)
+      const adminCompare = createClient(supabaseUrl, serviceKey)
+      const { data: compareSession, error: compareErr } = await adminCompare
+        .from('sessions')
+        .select('id, user_id, answers')
+        .eq('id', sessionId)
+        .maybeSingle()
+      if (compareErr || !compareSession) return json({ error: 'Session introuvable' }, 404)
+      if (!isOrchestrator) {
+        const userClient = createClient(supabaseUrl, anonKey, {
+          global: { headers: { Authorization: authHeader } },
+        })
+        const {
+          data: { user },
+          error: userError,
+        } = await userClient.auth.getUser()
+        if (userError || !user) return json({ error: 'Unauthorized' }, 401)
+        if (compareSession.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
+      }
+      try {
+        const generated = await generateSessionScriptDetailed(
+          compareSession.answers && typeof compareSession.answers === 'object'
+            ? (compareSession.answers as Record<string, unknown>)
+            : {},
+          model,
+        )
+        return json({
+          ok: true,
+          model: generated.model,
+          script: generated.script,
+          usage: generated.usage,
+        })
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : 'compare failed'
+        return json({ ok: false, error: detail }, 500)
+      }
+    }
   } catch {
     return json({ error: 'Invalid JSON body' }, 400)
   }
@@ -718,7 +828,12 @@ Deno.serve(async (req) => {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'script failed'
         console.error('[generate-session-audio] script fallback annex', message)
-        const fallback = resolveScript({ script: null })
+        const fallback = personalizeAnnex(
+          resolveScript({ script: null }),
+          session.answers && typeof session.answers === 'object'
+            ? (session.answers as Record<string, unknown>)
+            : {},
+        )
         await admin
           .from('sessions')
           .update({
@@ -751,14 +866,14 @@ Deno.serve(async (req) => {
       })
     }
 
-    if (canBackground && !isOrchestrator) {
+    if (canBackground) {
       EdgeRuntime!.waitUntil(runScript())
       return json({
         ok: true,
         accepted: true,
         status: 'generating',
         progress: 8,
-        orchestrated: n8nConfigured,
+        orchestrated: n8nConfigured || isOrchestrator,
       }, 202)
     }
 
@@ -820,10 +935,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    /** Requête téléphone : 202 immédiat. Relance serveur (chain) : on attend le TTS. */
-    if (canBackground && !isOrchestrator && !chain) {
+    /** 202 immédiat : n8n / le téléphone ne portent pas le TTS (évite le 502 gateway). */
+    if (canBackground) {
       EdgeRuntime!.waitUntil(runDemo())
-      return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
+      return json({
+        ok: true,
+        accepted: true,
+        status: 'generating',
+        progress: 15,
+        orchestrated: n8nConfigured || isOrchestrator,
+      }, 202)
     }
 
     await runDemo()
@@ -980,13 +1101,14 @@ Deno.serve(async (req) => {
    * Réponse 202 immédiate + travail en arrière-plan.
    * Évite que le client (timeout invoke) marque « Réessayer » alors que le job tourne.
    */
-  if (canBackground && !isOrchestrator && !chain) {
+  if (canBackground) {
     EdgeRuntime!.waitUntil(runWork())
     return json({
       ok: true,
       accepted: true,
       status: 'generating',
       progress: progressPct(job),
+      orchestrated: n8nConfigured || isOrchestrator,
     }, 202)
   }
 
