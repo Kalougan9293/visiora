@@ -5,7 +5,6 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { useAuth } from '@/context/AuthContext'
 import { APP_COPY } from '@/data/uiCopy'
-import { cn } from '@/lib/utils'
 
 export function Header() {
   const { user, profile, loading, signOut } = useAuth()

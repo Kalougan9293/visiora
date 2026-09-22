@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
 import { HEALTH_COPY } from '@/services/healthGate'
 
 export function HealthScreen({ onAccept }: { onAccept: () => void }) {
