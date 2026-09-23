@@ -5,8 +5,8 @@ export type SignUpInput = {
   email: string
   password: string
   firstName: string
-  lastName: string
   cguAccepted: boolean
+  shareSessions: boolean
 }
 
 function requireClient() {
@@ -37,8 +37,9 @@ export const authService = {
       options: {
         data: {
           first_name: input.firstName.trim(),
-          last_name: input.lastName.trim(),
+          last_name: '',
           cgu_accepted: input.cguAccepted,
+          share_sessions: input.shareSessions,
         },
       },
     })
@@ -63,6 +64,21 @@ export const authService = {
     }
 
     return data
+  },
+
+  async requestPasswordReset(email: string) {
+    const client = requireClient()
+    const redirectTo = `${window.location.origin}/nouveau-mot-de-passe`
+    const { error } = await client.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo,
+    })
+    if (error) throw error
+  },
+
+  async updatePassword(password: string) {
+    const client = requireClient()
+    const { error } = await client.auth.updateUser({ password })
+    if (error) throw error
   },
 
   async signOut() {

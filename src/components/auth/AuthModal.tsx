@@ -2,6 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Check, Eye, EyeOff, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { authService } from '@/services/auth'
+import { AI_DISCLOSURE } from '@/data/uiCopy'
 import { cn } from '@/lib/utils'
 
 type Mode = 'login' | 'signup'
@@ -41,10 +43,10 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPass, setLoginPass] = useState('')
   const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [signupPass, setSignupPass] = useState('')
   const [acceptCgu, setAcceptCgu] = useState(false)
+  const [shareSessions, setShareSessions] = useState(false)
   const [hint, setHint] = useState('')
   const [busy, setBusy] = useState(false)
   const [showLoginPass, setShowLoginPass] = useState(false)
@@ -110,8 +112,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
   function onSignupStep1(e: FormEvent) {
     e.preventDefault()
-    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
-      setHint('Champs requis')
+    if (!email.trim()) {
+      setHint('Indique ton e-mail')
       return
     }
     setHint('')
@@ -139,8 +141,8 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         email,
         password: signupPass,
         firstName,
-        lastName,
         cguAccepted: acceptCgu,
+        shareSessions,
       })
       if (needsEmailConfirm) {
         setHint('Compte créé — vérifie ton e-mail')
@@ -305,6 +307,25 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   </div>
                 </Field>
 
+                <button
+                  type="button"
+                  className={cn(linkClass, 'w-full')}
+                  onClick={() => {
+                    if (!loginEmail.trim()) {
+                      setHint('Indique ton e-mail')
+                      return
+                    }
+                    setBusy(true)
+                    setHint('')
+                    void authService
+                      .requestPasswordReset(loginEmail)
+                      .then(() => setHint('Un e-mail vient de partir pour choisir un nouveau mot de passe.'))
+                      .catch((err: unknown) => setHint(mapAuthError(err)))
+                      .finally(() => setBusy(false))
+                  }}
+                >
+                  Mot de passe oublié ?
+                </button>
                 <Hint text={hint} />
                 <PrimaryButton label={busy ? '…' : 'Se connecter'} disabled={busy} />
                 <button type="button" onClick={() => switchMode('signup')} className={cn(linkClass, 'w-full pt-1')}>
@@ -323,28 +344,16 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     exit={{ opacity: 0, x: -14 }}
                     transition={{ duration: 0.22 }}
                   >
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <Field label="Prénom" labelClass={labelClass} htmlFor="auth-first">
-                        <input
-                          id="auth-first"
-                          type="text"
-                          autoComplete="given-name"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          className={inputClass}
-                        />
-                      </Field>
-                      <Field label="Nom" labelClass={labelClass} htmlFor="auth-last">
-                        <input
-                          id="auth-last"
-                          type="text"
-                          autoComplete="family-name"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          className={inputClass}
-                        />
-                      </Field>
-                    </div>
+                    <Field label="Prénom (facultatif)" labelClass={labelClass} htmlFor="auth-first">
+                      <input
+                        id="auth-first"
+                        type="text"
+                        autoComplete="given-name"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className={inputClass}
+                      />
+                    </Field>
                     <Field label="Mail" labelClass={labelClass} htmlFor="auth-email">
                       <input
                         id="auth-email"
@@ -448,6 +457,25 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                         disabled={busy}
                       />
                       <span>J&apos;accepte les CGU et la politique de confidentialité</span>
+                    </label>
+
+                    <label
+                      className={cn(
+                        'flex cursor-pointer items-start gap-2.5 rounded-2xl px-0.5 text-left text-[11px] leading-snug sm:text-xs',
+                        'text-ink/60 dark:text-champagne/70',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={shareSessions}
+                        onChange={(e) => setShareSessions(e.target.checked)}
+                        className={cn(
+                          'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border accent-[var(--vs-azur)]',
+                          'border-black/20 dark:border-white/25',
+                        )}
+                        disabled={busy}
+                      />
+                      <span>{AI_DISCLOSURE.shareCheckbox}</span>
                     </label>
 
                     <Hint text={hint} />

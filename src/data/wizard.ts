@@ -7,7 +7,7 @@ export const CREATE_INTRO = {
   details: [
     '13 questions, une dizaine de minutes.',
     'Un texte écrit à partir de tes mots, adapté à ta façon de ressentir.',
-    'Une voix naturelle et une ambiance sonore, prêtes à écouter.',
+    'Une voix de synthèse et une ambiance sonore, prêtes à écouter.',
   ],
   cta: 'Commencer',
 } as const

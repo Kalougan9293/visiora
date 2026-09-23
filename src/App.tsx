@@ -8,6 +8,7 @@ import { CreatePage } from '@/pages/CreatePage'
 import { LibraryPage } from '@/pages/LibraryPage'
 import { ProgressPage } from '@/pages/ProgressPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { AdminPage } from '@/pages/AdminPage'
 import { VoicesLabPage } from '@/pages/VoicesLabPage'
 import { ModelsLabPage } from '@/pages/ModelsLabPage'
@@ -26,6 +27,7 @@ export default function App() {
                 <Route path="bibliotheque" element={<LibraryPage />} />
                 <Route path="suivi" element={<ProgressPage />} />
                 <Route path="profil" element={<ProfilePage />} />
+                <Route path="nouveau-mot-de-passe" element={<ResetPasswordPage />} />
                 {import.meta.env.DEV && (
                   <>
                     <Route path="voix" element={<VoicesLabPage />} />

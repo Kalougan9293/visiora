@@ -46,20 +46,10 @@ export interface VisualizationSession {
   tags?: string[]
 }
 
-export interface UserProfile {
-  id: string
-  firstName: string
-  lastName: string
-  email?: string
-  cguAccepted?: boolean
-  cguAcceptedAt?: string | null
-  lastSeenAt?: string | null
-  displayName: string
-  avatarUrl?: string | null
-  createdAt: string
-  streakDays: number
-  totalListens: number
-  milestoneTarget: number
+/** Une journée validée pour une visualisation (table `listens`). */
+export interface ListenMark {
+  sessionId: string
+  date: string
 }
 
 export interface DayLogEntry {

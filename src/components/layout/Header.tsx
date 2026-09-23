@@ -4,17 +4,30 @@ import { User } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { useAuth } from '@/context/AuthContext'
+import { useSessions } from '@/context/SessionsContext'
 import { APP_COPY } from '@/data/uiCopy'
+import type { VisualizationAnswers } from '@/types'
+
+function prenomSeance(sessions: { updatedAt: string; answers: VisualizationAnswers }[]): string {
+  const ordered = [...sessions].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+  for (const session of ordered) {
+    const value = session.answers.q13
+    const text = typeof value === 'string' ? value.trim() : ''
+    if (text) return text
+  }
+  return ''
+}
 
 export function Header() {
   const { user, profile, loading, signOut } = useAuth()
+  const { sessions } = useSessions()
   const [authOpen, setAuthOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const metaName =
     typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name.trim() : ''
-  const firstName = profile?.first_name?.trim() || metaName
+  const firstName = profile?.first_name?.trim() || metaName || prenomSeance(sessions)
   const loggedIn = Boolean(user)
   const shownNameRef = useRef(firstName)
   if (firstName) shownNameRef.current = firstName

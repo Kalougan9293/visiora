@@ -1,16 +1,20 @@
 /** Parse le format Annexe 1 et découpe le texte pour la synthèse vocale. */
 
-import { ANNEX_DEMO_SHORT_SCRIPT, ANNEX_FIXTURE_SCRIPT } from './annex.ts'
+import { ANNEX_DEMO_SHORT_SCRIPT } from './annex.ts'
 
 export const PAUSE_SHORT_SECONDS = 3
 /** CDC : pause longue ≈ 9 s */
 export const PAUSE_LONG_SECONDS = 9
 /** Petit blanc entre deux phrases (points). La voix ne ralentit pas. */
-export const SENTENCE_PAUSE_SECONDS = 0.75
+export const SENTENCE_PAUSE_SECONDS = 1
 /** Blanc entre deux paragraphes. */
-export const PARAGRAPH_PAUSE_SECONDS = 1.55
+export const PARAGRAPH_PAUSE_SECONDS = 1.8
 /** Après une consigne de souffle. */
-export const BREATH_PAUSE_SECONDS = 2.0
+export const BREATH_PAUSE_SECONDS = 2.4
+/** Après une affirmation entre guillemets — un rien de plus, pas une plage vide. */
+const AFFIRMATION_EXTRA_SECONDS = 1.2
+/** Entre deux mouvements, seulement si le script n’a pas déjà posé une pause. */
+const MOVEMENT_HOLD_SECONDS = 2.5
 /** Séance longue : ~20 s de voix max par invoke (évite OOM Edge / lame.js). */
 export const TTS_CHUNK_CHARS = 400
 
@@ -24,31 +28,8 @@ const MOVEMENT_LINE = /\[Mouvement[^\]]*\]/gi
 /** Marqueur fallback annexe : affichage seul, jamais lu */
 const ANNEX_MARK = /\[Annexe[^\]]*\]/gi
 
-export const ANNEX_FALLBACK_MARK = '[Annexe — texte de secours]'
-
 function stripDisplayOnly(raw: string): string {
   return raw.replace(MOVEMENT_LINE, ' ').replace(ANNEX_MARK, ' ')
-}
-
-function asAnswerText(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-/** Fallback commun si GPT plante : même canevas, prénom / objectif du user si on les a. */
-export function personalizeAnnex(
-  script: string,
-  answers?: Record<string, unknown> | null,
-): string {
-  const src = answers && typeof answers === 'object' ? answers : {}
-  const name = asAnswerText(src.q13)
-  let out = script
-  if (name.length >= 2) {
-    out = out.replace(/\bThomas\b/g, name)
-  }
-  if (!/\[Annexe/i.test(out)) {
-    out = `${ANNEX_FALLBACK_MARK}\n\n${out}`
-  }
-  return out
 }
 
 /** Garde les sauts de paragraphe, compacte le reste. */
@@ -63,6 +44,14 @@ function keepParagraphs(text: string): string {
 
 function isBreathCue(text: string): boolean {
   return /respir|inspir|expir|souffle/i.test(text)
+}
+
+function isAffirmation(text: string): boolean {
+  return /[«"]/.test(text)
+}
+
+function gapSeconds(sentence: string, base: number): number {
+  return isAffirmation(sentence) ? base + AFFIRMATION_EXTRA_SECONDS : base
 }
 
 function splitSentences(paragraph: string): string[] {
@@ -105,21 +94,33 @@ export function expandPacing(parts: ScriptPart[]): ScriptPart[] {
         if (!lastInPara) {
           out.push({
             kind: 'silence',
-            seconds: isBreathCue(sentence) ? BREATH_PAUSE_SECONDS : SENTENCE_PAUSE_SECONDS,
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence) ? BREATH_PAUSE_SECONDS : SENTENCE_PAUSE_SECONDS,
+            ),
           })
           return
         }
         if (!lastPara) {
           out.push({
             kind: 'silence',
-            seconds: isBreathCue(sentence)
-              ? Math.max(BREATH_PAUSE_SECONDS, PARAGRAPH_PAUSE_SECONDS)
-              : PARAGRAPH_PAUSE_SECONDS,
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence)
+                ? Math.max(BREATH_PAUSE_SECONDS, PARAGRAPH_PAUSE_SECONDS)
+                : PARAGRAPH_PAUSE_SECONDS,
+            ),
           })
           return
         }
-        if (isBreathCue(sentence)) {
-          out.push({ kind: 'silence', seconds: BREATH_PAUSE_SECONDS })
+        if (isBreathCue(sentence) || isAffirmation(sentence)) {
+          out.push({
+            kind: 'silence',
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence) ? BREATH_PAUSE_SECONDS : SENTENCE_PAUSE_SECONDS,
+            ),
+          })
         }
       })
     })
@@ -167,6 +168,35 @@ export function longSessionParts(script: string): ScriptPart[] {
   return expandPacing(parseAnnexScript(script))
 }
 
+function splitMovements(script: string): string[] {
+  const parts = script
+    .split(/(?=\[Mouvement[^\]]*\])/i)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  return parts.length ? parts : [script]
+}
+
+/**
+ * Le rythme de la voix reste celui d’une séance parlée.
+ * On n’étire pas avec de longues plages vides : juste un court maintien
+ * entre les mouvements, si le script n’en a pas déjà posé un.
+ */
+export function partsForDuration(script: string): ScriptPart[] {
+  const groups = splitMovements(script).map((chunk) => longSessionParts(chunk))
+  if (groups.length <= 1) return groups.flat()
+  const out: ScriptPart[] = []
+  groups.forEach((group, index) => {
+    out.push(...group)
+    if (index >= groups.length - 1) return
+    const tail = group[group.length - 1]
+    const already = tail?.kind === 'silence' ? tail.seconds : 0
+    if (already < MOVEMENT_HOLD_SECONDS) {
+      out.push({ kind: 'silence', seconds: MOVEMENT_HOLD_SECONDS - already })
+    }
+  })
+  return mergeSilences(out)
+}
+
 /** Démo 15 s : blancs phrase / souffle dans un seul invoke. */
 export function demoSessionParts(script: string): ScriptPart[] {
   return expandPacing(parseAnnexScript(script))
@@ -200,12 +230,9 @@ export function chunkSpeech(text: string, max = TTS_CHUNK_CHARS): string[] {
   return chunks
 }
 
-/**
- * Mode démo ~15 s tant que VISIORA_AUDIO_DEMO_SHORT ≠ "0".
- * Remettre le script complet : secrets set VISIORA_AUDIO_DEMO_SHORT=0
- */
+/** Extrait ~15 s seulement si VISIORA_AUDIO_DEMO_SHORT=1. Sinon, séance complète. */
 export function isDemoShortMode(): boolean {
-  return Deno.env.get('VISIORA_AUDIO_DEMO_SHORT') !== '0'
+  return Deno.env.get('VISIORA_AUDIO_DEMO_SHORT') === '1'
 }
 
 export function resolveScript(session: { script?: string | null }): string {
@@ -213,7 +240,7 @@ export function resolveScript(session: { script?: string | null }): string {
     return session.script.trim()
   }
   if (isDemoShortMode()) return ANNEX_DEMO_SHORT_SCRIPT
-  return ANNEX_FIXTURE_SCRIPT
+  return ''
 }
 
 /** Démo ~15 s : on ne lit que le début du script généré. */

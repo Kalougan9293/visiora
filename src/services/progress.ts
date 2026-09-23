@@ -14,7 +14,8 @@ function shiftDateKey(key: string, days: number) {
 
 const PRACTICE_MARKS = [3, 7, 21, 30, 50, 60] as const
 
-function nextMilestoneTarget(days: number) {
+/** Prochain palier strictement au-dessus des jours déjà acquis (3, puis 7, 21…). */
+export function nextMilestoneTarget(days: number) {
   return PRACTICE_MARKS.find((mark) => days < mark) ?? 60
 }
 
@@ -56,11 +57,12 @@ function buildEmptyJournal(days = 28): DayLogEntry[] {
 }
 
 function defaultStats(): ProgressStats {
+  const days = 0
   return {
     streakDays: 0,
     totalListens: 0,
-    milestoneTarget: 21,
-    daysCompletedTowardMilestone: 0,
+    milestoneTarget: nextMilestoneTarget(days),
+    daysCompletedTowardMilestone: days,
     journal: buildEmptyJournal(),
   }
 }
@@ -74,9 +76,12 @@ export const progressService = {
       // Refresh rolling window while keeping completion flags
       const window = Math.max(28, parsed.journal?.length ?? 28)
       const fresh = buildEmptyJournal(window)
-      const map = new Map(parsed.journal.map((j) => [j.date, j]))
+      const map = new Map((parsed.journal ?? []).map((j) => [j.date, j]))
+      const days = parsed.daysCompletedTowardMilestone ?? 0
       return {
         ...parsed,
+        daysCompletedTowardMilestone: days,
+        milestoneTarget: nextMilestoneTarget(days),
         journal: fresh.map((d) => map.get(d.date) ?? d),
       }
     } catch {
@@ -133,7 +138,16 @@ export const progressService = {
     return defaultStats()
   },
 
-  /** Construit le Suivi depuis la table `listens` (1 jour = 1 case, total acquis). */
+  /** Compteurs, calendrier et repères d’une seule visualisation. */
+  statsForSession(marks: { sessionId: string; date: string }[], sessionId: string): ProgressStats {
+    const rows = marks.filter((mark) => mark.sessionId === sessionId)
+    return this.fromListenRows(
+      rows.map((row) => row.date),
+      rows.length,
+    )
+  },
+
+  /** Construit le Suivi depuis des lignes `listens` (1 jour = 1 case). */
   fromListenRows(listenedOn: string[], rowCount: number): ProgressStats {
     const unique = [...new Set(listenedOn.filter(Boolean))].sort()
     const days = unique.length

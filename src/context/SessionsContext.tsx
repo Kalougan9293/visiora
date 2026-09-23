@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { ProgressStats, VisualizationAnswers, VisualizationSession } from '@/types'
+import type { ListenMark, ProgressStats, VisualizationAnswers, VisualizationSession } from '@/types'
 import { useAuth } from '@/context/AuthContext'
 import { audioService } from '@/services/audio'
 import { sessionsService } from '@/services/sessions'
@@ -23,14 +23,15 @@ const CONTINUE_KICK_MS = 8_000
 interface SessionsContextValue {
   sessions: VisualizationSession[]
   sessionsReady: boolean
+  /** Journées validées, chacune rattachée à une visualisation. */
+  listenMarks: ListenMark[]
+  /** Totaux du compte (profil). Le Suivi filtre `listenMarks` par visualisation. */
   stats: ProgressStats
   addSession: (answers: VisualizationAnswers) => Promise<VisualizationSession>
   adjustSession: (sessionId: string, answers: VisualizationAnswers) => Promise<VisualizationSession>
   removeSession: (id: string) => void
   markListened: (id: string) => void
   retryGeneration: (sessionId: string) => Promise<void>
-  simulateProgress: (days: number) => void
-  resetProgress: () => void
 }
 
 const SessionsContext = createContext<SessionsContextValue | null>(null)
@@ -40,7 +41,8 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const userId = user?.id
   const [sessions, setSessions] = useState<VisualizationSession[]>([])
   const [sessionsReady, setSessionsReady] = useState(false)
-  const [stats, setStats] = useState<ProgressStats>(() => progressService.getLocalStats())
+  const [listenMarks, setListenMarks] = useState<ListenMark[]>([])
+  const [localStats, setLocalStats] = useState<ProgressStats>(() => progressService.getLocalStats())
   const kickedRef = useRef(new Set<string>())
   const inFlightRef = useRef(new Set<string>())
   const lastKickAtRef = useRef<Record<string, number>>({})
@@ -58,12 +60,14 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     }
     if (!userId) {
       setSessions([])
+      setListenMarks([])
       setSessionsReady(true)
       sessionsService.clearLocal()
       return
     }
     let cancelled = false
     setSessionsReady(false)
+    setListenMarks([])
     void sessionsService
       .list(userId)
       .then((rows) => {
@@ -79,8 +83,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       })
     void sessionsService.listListenDays(userId).then((listens) => {
       if (cancelled || !listens) return
-      const next = progressService.fromListenRows(listens.dates, listens.count)
-      setStats(next)
+      setListenMarks(listens)
     })
     return () => {
       cancelled = true
@@ -88,8 +91,17 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   }, [userId, authLoading])
 
   useEffect(() => {
-    progressService.persistLocal(stats)
-  }, [stats])
+    if (userId) return
+    progressService.persistLocal(localStats)
+  }, [userId, localStats])
+
+  const stats = useMemo(() => {
+    if (!userId) return localStats
+    return progressService.fromListenRows(
+      listenMarks.map((mark) => mark.date),
+      listenMarks.length,
+    )
+  }, [userId, localStats, listenMarks])
 
   const mergeSession = useCallback((fresh: VisualizationSession) => {
     setSessions((prev) => {
@@ -261,6 +273,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       kickedRef.current.delete(id)
       setSessions((prev) => prev.filter((s) => s.id !== id))
+      setListenMarks((prev) => prev.filter((mark) => mark.sessionId !== id))
       void sessionsService.remove(id, userId).catch((err) => {
         console.warn('[sessions] remove failed', err)
       })
@@ -275,19 +288,21 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           if (userId) {
             const counted = await sessionsService.markListened(id, 0, userId)
             if (!counted) return
+            const today = new Date().toISOString().slice(0, 10)
+            setListenMarks((prev) =>
+              prev.some((mark) => mark.sessionId === id && mark.date === today)
+                ? prev
+                : [...prev, { sessionId: id, date: today }],
+            )
             setSessions((prev) =>
               prev.map((s) => (s.id === id ? { ...s, listens: s.listens + 1 } : s)),
             )
             const listens = await sessionsService.listListenDays(userId)
-            setStats((prev) =>
-              listens
-                ? progressService.fromListenRows(listens.dates, listens.count)
-                : progressService.recordListen(prev),
-            )
+            if (listens) setListenMarks(listens)
             return
           }
-          /** Invité : 1 jour validé max (journal local) */
-          setStats((prev) => {
+          /** Invité : 1 jour validé max (journal local, sans visualisation) */
+          setLocalStats((prev) => {
             const key = new Date().toISOString().slice(0, 10)
             const already = prev.journal.find((d) => d.date === key)?.completed
             if (already) return prev
@@ -304,38 +319,28 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [userId],
   )
 
-  const simulateProgress = useCallback((days: number) => {
-    setStats(progressService.simulateDays(days))
-  }, [])
-
-  const resetProgress = useCallback(() => {
-    setStats(progressService.reset())
-  }, [])
-
   const value = useMemo(
     () => ({
       sessions,
       sessionsReady,
+      listenMarks,
       stats,
       addSession,
       adjustSession,
       removeSession,
       markListened,
       retryGeneration,
-      simulateProgress,
-      resetProgress,
     }),
     [
       sessions,
       sessionsReady,
+      listenMarks,
       stats,
       addSession,
       adjustSession,
       removeSession,
       markListened,
       retryGeneration,
-      simulateProgress,
-      resetProgress,
     ],
   )
 

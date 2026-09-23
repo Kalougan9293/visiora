@@ -3,10 +3,21 @@ import { isSupabaseConfigured, supabase } from './supabase'
 export type AdminUserRow = {
   id: string
   firstName: string
-  lastName: string
   email: string
   audioCount: number
   lastSeenAt: string | null
+}
+
+export type AdminSharedSession = {
+  userId: string
+  firstName: string
+  email: string
+  sessionId: string
+  title: string
+  answers: Record<string, unknown>
+  script: string | null
+  listens: number
+  createdAt: string
 }
 
 export type AdminStats = {
@@ -76,7 +87,6 @@ export const adminService = {
       .map((u) => ({
         id: u.id,
         firstName: u.first_name ?? '',
-        lastName: u.last_name ?? '',
         email: u.email ?? '',
         audioCount: Number(u.audio_count) || 0,
         lastSeenAt: u.last_seen_at,
@@ -97,6 +107,26 @@ export const adminService = {
         storageBytes: Number(raw.storage_bytes) || 0,
       },
     }
+  },
+
+  async listSharedSessions(): Promise<AdminSharedSession[]> {
+    if (!isSupabaseConfigured() || !supabase) return []
+    const { data, error } = await supabase.rpc('admin_list_shared_sessions')
+    if (error) throw error
+    return (data ?? []).map((row) => ({
+      userId: row.user_id,
+      firstName: row.first_name ?? '',
+      email: row.email ?? '',
+      sessionId: row.session_id,
+      title: row.title ?? '',
+      answers:
+        row.answers && typeof row.answers === 'object' && !Array.isArray(row.answers)
+          ? (row.answers as Record<string, unknown>)
+          : {},
+      script: row.script,
+      listens: Number(row.listens) || 0,
+      createdAt: row.created_at,
+    }))
   },
 
   async deleteUser(userId: string): Promise<void> {

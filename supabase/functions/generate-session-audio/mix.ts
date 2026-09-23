@@ -37,11 +37,11 @@ const BED_SILENCE_B64: Record<string, { s3: string; s9: string }> = {
   antoni: { s3: ANTONI_3S_MP3, s9: ANTONI_9S_MP3 },
 }
 
-/** Volume bas : tapis discret, sans clip avec la voix. */
+/** Tapis très discret sous la voix. Même niveau pour les trois fonds. */
 const BED_GAIN: Record<string, number> = {
-  rituel: 0.05,
-  onde: 0.05,
-  antoni: 0.045,
+  rituel: 0.035,
+  onde: 0.035,
+  antoni: 0.032,
 }
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number }
@@ -237,6 +237,86 @@ async function lameEncoder(): Promise<Mp3EncoderInstance> {
     Mp3EncoderCtor = lame.Mp3Encoder
   }
   return new Mp3EncoderCtor(1, SAMPLE_RATE, 128)
+}
+
+const AI_MP3_COMMENT =
+  'Contenu audio généré artificiellement par Visiora. Voix de synthèse.'
+
+function latin1(text: string): Uint8Array {
+  const out = new Uint8Array(text.length)
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i)
+    out[i] = code < 256 ? code : 0x3f
+  }
+  return out
+}
+
+function id3v23Frame(id: string, body: Uint8Array): Uint8Array {
+  const frame = new Uint8Array(10 + body.length)
+  frame.set(latin1(id), 0)
+  frame[4] = (body.length >>> 24) & 0xff
+  frame[5] = (body.length >>> 16) & 0xff
+  frame[6] = (body.length >>> 8) & 0xff
+  frame[7] = body.length & 0xff
+  frame.set(body, 10)
+  return frame
+}
+
+function syncsafeSize(size: number): Uint8Array {
+  return new Uint8Array([
+    (size >>> 21) & 0x7f,
+    (size >>> 14) & 0x7f,
+    (size >>> 7) & 0x7f,
+    size & 0x7f,
+  ])
+}
+
+/**
+ * Étiquette ID3v2.3 en tête du MP3 assemblé.
+ * TXXX AI_GENERATED=1 est le champ machine. COMM est la phrase en français.
+ * Ce n’est pas un certificat C2PA : une ré-encodage peut retirer l’étiquette.
+ */
+export function withAiDisclosureTag(mp3: Uint8Array): Uint8Array {
+  if (mp3.length >= 3 && mp3[0] === 0x49 && mp3[1] === 0x44 && mp3[2] === 0x33) return mp3
+
+  const comment = latin1(AI_MP3_COMMENT)
+  const comm = new Uint8Array(1 + 3 + 1 + comment.length)
+  comm[0] = 0
+  comm.set(latin1('fre'), 1)
+  comm[4] = 0
+  comm.set(comment, 5)
+
+  const desc = latin1('AI_GENERATED')
+  const value = latin1('1')
+  const txxx = new Uint8Array(1 + desc.length + 1 + value.length)
+  txxx[0] = 0
+  txxx.set(desc, 1)
+  txxx[1 + desc.length] = 0
+  txxx.set(value, 2 + desc.length)
+
+  const frames = concatBytes([id3v23Frame('TXXX', txxx), id3v23Frame('COMM', comm)])
+  const tag = new Uint8Array(10 + frames.length)
+  tag.set(latin1('ID3'), 0)
+  tag[3] = 3
+  tag[4] = 0
+  tag.set(syncsafeSize(frames.length), 6)
+  tag.set(frames, 10)
+
+  const out = new Uint8Array(tag.length + mp3.length)
+  out.set(tag, 0)
+  out.set(mp3, tag.length)
+  return out
+}
+
+function concatBytes(parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((sum, part) => sum + part.length, 0)
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
 }
 
 export async function encodeMp3(pcm: Int16Array): Promise<Uint8Array> {

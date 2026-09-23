@@ -71,6 +71,14 @@ export const HEALTH_COPY = {
   checkbox: "J'ai lu et compris. Je suis prêt·e à vivre mon expérience.",
 } as const
 
+/** Le passage par l’écran n’est pas une donnée à conserver. */
+export function answersForStorage<T extends Record<string, unknown>>(answers: T): T {
+  const next = { ...answers }
+  delete next.health_ack
+  delete next.health_ack_at
+  return next
+}
+
 export function needsHealthScreen(
   answers: Record<string, unknown>,
   keywords: readonly string[] = HEALTH_KEYWORDS,

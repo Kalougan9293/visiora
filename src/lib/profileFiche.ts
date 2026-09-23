@@ -47,9 +47,8 @@ export function formatProfileFiche(answers: Record<string, unknown> | null | und
   lines.push(q12Line(src))
   const durationRaw = Number(src.duration_minutes)
   const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
-  lines.push(
-    `Durée cible de la séance : ${duration} minutes. Calibre le texte et les pauses pour tenir ce timing.`,
-  )
+  const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
+  lines.push(`Durée cible : ${duration} minutes, environ ${words} mots.`)
   lines.push('')
   lines.push('Génère le script de séance pour ce profil.')
   return lines.join('\n')

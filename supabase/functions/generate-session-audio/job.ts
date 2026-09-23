@@ -1,8 +1,8 @@
 /** Plan de génération audio découpé (une étape = un invoc Edge Function). */
 
-import { chunkSpeech, longSessionParts, type ScriptPart } from './script.ts'
+import { chunkSpeech, longSessionParts, partsForDuration } from './script.ts'
 
-export const JOB_VERSION = 6
+export const JOB_VERSION = 7
 /** Une pause CDC = un step (MP3 pré-encodé, plus de découpe lame.js). */
 export const SILENCE_SLICE_SECONDS = 12
 
@@ -24,14 +24,16 @@ export type AudioJob = {
   claimedAt: string | null
   phase: 'tts' | 'finalize' | 'done'
   handedToN8n?: boolean
+  /** Présent à partir de la v7 : durée choisie, pour recalculer les blancs. */
+  durationMinutes?: number
 }
 
 type FullStep =
   | { kind: 'speech'; text: string }
   | { kind: 'silence'; seconds: number }
 
-export function buildFullSteps(script: string): FullStep[] {
-  const parts = longSessionParts(script)
+export function buildFullSteps(script: string, minutes = 0): FullStep[] {
+  const parts = minutes > 0 ? partsForDuration(script) : longSessionParts(script)
   const steps: FullStep[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -50,8 +52,8 @@ export function buildFullSteps(script: string): FullStep[] {
   return steps
 }
 
-export function speechTextAt(script: string, index: number): string {
-  const full = buildFullSteps(script)
+export function speechTextAt(script: string, index: number, minutes = 0): string {
+  const full = buildFullSteps(script, minutes)
   const step = full[index]
   if (!step || step.kind !== 'speech') {
     throw new Error(`Pas de texte speech à l’index ${index}`)
@@ -59,8 +61,9 @@ export function speechTextAt(script: string, index: number): string {
   return step.text
 }
 
-export function createAudioJob(script: string, voiceKey: string): AudioJob {
-  const full = buildFullSteps(script)
+export function createAudioJob(script: string, voiceKey: string, minutes = 15): AudioJob {
+  const durationMinutes = minutes === 3 || minutes === 10 || minutes === 15 ? minutes : 15
+  const full = buildFullSteps(script, durationMinutes)
   const steps: JobStep[] = full.map((s) =>
     s.kind === 'speech' ? { kind: 'speech' } : { kind: 'silence', seconds: s.seconds },
   )
@@ -77,6 +80,7 @@ export function createAudioJob(script: string, voiceKey: string): AudioJob {
     claimId: null,
     claimedAt: null,
     phase: 'tts',
+    durationMinutes,
   }
 }
 
@@ -84,7 +88,7 @@ export function isAudioJob(value: unknown): value is AudioJob {
   if (!value || typeof value !== 'object') return false
   const job = value as AudioJob
   return (
-    job.version === JOB_VERSION &&
+    (job.version === 6 || job.version === 7) &&
     Array.isArray(job.steps) &&
     typeof job.nextIndex === 'number' &&
     (job.phase === 'tts' || job.phase === 'finalize' || job.phase === 'done')

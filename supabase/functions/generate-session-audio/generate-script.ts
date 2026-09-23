@@ -53,7 +53,8 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
   lines.push(q12Line(src))
   const durationRaw = Number(src.duration_minutes)
   const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
-  lines.push(`Durée cible de la séance : ${duration} minutes. Calibre le texte et les pauses pour tenir ce timing.`)
+  const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
+  lines.push(`Durée cible : ${duration} minutes, environ ${words} mots.`)
   lines.push('')
   lines.push('Génère le script de séance pour ce profil.')
   return lines.join('\n')
@@ -70,11 +71,19 @@ function looksLikeSessionScript(text: string): boolean {
   return text.length > 80 && (/\[Mouvement/i.test(text) || /\[pause/i.test(text))
 }
 
+function scriptModelFromEnv(): string {
+  return (
+    Deno.env.get('VISIORA_SCRIPT_MODEL')?.trim() ||
+    Deno.env.get('VISIORA_OPENAI_MODEL')?.trim() ||
+    ''
+  )
+}
+
 function preferredModels(override?: string): string[] {
   if (override?.trim()) return [override.trim()]
-  const fromEnv = Deno.env.get('VISIORA_OPENAI_MODEL')?.trim()
-  const list = [fromEnv, 'gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini']
-  return [...new Set(list.filter((m): m is string => Boolean(m)))]
+  const fromEnv = scriptModelFromEnv()
+  if (fromEnv) return [fromEnv]
+  return ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini']
 }
 
 function isAnthropicModel(model: string) {
@@ -188,9 +197,10 @@ async function anthropicCompletion(
 }
 
 export function canGenerateScript(): boolean {
-  return Boolean(
-    Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() && Deno.env.get('OPENAI_API_KEY')?.trim(),
-  )
+  if (!Deno.env.get('VISIORA_MASTER_PROMPT')?.trim()) return false
+  const model = scriptModelFromEnv()
+  if (model.startsWith('claude')) return Boolean(Deno.env.get('ANTHROPIC_API_KEY')?.trim())
+  return Boolean(Deno.env.get('OPENAI_API_KEY')?.trim())
 }
 
 const SCRIPT_CLAIM_TTL_MS = 120_000
@@ -234,6 +244,50 @@ export function hasStoredScript(script: unknown): boolean {
   return typeof script === 'string' && script.trim().length > 40
 }
 
+function spokenWords(script: string): number {
+  return script
+    .replace(/\[[^\]]*\]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean).length
+}
+
+function wordTarget(answers: SessionAnswers | null | undefined): number {
+  const raw = Number(answers && typeof answers === 'object' ? answers.duration_minutes : NaN)
+  const duration = raw === 3 || raw === 10 || raw === 15 ? raw : 15
+  if (duration === 3) return 320
+  if (duration === 10) return 850
+  return 1200
+}
+
+const EXPAND_PROMPT = `Tu allonges un script de visualisation guidée Visiora, sans en changer la méthode.
+Le texte reçu est trop court. Réécris-le plus développé, en gardant la même structure, les mêmes balises [pause] et les « je » entre guillemets.
+Garde le tutoiement et les faits de la fiche. N’invente pas d’objectif, de date ou de symptôme.
+Réponds uniquement avec le script.`
+
+async function expandIfShort(
+  answers: SessionAnswers | null | undefined,
+  draft: string,
+  model: string,
+  anthropic: boolean,
+  apiKey: string,
+): Promise<string> {
+  const target = wordTarget(answers)
+  const before = spokenWords(draft)
+  if (before >= target * 0.75) return draft
+  const userContent = `${formatProfileFiche(answers)}
+
+Script trop court (${before} mots, vise environ ${target}) :
+
+${draft}`
+  const result = anthropic
+    ? await anthropicCompletion(apiKey, model, EXPAND_PROMPT, userContent)
+    : await chatCompletion(apiKey, model, EXPAND_PROMPT, userContent)
+  if (!result.ok || !looksLikeSessionScript(result.script)) return draft
+  if (spokenWords(result.script) <= before) return draft
+  console.log('[generate-session-audio] script allongé', spokenWords(result.script))
+  return result.script
+}
+
 export async function generateSessionScriptDetailed(
   answers: SessionAnswers | null | undefined,
   modelOverride?: string,
@@ -272,7 +326,8 @@ export async function generateSessionScriptDetailed(
       continue
     }
     console.log('[generate-session-audio] script ok', model, result.script.length)
-    return { script: result.script, model, usage: result.usage }
+    const script = await expandIfShort(answers, result.script, model, anthropic, apiKey)
+    return { script, model, usage: result.usage }
   }
 
   throw new Error(`Génération script : ${lastDetail}`)

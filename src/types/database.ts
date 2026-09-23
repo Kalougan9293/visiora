@@ -13,6 +13,7 @@ export interface Database {
           email: string
           cgu_accepted: boolean
           cgu_accepted_at: string | null
+          share_sessions: boolean
           is_admin: boolean
           created_at: string
           updated_at: string
@@ -25,6 +26,7 @@ export interface Database {
           email?: string
           cgu_accepted?: boolean
           cgu_accepted_at?: string | null
+          share_sessions?: boolean
           is_admin?: boolean
           created_at?: string
           updated_at?: string
@@ -37,6 +39,7 @@ export interface Database {
           email?: string
           cgu_accepted?: boolean
           cgu_accepted_at?: string | null
+          share_sessions?: boolean
           is_admin?: boolean
           created_at?: string
           updated_at?: string
@@ -143,6 +146,86 @@ export interface Database {
         }
         Relationships: []
       }
+      listen_plays: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          started_at: string
+          duration_seconds: number
+          stop_seconds: number
+          max_seconds: number
+          completed: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          started_at?: string
+          duration_seconds?: number
+          stop_seconds?: number
+          max_seconds?: number
+          completed?: boolean
+          updated_at?: string
+        }
+        Update: {
+          duration_seconds?: number
+          stop_seconds?: number
+          max_seconds?: number
+          completed?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wizard_drops: {
+        Row: {
+          id: string
+          user_id: string
+          step_number: number
+          question_ids: string
+          completed: boolean
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          user_id: string
+          step_number: number
+          question_ids: string
+          completed?: boolean
+          updated_at?: string
+        }
+        Update: {
+          step_number?: number
+          question_ids?: string
+          completed?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      listen_feedback: {
+        Row: {
+          id: string
+          user_id: string
+          session_id: string
+          scale: number
+          remark: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          session_id: string
+          scale: number
+          remark?: string | null
+          created_at?: string
+        }
+        Update: {
+          scale?: number
+          remark?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -168,6 +251,25 @@ export interface Database {
       admin_delete_user: {
         Args: { target_id: string }
         Returns: boolean
+      }
+      admin_list_shared_sessions: {
+        Args: Record<string, never>
+        Returns: {
+          user_id: string
+          first_name: string
+          last_name: string
+          email: string
+          session_id: string
+          title: string
+          answers: Json
+          script: string | null
+          listens: number
+          created_at: string
+        }[]
+      }
+      admin_export_metrics: {
+        Args: Record<string, never>
+        Returns: Json
       }
       record_listen: {
         Args: { p_session_id: string }

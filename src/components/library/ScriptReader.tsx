@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils'
-import { ANNEX_SCRIPT } from '@/data/annexScript'
 
 export type ScriptBlock =
   | { kind: 'movement'; title: string }
@@ -64,8 +63,14 @@ export function ScriptReader({
   script?: string | null
   className?: string
 }) {
-  const source = (script && script.trim().length > 40 ? script : ANNEX_SCRIPT).trim()
-  const isAnnexFallback = /\[Annexe/i.test(source)
+  const source = script?.trim() ?? ''
+  if (source.length <= 40) {
+    return (
+      <p className="text-sm leading-relaxed text-ink/60 dark:text-champagne/70">
+        Le texte de cette séance n’est pas encore prêt.
+      </p>
+    )
+  }
   const blocks = parseScriptForDisplay(source)
 
   return (
@@ -76,17 +81,6 @@ export function ScriptReader({
         className,
       )}
     >
-      {isAnnexFallback && (
-        <p
-          className={cn(
-            'mb-4 text-[11px] leading-relaxed',
-            'text-ink/45 dark:text-[var(--vs-brume)]',
-          )}
-        >
-          Script de secours (annexe). Ce n’est pas le texte d’un autre compte — la
-          génération IA n’était pas disponible.
-        </p>
-      )}
       {blocks.map((b, i) => {
         if (b.kind === 'movement') {
           return (

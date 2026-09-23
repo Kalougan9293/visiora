@@ -3,6 +3,7 @@ import { Pause, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
+import { AI_DISCLOSURE } from '@/data/uiCopy'
 import { hasListenedEnough } from '@/lib/listenThreshold'
 
 interface AudioPlayerProps {
@@ -10,6 +11,10 @@ interface AudioPlayerProps {
   title: string
   subtitle?: string
   onPlayStart?: () => void
+  /** Nouvelle lecture (pas une reprise après pause). */
+  onListenBegin?: () => void
+  /** Position courante. `ended` = la piste est allée au bout. */
+  onListenSample?: (sample: { current: number; duration: number; ended: boolean }) => void
   className?: string
   /** Bouton play seul, pour une ligne de bibliothèque */
   compact?: boolean
@@ -21,6 +26,8 @@ export function AudioPlayer({
   title,
   subtitle,
   onPlayStart,
+  onListenBegin,
+  onListenSample,
   className,
   compact = false,
   ambiance = null,
@@ -30,6 +37,12 @@ export function AudioPlayer({
   const [progress, setProgress] = useState(0)
   const countedRef = useRef(false)
   const bedHeldRef = useRef(false)
+  const onSampleRef = useRef(onListenSample)
+  const onBeginRef = useRef(onListenBegin)
+  const lastSampleRef = useRef({ current: 0, duration: 0 })
+  const lastSentRef = useRef(0)
+  onSampleRef.current = onListenSample
+  onBeginRef.current = onListenBegin
 
   const dropBed = () => {
     if (!bedHeldRef.current) return
@@ -69,20 +82,32 @@ export function AudioPlayer({
       onPlayStart?.()
     }
 
+    const remember = (ended = false, force = false) => {
+      const duration = Number.isFinite(el.duration) ? el.duration : 0
+      const current = Number.isFinite(el.currentTime) ? el.currentTime : 0
+      lastSampleRef.current = { current, duration }
+      const now = Date.now()
+      if (!force && !ended && now - lastSentRef.current < 5000) return
+      lastSentRef.current = now
+      onSampleRef.current?.({ current, duration, ended })
+    }
     const onTime = () => {
       if (!el.duration || Number.isNaN(el.duration)) return
       setProgress((el.currentTime / el.duration) * 100)
       markIfEnough(false)
+      remember(false)
     }
     const onEnd = () => {
       setPlaying(false)
       setProgress(100)
       markIfEnough(true)
       dropBed()
+      remember(true, true)
     }
     const onPlay = () => setPlaying(true)
     const onPause = () => {
       if (!el.ended) setPlaying(false)
+      remember(el.ended, true)
     }
 
     el.addEventListener('timeupdate', onTime)
@@ -94,6 +119,10 @@ export function AudioPlayer({
       el.removeEventListener('ended', onEnd)
       el.removeEventListener('play', onPlay)
       el.removeEventListener('pause', onPause)
+      const last = lastSampleRef.current
+      if (last.duration > 0) {
+        onSampleRef.current?.({ current: last.current, duration: last.duration, ended: el.ended })
+      }
     }
   }, [src, onPlayStart])
 
@@ -106,11 +135,13 @@ export function AudioPlayer({
       return
     }
     try {
+      const fresh = el.ended || el.currentTime < 0.4
       if (el.ended || (el.duration && el.currentTime >= el.duration - 0.05)) {
         el.currentTime = 0
         setProgress(0)
         countedRef.current = false
       }
+      if (fresh) onBeginRef.current?.()
       takeBed()
       await el.play()
     } catch (err) {
@@ -165,6 +196,7 @@ export function AudioPlayer({
           {subtitle && (
             <p className="mt-0.5 text-xs text-ink/76 dark:text-champagne/90">{subtitle}</p>
           )}
+          <p className="mt-1 text-xs text-ink/70 dark:text-champagne/80">{AI_DISCLOSURE.player}</p>
           <div className="mt-2 h-1 overflow-hidden rounded-full bg-black/8 dark:bg-white/10">
             <div
               className="h-full rounded-full bg-[var(--vs-azur)] transition-[width] duration-200"

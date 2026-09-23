@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Download, Pencil, Trash2 } from 'lucide-react'
 import { audioStorage } from '@/services/audioStorage'
@@ -6,7 +6,8 @@ import { AudioPlayer } from '@/components/audio/AudioPlayer'
 import { GeneratingWaterProgress } from '@/components/library/GeneratingWaterProgress'
 import { ScriptReader } from '@/components/library/ScriptReader'
 import { useSessions } from '@/context/SessionsContext'
-import { APP_COPY } from '@/data/uiCopy'
+import { AI_DISCLOSURE, APP_COPY } from '@/data/uiCopy'
+import { metricsService } from '@/services/metrics'
 import { formatDateFr, cn } from '@/lib/utils'
 import type { VisualizationSession } from '@/types'
 
@@ -16,7 +17,45 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [askAfter, setAskAfter] = useState(false)
+  const [scale, setScale] = useState<number | null>(null)
+  const [remark, setRemark] = useState('')
+  const [afterSent, setAfterSent] = useState(false)
+  const playIdRef = useRef<string | null>(null)
+  const maxSecondsRef = useRef(0)
+  const chainRef = useRef(Promise.resolve())
+  const playGenRef = useRef(0)
   const onHeardEnough = useCallback(() => markListened(session.id), [markListened, session.id])
+
+  const onListenBegin = useCallback(() => {
+    const gen = ++playGenRef.current
+    playIdRef.current = null
+    maxSecondsRef.current = 0
+    chainRef.current = chainRef.current
+      .then(async () => {
+        const id = await metricsService.startPlay(session.id)
+        if (playGenRef.current === gen) playIdRef.current = id
+      })
+      .catch(() => {})
+  }, [session.id])
+
+  const onListenSample = useCallback(
+    (sample: { current: number; duration: number; ended: boolean }) => {
+      if (sample.ended) setAskAfter(true)
+      maxSecondsRef.current = Math.max(maxSecondsRef.current, sample.current)
+      const maxSeconds = maxSecondsRef.current
+      const gen = playGenRef.current
+      chainRef.current = chainRef.current
+        .then(async () => {
+          if (playGenRef.current !== gen) return
+          if (!playIdRef.current) playIdRef.current = await metricsService.startPlay(session.id)
+          if (playGenRef.current !== gen || !playIdRef.current) return
+          await metricsService.updatePlay(playIdRef.current, sample, maxSeconds)
+        })
+        .catch(() => {})
+    },
+    [session.id],
+  )
 
   const downloadAudio = useCallback(async () => {
     if ((!session.audioUrl && !session.audioStoragePath) || downloading) return
@@ -91,6 +130,11 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             {session.durationMinutes} min · {session.listens} écoute
             {session.listens !== 1 ? 's' : ''}
           </span>
+          {ready && (
+            <span className="text-[10px] leading-snug text-ink/70 dark:text-champagne/85">
+              {AI_DISCLOSURE.player}
+            </span>
+          )}
         </div>
 
         {hasScript && ready && (
@@ -169,10 +213,71 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               src={session.audioUrl}
               title={session.title}
               onPlayStart={onHeardEnough}
+              onListenBegin={onListenBegin}
+              onListenSample={onListenSample}
             />
           )}
         </div>
       </div>
+
+      {askAfter && !afterSent && (
+        <form
+          className="mt-1 rounded-2xl border border-black/8 bg-cream-card/80 px-4 py-4 text-left dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!scale) return
+            void metricsService.saveFeedback(session.id, scale, remark).then((ok) => {
+              if (ok) setAfterSent(true)
+            })
+          }}
+        >
+          <p className="text-sm font-medium text-ink dark:text-cream">{AI_DISCLOSURE.afterTitle}</p>
+          <p className="mt-1 text-[11px] text-ink/55 dark:text-champagne/70">{AI_DISCLOSURE.afterScaleHint}</p>
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setScale(n)}
+                className={cn(
+                  'h-8 w-8 rounded-full text-xs font-medium',
+                  scale === n
+                    ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
+                    : 'border border-black/10 text-ink/70 dark:border-white/15 dark:text-cream/80',
+                )}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+          <label className="mt-4 block text-sm text-ink dark:text-cream">
+            {AI_DISCLOSURE.afterRemark}
+            <textarea
+              value={remark}
+              onChange={(event) => setRemark(event.target.value)}
+              placeholder={AI_DISCLOSURE.afterRemarkHint}
+              rows={3}
+              className="mt-1.5 w-full resize-none rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-ink/35 dark:border-white/15 dark:placeholder:text-cream/35"
+            />
+          </label>
+          <div className="mt-3 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setAfterSent(true)}
+              className="text-xs text-ink/50 dark:text-champagne/60"
+            >
+              {AI_DISCLOSURE.afterSkip}
+            </button>
+            <button
+              type="submit"
+              disabled={!scale}
+              className="rounded-full bg-[var(--vs-or)] px-4 py-1.5 text-xs font-semibold text-[var(--vs-nuit)] disabled:opacity-40"
+            >
+              {AI_DISCLOSURE.afterSend}
+            </button>
+          </div>
+        </form>
+      )}
 
       {scriptOpen && (
         <div

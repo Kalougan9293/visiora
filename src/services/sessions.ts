@@ -1,6 +1,7 @@
-import type { VisualizationAnswers, VisualizationSession } from '@/types'
+import type { ListenMark, VisualizationAnswers, VisualizationSession } from '@/types'
 import { normalizeDuration } from '@/lib/sessionDuration'
 import { audioStorage } from './audioStorage'
+import { answersForStorage } from './healthGate'
 import { isSupabaseConfigured, supabase } from './supabase'
 import type { SessionRow } from '@/types/database'
 
@@ -106,20 +107,19 @@ export const sessionsService = {
     const status = 'generating' as const
 
     if (isSupabaseConfigured() && supabase) {
-      const healthAckAt =
-        typeof answers.health_ack_at === 'string' ? answers.health_ack_at : null
+      const storedAnswers = answersForStorage(answers)
       const { data, error } = await supabase
         .from('sessions')
         .insert({
           user_id: userId,
           title,
-          answers,
+          answers: storedAnswers,
           status,
           duration_minutes: durationMinutes,
           voice_id: voiceId,
           audio_bytes: 5,
           listens: 0,
-          health_ack_at: healthAckAt,
+          health_ack_at: null,
         })
         .select('*')
         .single()
@@ -153,6 +153,7 @@ export const sessionsService = {
 
   async remove(id: string, userId?: string): Promise<void> {
     if (isSupabaseConfigured() && supabase && userId) {
+      await audioStorage.clearGenerated(userId, id)
       const { error } = await supabase.from('sessions').delete().eq('id', id).eq('user_id', userId)
       if (error) throw error
     }
@@ -172,7 +173,8 @@ export const sessionsService = {
     const { data, error } = await supabase
       .from('sessions')
       .update({
-        answers,
+        answers: answersForStorage(answers),
+        health_ack_at: null,
         title: keepTitle,
         duration_minutes: durationMinutes,
         voice_id: voiceId,
@@ -197,20 +199,22 @@ export const sessionsService = {
     return rowToSession(data)
   },
 
-  async listListenDays(userId?: string): Promise<{ dates: string[]; count: number } | null> {
+  async listListenDays(userId?: string): Promise<ListenMark[] | null> {
     if (!userId || !isSupabaseConfigured() || !supabase) return null
     const { data, error } = await supabase
       .from('listens')
-      .select('listened_on')
+      .select('session_id, listened_on')
       .eq('user_id', userId)
     if (error || !data) {
       if (error) console.warn('[sessions] listens', error.message)
       return null
     }
-    return {
-      dates: data.map((row) => String(row.listened_on)).filter(Boolean),
-      count: data.length,
-    }
+    return data
+      .map((row) => ({
+        sessionId: String(row.session_id),
+        date: String(row.listened_on),
+      }))
+      .filter((row) => row.sessionId && row.date)
   },
 
   async markListened(id: string, nextListens: number, userId?: string): Promise<boolean> {

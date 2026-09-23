@@ -1,5 +1,21 @@
 /** Textes officiels v1 — tutoiement partout, aucun mot banni. */
 
+export const AI_DISCLOSURE = {
+  beforeQuestionnaire:
+    'Tu réponds à une intelligence artificielle, pas à une personne. Tes réponses servent à générer automatiquement le texte et la voix de ta séance.',
+  player: 'Voix générée artificiellement.',
+  privacy:
+    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez Visiora n’y accède, sauf si tu l’autorises.',
+  shareCheckbox: 'J’accepte que Visiora lise mes séances pour améliorer la méthode.',
+  shareRevoke: 'Tu peux retirer cette autorisation à tout moment.',
+  afterTitle: 'Comment te sens-tu maintenant ?',
+  afterScaleHint: '1, très bas. 10, très bien.',
+  afterRemark: 'Une remarque sur cette séance ?',
+  afterRemarkHint: 'Dis-nous ce qui a marché, et ce qui n’a pas marché.',
+  afterSkip: 'Passer',
+  afterSend: 'Envoyer',
+} as const
+
 export const HOME_COPY = {
   badge: 'IMAGERIE MENTALE · IA',
   line1: 'Visualise.',
@@ -26,7 +42,13 @@ export const LIBRARY_COPY = {
 
 export const PROGRESS_COPY = {
   title: 'Mon chemin',
-  subtitle: 'Chaque écoute compte, à ton rythme',
+  subtitle: 'Chaque visualisation avance à son rythme',
+  emptyTitle: 'Pas encore de visualisation',
+  emptyBody:
+    'Dès que tu en crées une, ses compteurs, son calendrier et ses repères apparaîtront ici. Une écoute ne fait avancer qu’elle.',
+  emptyCta: 'Créer ma séance',
+  lockedBody: 'Connecte-toi pour suivre chaque visualisation à part.',
+  lockedCta: 'Se connecter',
   listens: 'Séances écoutées',
   practiceDays: 'Jours de pratique',
   nextLabel: 'PROCHAIN REPÈRE',

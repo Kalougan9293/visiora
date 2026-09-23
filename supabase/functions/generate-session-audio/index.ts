@@ -9,7 +9,7 @@ import {
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript, personalizeAnnex } from './script.ts'
+import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript } from './script.ts'
 import {
   canGenerateScript,
   generateSessionScript,
@@ -26,12 +26,12 @@ import {
   TTS_PCM_FORMAT,
   upsampleTts,
   encodeMp3,
+  withAiDisclosureTag,
   pcmFromEleven,
   silencePcm,
   loadBed,
   mixLoopingBed,
   concatPcm,
-  silenceBedMp3,
 } from './mix.ts'
 
 const corsHeaders = {
@@ -179,7 +179,7 @@ async function handleDemoShort(params: {
     pcmParts.push(pcm)
   }
 
-  const mp3 = await encodeMp3(concatPcm(pcmParts))
+  const mp3 = withAiDisclosureTag(await encodeMp3(concatPcm(pcmParts)))
   if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
 
   const path = `${params.userId}/${params.sessionId}.mp3`
@@ -314,6 +314,43 @@ function jobIsBusy(job: AudioJob): boolean {
   return age >= 0 && age < CLAIM_TTL_MS
 }
 
+function storageErrorText(error: unknown): string {
+  if (!error || typeof error !== 'object') return error ? String(error) : 'missing'
+  const row = error as { message?: string; statusCode?: string | number; status?: string | number; error?: string; name?: string }
+  const text = [row.name, row.statusCode ?? row.status, row.error, row.message]
+    .filter((part) => part != null && String(part).trim() !== '')
+    .join(' ')
+  return text || 'réponse storage vide'
+}
+
+/** Relit un segment. Deux assemblages en parallèle font renvoyer une erreur vide. */
+async function downloadPart(
+  admin: SupabaseClient,
+  path: string,
+  index: number,
+): Promise<Uint8Array> {
+  let last = 'missing'
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const { data, error } = await admin.storage.from('audios').download(path)
+    if (!error && data) {
+      const bytes = new Uint8Array(await data.arrayBuffer())
+      if (bytes.byteLength >= 32) return bytes
+      last = 'segment trop court'
+    } else {
+      last = storageErrorText(error)
+    }
+    if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
+  }
+  throw new Error(`Lecture part ${index}: ${last}`)
+}
+
+async function holdFinalizeClaim(admin: SupabaseClient, sessionId: string, job: AudioJob) {
+  if (!job.claimId) job.claimId = crypto.randomUUID()
+  job.claimedAt = new Date().toISOString()
+  job.phase = 'finalize'
+  await setProgress(admin, sessionId, 94, job)
+}
+
 async function clearParts(admin: SupabaseClient, userId: string, sessionId: string) {
   const prefix = `${userId}/${sessionId}/parts`
   const { data } = await admin.storage.from('audios').list(`${userId}/${sessionId}/parts`, { limit: 1000 })
@@ -360,17 +397,8 @@ async function encodeStepMp3(params: {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
   let requestId: string | null = null
   const previousRequestIds = [...params.previousRequestIds]
-  const sampleRate = 44100
 
   if (params.step.kind === 'silence') {
-    const pre = await silenceBedMp3(appVoiceKey, params.step.seconds)
-    const bedForOffset = await loadBed(appVoiceKey)
-    const loopLen = Math.max(1, bedForOffset?.pcm.length ?? sampleRate * 12)
-    const nextOffset =
-      (params.bedOffset + Math.round(params.step.seconds * sampleRate)) % loopLen
-    if (pre && pre.byteLength >= 32) {
-      return { mp3: pre, requestId: null, bedOffset: nextOffset, previousRequestIds }
-    }
     const bed = await loadBed(appVoiceKey)
     let pcm = upsampleTts(silencePcm(params.step.seconds))
     if (bed) {
@@ -382,7 +410,7 @@ async function encodeStepMp3(params: {
     }
     const mp3 = await encodeMp3(pcm)
     if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-    return { mp3, requestId: null, bedOffset: nextOffset, previousRequestIds }
+    return { mp3, requestId: null, bedOffset: params.bedOffset, previousRequestIds }
   }
 
   const text = params.speechText?.trim()
@@ -448,8 +476,7 @@ async function processOneStep(params: {
 
   if (job.nextIndex >= job.steps.length) {
     job.phase = 'finalize'
-    job.claimId = null
-    job.claimedAt = null
+    await holdFinalizeClaim(params.admin, params.sessionId, job)
     return { job: await finalizeJob({ ...params, job }), done: true }
   }
 
@@ -470,7 +497,11 @@ async function processOneStep(params: {
   if (speechItems.length) {
     const batch = await Promise.all(
       speechItems.map(async (item) => {
-        const text = speechTextAt(params.script, item.index)
+        const text = speechTextAt(
+          params.script,
+          item.index,
+          params.job.version >= 7 ? (params.job.durationMinutes ?? 15) : 0,
+        )
         const tts = await elevenTts({
           apiKey: params.elevenKey,
           voiceId: resolveElevenVoiceId(params.voiceId),
@@ -538,13 +569,16 @@ async function processOneStep(params: {
   if (job.nextIndex >= job.steps.length) job.phase = 'finalize'
 
   job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
+
+  if (job.phase === 'finalize') {
+    /** Ne pas lâcher le claim : n8n rappelle toutes les 2 s et lancerait un second montage. */
+    await holdFinalizeClaim(params.admin, params.sessionId, job)
+    return { job: await finalizeJob({ ...params, job }), done: true }
+  }
+
   job.claimId = null
   job.claimedAt = null
   await setProgress(params.admin, params.sessionId, progressPct(job), job)
-
-  if (job.phase === 'finalize') {
-    return { job: await finalizeJob({ ...params, job }), done: true }
-  }
   return { job, done: false }
 }
 
@@ -556,19 +590,29 @@ async function finalizeJob(params: {
   job: AudioJob
 }): Promise<AudioJob> {
   const job = params.job
-  job.phase = 'finalize'
-  await setProgress(params.admin, params.sessionId, 94, job)
+  const { data: existing } = await params.admin
+    .from('sessions')
+    .select('status, audio_path')
+    .eq('id', params.sessionId)
+    .maybeSingle()
+  if (existing?.status === 'ready' && existing.audio_path) {
+    job.phase = 'done'
+    job.claimId = null
+    job.claimedAt = null
+    return job
+  }
+
+  await holdFinalizeClaim(params.admin, params.sessionId, job)
 
   const chunks: Uint8Array[] = []
   for (let i = 0; i < job.steps.length; i++) {
+    if (i > 0 && i % 8 === 0) await holdFinalizeClaim(params.admin, params.sessionId, job)
     const step = job.steps[i]!
     const path = step.partPath ?? partPath(params.userId, params.sessionId, i)
-    const { data, error } = await params.admin.storage.from('audios').download(path)
-    if (error || !data) throw new Error(`Lecture part ${i}: ${error?.message ?? 'missing'}`)
-    chunks.push(new Uint8Array(await data.arrayBuffer()))
+    chunks.push(await downloadPart(params.admin, path, i))
   }
 
-  const audioBytes = concatBytes(chunks)
+  const audioBytes = withAiDisclosureTag(concatBytes(chunks))
   if (audioBytes.byteLength < 1000) throw new Error('Fichier audio trop court')
 
   const path = `${params.userId}/${params.sessionId}.mp3`
@@ -669,6 +713,14 @@ async function notifyN8n(sessionId: string): Promise<boolean> {
     console.warn('[generate-session-audio] n8n webhook failed', err)
     return false
   }
+}
+
+function sessionMinutes(answers: unknown): number {
+  const raw = answers && typeof answers === 'object'
+    ? Number((answers as { duration_minutes?: unknown }).duration_minutes)
+    : NaN
+  if (raw === 3 || raw === 10 || raw === 15) return raw
+  return 15
 }
 
 Deno.serve(async (req) => {
@@ -796,7 +848,9 @@ Deno.serve(async (req) => {
     return json({ ok: true, accepted: true, status: 'ready' }, 202)
   }
 
-  if (session.status === 'failed' && !force && !reset) {
+  const failedJob = isAudioJob(session.audio_job) ? (session.audio_job as AudioJob) : null
+  /** N8N s’arrête sur failed. Le bouton Relancer, lui, reprend le montage sans effacer les segments. */
+  if (session.status === 'failed' && !force && !reset && (isOrchestrator || !failedJob)) {
     return json({
       ok: false,
       error: 'Generation failed',
@@ -806,7 +860,7 @@ Deno.serve(async (req) => {
 
   const canBackground = typeof EdgeRuntime !== 'undefined' && Boolean(EdgeRuntime?.waitUntil)
 
-  /** Script d'abord, hors du TTS : un seul appel OpenAI, pas de timeout client. */
+  /** Script d'abord, hors du TTS : un seul appel au modèle, pas de timeout client. */
   if (!hasStoredScript(session.script) && canGenerateScript()) {
     if (isScriptInProgress(session.audio_job)) {
       return json({ ok: true, accepted: true, status: 'generating', progress: 8 }, 202)
@@ -827,23 +881,16 @@ Deno.serve(async (req) => {
         await saveGeneratedScript(admin, sessionId, session.answers)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'script failed'
-        console.error('[generate-session-audio] script fallback annex', message)
-        const fallback = personalizeAnnex(
-          resolveScript({ script: null }),
-          session.answers && typeof session.answers === 'object'
-            ? (session.answers as Record<string, unknown>)
-            : {},
-        )
+        console.error('[generate-session-audio] script failed', message)
         await admin
           .from('sessions')
           .update({
-            script: fallback,
+            status: 'failed',
             audio_job: null,
-            audio_bytes: 12,
-            status: 'generating',
             updated_at: new Date().toISOString(),
           })
           .eq('id', sessionId)
+        return
       }
       if (!isDemoShortMode() && n8nConfigured) {
         await admin
@@ -979,11 +1026,22 @@ Deno.serve(async (req) => {
   }
 
   const script = resolveScript(session)
+  if (!script.trim()) {
+    await admin
+      .from('sessions')
+      .update({
+        status: 'failed',
+        audio_job: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId)
+    return json({ ok: false, error: 'Script manquant', status: 'failed' }, 409)
+  }
   const voiceId = (session.voice_id as string | null) ?? null
   const voiceKey = (voiceId ?? 'rituel').toLowerCase()
 
   if (!job) {
-    job = createAudioJob(script, voiceKey)
+    job = createAudioJob(script, voiceKey, sessionMinutes(session.answers))
     if (isOrchestrator || n8nConfigured) job.handedToN8n = true
     const { error: initError } = await admin
       .from('sessions')
@@ -1007,7 +1065,8 @@ Deno.serve(async (req) => {
    * Démarrage user (pas chain / pas orchestrateur) + N8N configuré
    * → on confie la boucle longue à N8N (meilleure fiabilité 15 min).
    */
-  if (!isOrchestrator && !chain && n8nConfigured) {
+  if (!isOrchestrator && !chain && n8nConfigured && job.phase !== 'finalize') {
+    if (session.status === 'failed') job.handedToN8n = false
     if (job.handedToN8n) {
       return json({
         ok: true,

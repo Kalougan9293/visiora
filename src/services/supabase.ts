@@ -19,7 +19,4 @@ export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured()
     })
   : null
 
-/** @deprecated Prefer `supabase` — kept for older service stubs */
-export const supabaseClient = supabase
-
 export const AUDIO_BUCKET = 'audios' as const

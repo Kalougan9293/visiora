@@ -8,6 +8,7 @@ create table if not exists public.profiles (
   email text not null default '',
   cgu_accepted boolean not null default false,
   cgu_accepted_at timestamptz,
+  share_sessions boolean not null default false,
   is_admin boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -84,14 +85,15 @@ create policy "sessions_delete_own" on public.sessions for delete using (auth.ui
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, first_name, last_name, email, cgu_accepted, cgu_accepted_at)
+  insert into public.profiles (id, first_name, last_name, email, cgu_accepted, cgu_accepted_at, share_sessions)
   values (
     new.id,
     coalesce(new.raw_user_meta_data->>'first_name', ''),
     coalesce(new.raw_user_meta_data->>'last_name', ''),
     coalesce(new.email, ''),
     coalesce((new.raw_user_meta_data->>'cgu_accepted')::boolean, false),
-    case when coalesce((new.raw_user_meta_data->>'cgu_accepted')::boolean, false) then now() else null end
+    case when coalesce((new.raw_user_meta_data->>'cgu_accepted')::boolean, false) then now() else null end,
+    coalesce((new.raw_user_meta_data->>'share_sessions')::boolean, false)
   );
   return new;
 end;

@@ -19,6 +19,8 @@ import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { LegalFooter } from '@/components/layout/LegalFooter'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
+import { AI_DISCLOSURE } from '@/data/uiCopy'
+import { metricsService } from '@/services/metrics'
 import { HEALTH_KEYWORDS, needsHealthScreen } from '@/services/healthGate'
 import { healthKeywordsService } from '@/services/healthKeywords'
 
@@ -45,6 +47,7 @@ export function CreatePage() {
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const hydratedAdjustRef = useRef<string | null>(null)
+  const wizardAttemptRef = useRef<string | null>(null)
 
   useEffect(() => {
     void healthKeywordsService.list().then(setHealthWords)
@@ -76,6 +79,13 @@ export function CreatePage() {
   }, [adjustId, sessions])
 
   const step = WIZARD_STEPS[stepIdx]
+
+  useEffect(() => {
+    if (phase !== 'wizard' || !user || !step) return
+    if (!wizardAttemptRef.current) wizardAttemptRef.current = crypto.randomUUID()
+    const ids = healthGate ? 'sante' : step.fields.map((field) => field.id).join(',')
+    void metricsService.touchWizard(wizardAttemptRef.current, step.step, ids)
+  }, [phase, user, step, stepIdx, healthGate])
 
   const canContinue = useMemo(() => {
     if (!step) return false
@@ -137,7 +147,10 @@ export function CreatePage() {
       ? adjustSession(adjustId, payload)
       : addSession(payload)
     void run
-      .then(() => navigate('/bibliotheque'))
+      .then(() => {
+        if (wizardAttemptRef.current) void metricsService.completeWizard(wizardAttemptRef.current)
+        navigate('/bibliotheque')
+      })
       .catch((err: unknown) => {
         setSubmitError(err instanceof Error ? err.message : 'Impossible d’enregistrer la séance')
       })
@@ -221,6 +234,12 @@ export function CreatePage() {
         </h1>
         <p className="mt-4 max-w-md text-sm leading-relaxed text-ink/82 dark:text-cream/92">
           {CREATE_INTRO.body}
+        </p>
+        <p className="mt-4 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+          {AI_DISCLOSURE.beforeQuestionnaire}
+        </p>
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+          {AI_DISCLOSURE.privacy}
         </p>
 
         <Card className="mt-8 w-full max-w-md !p-5 text-center">
@@ -333,7 +352,6 @@ export function CreatePage() {
         </Button>
         )}
       </div>
-      <LegalFooter className="pt-3" />
     </div>
   )
 }

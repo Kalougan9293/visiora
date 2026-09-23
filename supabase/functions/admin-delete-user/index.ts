@@ -5,6 +5,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+type StorageAdmin = {
+  storage: {
+    from: (bucket: string) => {
+      list: (
+        prefix: string,
+        opts: { limit: number },
+      ) => Promise<{ data: { name: string; id: string | null }[] | null }>
+      remove: (paths: string[]) => Promise<unknown>
+    }
+  }
+}
+
+async function listAudioPaths(admin: StorageAdmin, prefix: string): Promise<string[]> {
+  const { data } = await admin.storage.from('audios').list(prefix, { limit: 1000 })
+  const paths: string[] = []
+  for (const file of data ?? []) {
+    if (!file.name) continue
+    const path = `${prefix}/${file.name}`
+    if (file.id === null) paths.push(...(await listAudioPaths(admin, path)))
+    else paths.push(path)
+  }
+  return paths
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -55,24 +79,7 @@ Deno.serve(async (req) => {
   if (profile?.is_admin) return json({ error: 'Impossible de supprimer un admin.' }, 400)
 
   try {
-    const { data: files } = await admin.storage.from('audios').list(targetId, {
-      limit: 1000,
-      sortBy: { column: 'name', order: 'asc' },
-    })
-    const paths: string[] = []
-    for (const file of files ?? []) {
-      if (!file.name) continue
-      if (file.id === null) {
-        const { data: nested } = await admin.storage
-          .from('audios')
-          .list(`${targetId}/${file.name}`, { limit: 1000 })
-        for (const inner of nested ?? []) {
-          if (inner.name) paths.push(`${targetId}/${file.name}/${inner.name}`)
-        }
-      } else {
-        paths.push(`${targetId}/${file.name}`)
-      }
-    }
+    const paths = await listAudioPaths(admin, targetId)
     if (paths.length) await admin.storage.from('audios').remove(paths)
   } catch (err) {
     console.warn('[admin-delete-user] storage', err)
