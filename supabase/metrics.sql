@@ -103,9 +103,16 @@ begin
     'feedback', coalesce((
       select jsonb_agg(to_jsonb(t))
       from (
-        select user_id, session_id, scale, remark, created_at
-        from public.listen_feedback
-        order by created_at
+        select
+          f.user_id,
+          f.session_id,
+          f.scale,
+          f.remark,
+          f.created_at,
+          nullif(s.answers->>'q6_scale', '') as scale_before
+        from public.listen_feedback f
+        left join public.sessions s on s.id = f.session_id
+        order by f.created_at
       ) t
     ), '[]'::jsonb)
   );

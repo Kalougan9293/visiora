@@ -19,7 +19,8 @@ import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { LegalFooter } from '@/components/layout/LegalFooter'
 import { cn } from '@/lib/utils'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
-import { AI_DISCLOSURE } from '@/data/uiCopy'
+import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
+import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
 import { HEALTH_KEYWORDS, needsHealthScreen } from '@/services/healthGate'
 import { healthKeywordsService } from '@/services/healthKeywords'
@@ -30,7 +31,7 @@ export function CreatePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const adjustId = searchParams.get('adjust')
-  const { addSession, adjustSession, sessions, sessionsReady } = useSessions()
+  const { addSession, adjustSession, forgetSessions, sessions, sessionsReady } = useSessions()
   const { user } = useAuth()
   const [phase, setPhase] = useState<'intro' | 'wizard'>(adjustId ? 'wizard' : 'intro')
   const [stepIdx, setStepIdx] = useState(0)
@@ -46,6 +47,7 @@ export function CreatePage() {
   const [healthWords, setHealthWords] = useState<readonly string[]>(HEALTH_KEYWORDS)
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [replaceOpen, setReplaceOpen] = useState(false)
   const hydratedAdjustRef = useRef<string | null>(null)
   const wizardAttemptRef = useRef<string | null>(null)
 
@@ -90,6 +92,7 @@ export function CreatePage() {
   const canContinue = useMemo(() => {
     if (!step) return false
     return step.fields.every((f) => {
+      if (f.id === 'q6' && !isScale(answers.q6_scale)) return false
       if (f.optional) return true
       if (f.type === 'voice') return Boolean(answers.q12_voice)
       if (f.type === 'choice-row') return Boolean(answers[f.id])
@@ -139,17 +142,49 @@ export function CreatePage() {
       setHealthGate(true)
       return
     }
+    if (!adjustId && !sessionsReady) return
+    if (!adjustId && sessionsEvictedByNewOne(sessions).length) {
+      setReplaceOpen(true)
+      return
+    }
+    void submitCreate()
+  }
+
+  const submitCreate = () => {
     if (adjustBusy) return
     setAdjustBusy(true)
+    setReplaceOpen(false)
     setSubmitError('')
     const payload: Answers = { ...answers, q12_tutoiement: 'tu' }
-    const run = adjustId
-      ? adjustSession(adjustId, payload)
-      : addSession(payload)
-    void run
-      .then(() => {
+    const dropping = adjustId ? [] : sessionsEvictedByNewOne(sessions)
+    const run = async () => {
+      if (adjustId) {
+        await adjustSession(adjustId, payload)
+        return false
+      }
+      await addSession(payload)
+      if (!dropping.length) return false
+      try {
+        await forgetSessions(dropping.map((session) => session.id))
+        return false
+      } catch {
+        return true
+      }
+    }
+    void run()
+      .then((oldKept) => {
         if (wizardAttemptRef.current) void metricsService.completeWizard(wizardAttemptRef.current)
-        navigate('/bibliotheque')
+        navigate(
+          '/bibliotheque',
+          oldKept
+            ? {
+                state: {
+                  notice:
+                    'La nouvelle séance est créée. L’ancienne n’a pas pu être effacée.',
+                },
+              }
+            : undefined,
+        )
       })
       .catch((err: unknown) => {
         setSubmitError(err instanceof Error ? err.message : 'Impossible d’enregistrer la séance')
@@ -259,9 +294,12 @@ export function CreatePage() {
           </ul>
         </Card>
 
+        <p className="mt-6 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+          {STORAGE_COPY.rule}
+        </p>
         <Button
           size="lg"
-          className="mt-8 w-full max-w-md rounded-full"
+          className="mt-4 w-full max-w-md rounded-full"
           onClick={onStartClick}
         >
           {CREATE_INTRO.cta}
@@ -328,6 +366,14 @@ export function CreatePage() {
       {submitError && (
         <p className="w-full pb-1 text-center text-[12px] text-[var(--vs-or)]">{submitError}</p>
       )}
+      {replaceOpen && (
+        <ReplaceConfirm
+          titles={sessionsEvictedByNewOne(sessions).map((session) => session.title)}
+          busy={adjustBusy}
+          onCancel={() => setReplaceOpen(false)}
+          onConfirm={() => void submitCreate()}
+        />
+      )}
       <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
         <Button variant="outline" className="flex-1 rounded-full !py-2.5 text-[15px]" onClick={goBack}>
           <ArrowLeft size={17} />
@@ -336,7 +382,7 @@ export function CreatePage() {
         {!healthGate && (
         <Button
           className="flex-1 rounded-full !py-2.5 text-[15px]"
-          disabled={!canContinue || adjustBusy}
+          disabled={!canContinue || adjustBusy || (!adjustId && stepIdx === WIZARD_STEPS.length - 1 && !sessionsReady)}
           onClick={goNext}
         >
           {stepIdx === WIZARD_STEPS.length - 1
@@ -426,6 +472,12 @@ function FieldBlock({
       <p className="text-[14px] font-medium leading-snug text-ink/85 dark:text-cream/90">
         {field.label}
       </p>
+      {field.id === 'q6' && (
+        <FeelingScale
+          value={answers.q6_scale}
+          onChange={(n) => setField('q6_scale', String(n))}
+        />
+      )}
       {field.hint && (
         <p className="mx-auto mt-1.5 max-w-md text-[12px] leading-relaxed text-ink/50 dark:text-cream/50 sm:text-[13px]">
           {field.hint}
@@ -455,6 +507,102 @@ function FieldBlock({
           L’objectif reste — il porte le titre de la séance.
         </p>
       )}
+    </div>
+  )
+}
+
+function ReplaceConfirm({
+  titles,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  titles: string[]
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center px-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="replace-session-title"
+    >
+      <button type="button" aria-label="Fermer" className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div
+        className={cn(
+          'relative w-full max-w-sm rounded-2xl border px-5 py-5 text-center',
+          'border-[var(--vs-bordure)] bg-[var(--vs-surface)] text-ink dark:text-[var(--vs-ecume)]',
+        )}
+      >
+        <p id="replace-session-title" className="text-sm font-medium leading-relaxed">
+          {titles.length > 1 ? STORAGE_COPY.confirmMany : STORAGE_COPY.confirmOne}
+        </p>
+        <ul className="mt-3 space-y-1">
+          {titles.map((title, index) => (
+            <li key={`${title}-${index}`} className="text-sm text-ink/70 dark:text-cream/80">
+              {title}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="flex-1 rounded-xl border border-black/12 px-3 py-2 text-xs font-medium text-ink/80 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)]"
+          >
+            {STORAGE_COPY.cancel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className="flex-1 rounded-xl bg-[var(--vs-or)] px-3 py-2 text-xs font-medium text-[var(--vs-nuit)] disabled:opacity-40"
+          >
+            {STORAGE_COPY.confirm}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function isScale(value: string | undefined) {
+  const n = Number(value)
+  return Number.isInteger(n) && n >= 1 && n <= 10
+}
+
+/** Même échelle que la note d’après, posée sous la question 6 sans remplacer la phrase. */
+function FeelingScale({
+  value,
+  onChange,
+}: {
+  value: string | undefined
+  onChange: (n: number) => void
+}) {
+  const selected = isScale(value) ? Number(value) : null
+  return (
+    <div className="mt-2.5">
+      <p className="text-[12px] text-ink/50 dark:text-cream/50">{AI_DISCLOSURE.afterScaleHint}</p>
+      <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className={cn(
+              'h-8 w-8 rounded-full text-xs font-medium',
+              selected === n
+                ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
+                : 'border border-black/10 text-ink/70 dark:border-white/15 dark:text-cream/80',
+            )}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

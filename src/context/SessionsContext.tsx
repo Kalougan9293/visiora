@@ -30,6 +30,7 @@ interface SessionsContextValue {
   addSession: (answers: VisualizationAnswers) => Promise<VisualizationSession>
   adjustSession: (sessionId: string, answers: VisualizationAnswers) => Promise<VisualizationSession>
   removeSession: (id: string) => void
+  forgetSessions: (ids: string[]) => Promise<void>
   markListened: (id: string) => void
   retryGeneration: (sessionId: string) => Promise<void>
 }
@@ -281,6 +282,21 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [userId],
   )
 
+  const forgetSessions = useCallback(
+    async (ids: string[]) => {
+      if (!ids.length) return
+      if (!userId) throw new Error('Connexion requise')
+      for (const id of ids) {
+        await sessionsService.remove(id, userId)
+        kickedRef.current.delete(id)
+      }
+      const gone = new Set(ids)
+      setSessions((prev) => prev.filter((s) => !gone.has(s.id)))
+      setListenMarks((prev) => prev.filter((mark) => !gone.has(mark.sessionId)))
+    },
+    [userId],
+  )
+
   const markListened = useCallback(
     (id: string) => {
       void (async () => {
@@ -328,6 +344,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       addSession,
       adjustSession,
       removeSession,
+      forgetSessions,
       markListened,
       retryGeneration,
     }),
@@ -339,6 +356,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       addSession,
       adjustSession,
       removeSession,
+      forgetSessions,
       markListened,
       retryGeneration,
     ],

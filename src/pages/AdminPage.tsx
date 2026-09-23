@@ -482,7 +482,8 @@ function answerLines(answers: Record<string, unknown>) {
   return Object.entries(answers).flatMap(([key, value]) => {
     if (skip.has(key) || value == null || String(value).trim() === '') return []
     const text = Array.isArray(value) ? value.join(', ') : String(value)
-    return [{ label: ANSWER_LABELS.get(key) ?? key, text }]
+    const label = key === 'q6_scale' ? 'Note avant (1 à 10)' : (ANSWER_LABELS.get(key) ?? key)
+    return [{ label, text }]
   })
 }
 

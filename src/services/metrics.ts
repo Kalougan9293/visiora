@@ -142,6 +142,7 @@ type FeedbackRow = {
   user_id: string
   session_id: string
   scale: number
+  scale_before: number | null
   remark: string | null
   created_at: string
 }
@@ -182,6 +183,7 @@ export async function downloadMetricsCsv(): Promise<void> {
     'questions',
     'echelle',
     'remarque',
+    'note_avant',
   ]
   const lines = [header.join(';')]
   for (const play of payload.plays ?? []) {
@@ -198,6 +200,7 @@ export async function downloadMetricsCsv(): Promise<void> {
         play.completed ? 'oui' : 'non',
         play.listen_index,
         play.days_since_first,
+        '',
         '',
         '',
         '',
@@ -225,6 +228,7 @@ export async function downloadMetricsCsv(): Promise<void> {
         drop.question_ids,
         '',
         '',
+        '',
       ]
         .map(cell)
         .join(';'),
@@ -248,6 +252,7 @@ export async function downloadMetricsCsv(): Promise<void> {
         '',
         row.scale,
         row.remark ?? '',
+        row.scale_before ?? '',
       ]
         .map(cell)
         .join(';'),

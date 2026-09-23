@@ -1,14 +1,11 @@
-/** Écran santé CDC (p.9) — déclenché par mots-clés dans Q1 / Q7 / Q8 / Q11. */
+/** Écran santé CDC (p.9) — déclenché par mots-clés dans Q1 / Q7 / Q11. Pas la Q8. */
 
 /** Un mot suffit : accents, espaces et tirets sont ignorés à la détection. */
 export const HEALTH_KEYWORDS = [
-  'santé',
   'maladie',
   'guérir',
   'guérison',
   'rémission',
-  'douleur',
-  'symptôme',
   'diagnostic',
   'traitement',
   'cancer',
@@ -19,23 +16,12 @@ export const HEALTH_KEYWORDS = [
   'pathologie',
   'thérapie',
   'médicament',
-  'hôpital',
-  'médecin',
-  'migraine',
-  'insomnie',
   'diabète',
   'hypertension',
   'asthme',
   'fibromyalgie',
-  'arthrose',
-  'lombalgie',
-  'sciatique',
   'endométriose',
   'tumeur',
-  'inflammation',
-  'blessure',
-  'chirurgie',
-  'opération',
   'covid',
   'AVC',
   'infarctus',
@@ -44,10 +30,6 @@ export const HEALTH_KEYWORDS = [
   'bipolarité',
   'TOC',
   'addiction',
-  'hernie',
-  'tendinite',
-  'eczéma',
-  'psoriasis',
   'thyroïde',
   'Alzheimer',
   'Parkinson',
@@ -63,7 +45,7 @@ export function healthMatchKey(text: string) {
     .trim()
 }
 
-const SCAN_FIELDS = ['q1', 'q7', 'q8', 'q11'] as const
+const SCAN_FIELDS = ['q1', 'q7', 'q11'] as const
 
 export const HEALTH_COPY = {
   title: "Avant d'entrer dans ta visualisation",

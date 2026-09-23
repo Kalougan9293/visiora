@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { BookOpen, LogIn, Plus } from 'lucide-react'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +14,7 @@ export function LibraryPage() {
   const { user, loading } = useAuth()
   const { sessions } = useSessions()
   const [authOpen, setAuthOpen] = useState(false)
+  const notice = (useLocation().state as { notice?: string } | null)?.notice
 
   if (loading) {
     return (
@@ -73,6 +74,12 @@ export function LibraryPage() {
           <p className="mt-1.5 text-sm text-ink/68 dark:text-champagne/86">
             {LIBRARY_COPY.subtitle}
           </p>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink/68 dark:text-champagne/86">
+            {LIBRARY_COPY.limit}
+          </p>
+          {notice && (
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[var(--vs-or)]">{notice}</p>
+          )}
         </header>
 
         <div
@@ -109,6 +116,12 @@ export function LibraryPage() {
         <p className="mt-1 text-sm text-ink/68 dark:text-champagne/86">
           {LIBRARY_COPY.subtitle}
         </p>
+        <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-ink/68 dark:text-champagne/86">
+          {LIBRARY_COPY.limit}
+        </p>
+        {notice && (
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-[var(--vs-or)]">{notice}</p>
+        )}
         {!sessions.some((s) => s.status === 'generating') && (
           <Link to="/creer" className="mt-4 inline-block w-full">
             <Button size="sm" variant="outline" className="w-full rounded-full">

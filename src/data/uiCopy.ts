@@ -28,9 +28,18 @@ export const HOME_COPY = {
   swipe: 'Glisse pour explorer',
 } as const
 
+export const STORAGE_COPY = {
+  rule: 'Tu gardes trois séances. À la quatrième, la plus ancienne est effacée, avec son audio.',
+  confirmOne: 'Cette création efface ta séance la plus ancienne, avec son audio.',
+  confirmMany: 'Cette création efface tes séances les plus anciennes, avec leur audio.',
+  cancel: 'Annuler',
+  confirm: 'Effacer et créer',
+} as const
+
 export const LIBRARY_COPY = {
   title: 'Ma bibliothèque',
   subtitle: 'Tes séances, conservées avec ton compte',
+  limit: STORAGE_COPY.rule,
   emptyTitle: 'Ta bibliothèque est encore vide',
   emptyBody:
     'Ta première séance apparaîtra ici, et tu pourras la réécouter autant de fois que tu veux.',
