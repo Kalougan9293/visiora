@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -32,13 +33,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(configured)
   const [session, setSession] = useState<Session | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
+  const activeUserId = useRef<string | null>(null)
+  const profileTicket = useRef(0)
 
   const loadProfile = useCallback(async (userId: string) => {
+    const ticket = ++profileTicket.current
     try {
       const p = await authService.getProfile(userId)
-      if (p) setProfile(p)
+      if (ticket !== profileTicket.current || activeUserId.current !== userId) return
+      setProfile(p && p.id === userId ? p : null)
     } catch {
-      /** Garde le profil déjà chargé : un raté réseau ne doit pas “déconnecter” le prénom. */
+      if (ticket !== profileTicket.current || activeUserId.current !== userId) return
+      setProfile(null)
     }
   }, [])
 
@@ -48,30 +54,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    let mounted = true
+    let settledByEvent = false
 
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return
-      setSession(data.session)
-      if (data.session?.user) void loadProfile(data.session.user.id)
-      setLoading(false)
-    })
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+    const applySession = (next: Session | null, event?: string) => {
+      const nextId = next?.user?.id ?? null
+      const changed = activeUserId.current !== nextId
+      activeUserId.current = nextId
       setSession(next)
-      if (!next?.user) {
+      if (!nextId) {
+        profileTicket.current += 1
         setProfile(null)
+        setLoading(false)
         return
       }
-      if (event === 'TOKEN_REFRESHED') return
-      void loadProfile(next.user.id)
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        void authService.touchLastSeen(next.user.id).catch(() => {})
+      if (event === 'TOKEN_REFRESHED') {
+        setLoading(false)
+        return
       }
+      if (changed) setProfile(null)
+      void loadProfile(nextId)
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        void authService.touchLastSeen(nextId).catch(() => {})
+      }
+      setLoading(false)
+    }
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      settledByEvent = true
+      applySession(next, event)
+    })
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (settledByEvent) return
+      applySession(data.session, 'INITIAL_SESSION')
     })
 
     return () => {
-      mounted = false
+      settledByEvent = true
       sub.subscription.unsubscribe()
     }
   }, [loadProfile])
@@ -86,8 +105,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
-    await authService.signOut()
+    activeUserId.current = null
+    profileTicket.current += 1
     setProfile(null)
+    setSession(null)
+    await authService.signOut()
   }, [])
 
   const refreshProfile = useCallback(async () => {

@@ -74,6 +74,7 @@ export function CreatePage() {
       next[key] = Array.isArray(value) ? value.join(', ') : String(value ?? '')
     }
     next.q12_tutoiement = 'tu'
+    next.duration_minutes = '15'
     setAnswers(next)
     setPhase('wizard')
     setStepIdx(0)
@@ -155,7 +156,7 @@ export function CreatePage() {
     setAdjustBusy(true)
     setReplaceOpen(false)
     setSubmitError('')
-    const payload: Answers = { ...answers, q12_tutoiement: 'tu' }
+    const payload: Answers = { ...answers, q12_tutoiement: 'tu', duration_minutes: '15' }
     const dropping = adjustId ? [] : sessionsEvictedByNewOne(sessions)
     const run = async () => {
       if (adjustId) {

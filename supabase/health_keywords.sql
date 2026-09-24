@@ -32,6 +32,7 @@ create policy health_keywords_delete
 
 insert into public.health_keywords (word) values
   ('maladie'),
+  ('malade'),
   ('guerir'),
   ('guerison'),
   ('remission'),

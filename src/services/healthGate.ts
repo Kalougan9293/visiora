@@ -3,6 +3,7 @@
 /** Un mot suffit : accents, espaces et tirets sont ignorés à la détection. */
 export const HEALTH_KEYWORDS = [
   'maladie',
+  'malade',
   'guérir',
   'guérison',
   'rémission',
@@ -45,6 +46,33 @@ export function healthMatchKey(text: string) {
     .trim()
 }
 
+/** Terminaisons courtes : malade / maladie, dépressif / dépression. Pas un dictionnaire. */
+const FAMILY_ENDING = /^(e|es|s|x|f|ie|on|ion|if|ive|eux|euse|er|ir|is|ment)?$/
+
+function healthWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .split(/[^a-z0-9]+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 4)
+}
+
+/** Même famille si l’un contient l’autre, ou si seul le bout du mot change. */
+export function sameHealthFamily(word: string, keyword: string): boolean {
+  if (!word || !keyword) return false
+  if (word === keyword) return true
+  const shorter = word.length <= keyword.length ? word : keyword
+  const longer = word.length <= keyword.length ? keyword : word
+  if (shorter.length >= 4 && longer.includes(shorter)) return true
+  if (shorter.length < 5 || longer.length - shorter.length > 4) return false
+  let shared = 0
+  while (shared < shorter.length && word[shared] === keyword[shared]) shared += 1
+  if (shared < 5) return false
+  return FAMILY_ENDING.test(word.slice(shared)) && FAMILY_ENDING.test(keyword.slice(shared))
+}
+
 const SCAN_FIELDS = ['q1', 'q7', 'q11'] as const
 
 export const HEALTH_COPY = {
@@ -72,9 +100,12 @@ export function needsHealthScreen(
   }).join(' ')
   if (!blob.trim()) return false
   const hay = healthMatchKey(blob)
+  const words = healthWords(blob)
   const list = keywords.length ? keywords : HEALTH_KEYWORDS
   return list.some((kw) => {
     const key = healthMatchKey(kw)
-    return Boolean(key) && hay.includes(key)
+    if (!key) return false
+    if (hay.includes(key)) return true
+    return words.some((word) => sameHealthFamily(word, key))
   })
 }

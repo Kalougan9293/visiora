@@ -74,9 +74,9 @@ export const WIZARD_STEPS: WizardStep[] = [
         id: 'q4',
         label: 'Décris la scène de réussite comme si tu y étais :',
         placeholder:
-          "Que vois-tu autour de toi ? Qu'entends-tu ? Que ressens-tu physiquement dans ton corps ? (Ex: je vois des visages souriants, j'entends des applaudissements chaleureux, mon cœur bat sereinement...)",
+          "Décris la scène avec tes mots, le plus précisément possible.",
         type: 'textarea',
-        hint: 'Astuce : Utilise des mots sensoriels ("je vois", "j\'entends", "je sens") pour affiner l\'analyse de l\'IA.',
+        hint: 'Prends ton temps, sois le plus concret possible — c\'est cette scène que tu vas vivre.',
       },
       {
         id: 'q5',
@@ -166,16 +166,6 @@ export const WIZARD_STEPS: WizardStep[] = [
         placeholder: 'Ex: Marie, Julien...',
         type: 'text',
         optional: true,
-      },
-      {
-        id: 'duration_minutes',
-        label: 'Durée de la séance',
-        type: 'choice-row',
-        choices: [
-          { id: '15', label: '15 min' },
-          { id: '10', label: '10 min' },
-          { id: '3', label: '3 min' },
-        ],
       },
       {
         id: 'q12_voice',

@@ -40,6 +40,7 @@ const SessionsContext = createContext<SessionsContextValue | null>(null)
 export function SessionsProvider({ children }: { children: ReactNode }) {
   const { user, loading: authLoading } = useAuth()
   const userId = user?.id
+  const seenUserId = useRef(userId)
   const [sessions, setSessions] = useState<VisualizationSession[]>([])
   const [sessionsReady, setSessionsReady] = useState(false)
   const [listenMarks, setListenMarks] = useState<ListenMark[]>([])
@@ -50,6 +51,12 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   /** Séances confiées à N8N : pas de re-kick agressif côté téléphone. */
   const orchestratedRef = useRef(new Set<string>())
 
+  if (seenUserId.current !== userId) {
+    seenUserId.current = userId
+    setSessions([])
+    setListenMarks([])
+  }
+
   useEffect(() => {
     kickedRef.current.clear()
     inFlightRef.current.clear()
@@ -59,21 +66,25 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       setSessionsReady(false)
       return
     }
+    setSessions([])
+    setListenMarks([])
+    try {
+      localStorage.removeItem('visiora-suivi-session')
+    } catch {
+      /* stockage indisponible */
+    }
     if (!userId) {
-      setSessions([])
-      setListenMarks([])
       setSessionsReady(true)
       sessionsService.clearLocal()
       return
     }
     let cancelled = false
     setSessionsReady(false)
-    setListenMarks([])
     void sessionsService
       .list(userId)
       .then((rows) => {
         if (cancelled) return
-        setSessions(rows)
+        setSessions(rows.filter((row) => row.userId === userId))
         setSessionsReady(true)
       })
       .catch((err) => {

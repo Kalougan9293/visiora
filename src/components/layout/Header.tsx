@@ -29,9 +29,12 @@ export function Header() {
     typeof user?.user_metadata?.first_name === 'string' ? user.user_metadata.first_name.trim() : ''
   const firstName = profile?.first_name?.trim() || metaName || prenomSeance(sessions)
   const loggedIn = Boolean(user)
-  const shownNameRef = useRef(firstName)
-  if (firstName) shownNameRef.current = firstName
-  const shownName = firstName || (loggedIn ? shownNameRef.current : '')
+  const shownNameRef = useRef<{ userId: string; name: string } | null>(null)
+  if (user?.id && firstName) shownNameRef.current = { userId: user.id, name: firstName }
+  if (!user?.id) shownNameRef.current = null
+  const cached = shownNameRef.current
+  const cachedName = cached && user?.id && cached.userId === user.id ? cached.name : ''
+  const shownName = firstName || (loggedIn ? cachedName : '')
 
   useEffect(() => {
     setMenuOpen(false)
