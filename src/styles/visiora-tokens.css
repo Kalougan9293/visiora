@@ -129,14 +129,28 @@
   color: var(--vs-texte-fort);
 }
 
-.admin-root.dark {
-  background-color: #020c25;
+html:has(.admin-root),
+html:has(.admin-root) body {
+  background-color: #020c25 !important;
   background-image: radial-gradient(
     circle at 50% 18%,
     color-mix(in srgb, #e09a38 10%, transparent) 0%,
     transparent 60%
-  );
+  ) !important;
+  color: #e9eff4 !important;
+  color-scheme: dark;
+}
+
+.admin-root,
+.admin-root.dark {
+  background-color: #020c25 !important;
+  background-image: radial-gradient(
+    circle at 50% 18%,
+    color-mix(in srgb, #e09a38 10%, transparent) 0%,
+    transparent 60%
+  ) !important;
   color: #e9eff4;
+  min-height: 100dvh;
 }
 
 .admin-root.dark,

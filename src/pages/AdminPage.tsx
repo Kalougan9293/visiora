@@ -21,6 +21,19 @@ function formatDate(iso: string | null) {
 }
 
 export function AdminPage() {
+  useEffect(() => {
+    const root = document.documentElement
+    const hadDark = root.classList.contains('dark')
+    root.classList.add('dark')
+    const meta = document.querySelector('meta[name="theme-color"]')
+    const prev = meta?.getAttribute('content') ?? null
+    meta?.setAttribute('content', '#020C25')
+    return () => {
+      if (!hadDark) root.classList.remove('dark')
+      if (meta && prev) meta.setAttribute('content', prev)
+    }
+  }, [])
+
   const [authed, setAuthed] = useState(false)
   const [checking, setChecking] = useState(true)
   const [email, setEmail] = useState('')
