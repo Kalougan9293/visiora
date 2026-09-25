@@ -9,16 +9,14 @@ import {
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { isDemoShortMode, resolveScript, demoSessionParts, shortAudioScript } from './script.ts'
+import { resolveScript } from './script.ts'
 import {
   canGenerateScript,
   generateSessionScript,
   generateSessionScriptDetailed,
   hasStoredScript,
-  isDemoInProgress,
   isN8nQueued,
   isScriptInProgress,
-  demoClaimPayload,
   n8nQueuePayload,
   scriptClaimPayload,
 } from './generate-script.ts'
@@ -31,7 +29,6 @@ import {
   silencePcm,
   loadBed,
   mixLoopingBed,
-  concatPcm,
   levelSpeech,
 } from './mix.ts'
 
@@ -101,128 +98,22 @@ function resolveElevenVoiceId(appVoiceId: string | null): string {
   return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.rituel
 }
 
-/**
- * Chemin démo (~15 s) : TTS par phrase + blancs + lit d’ambiance, un seul MP3.
- */
-async function handleDemoShort(params: {
-  admin: SupabaseClient
-  elevenKey: string
-  sessionId: string
-  userId: string
-  voiceId: string | null
-  answers?: unknown
-  script?: string | null
-}): Promise<Response> {
-  const fullScript = resolveScript({ script: params.script })
-  const audioScript = isDemoShortMode() ? shortAudioScript(fullScript) : fullScript
-  const steps = demoSessionParts(audioScript)
-  const speechChars = steps
-    .filter((s): s is { kind: 'speech'; text: string } => s.kind === 'speech')
-    .reduce((n, s) => n + s.text.length, 0)
-  if (speechChars < 20) {
-    throw new Error('Script démo vide')
-  }
-
-  const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
-  await params.admin
-    .from('sessions')
-    .update({
-      status: 'generating',
-      script: fullScript,
-      audio_bytes: 15,
-      audio_job: demoClaimPayload(),
-      audio_path: null,
-      audio_url: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.sessionId)
-
-  const bed = await loadBed(appVoiceKey)
-  const pcmParts: Int16Array[] = []
-  const previousRequestIds: string[] = []
-  let bedOffset = 0
-
-  const speechIndexes = steps
-    .map((step, i) => (step.kind === 'speech' ? i : -1))
-    .filter((i) => i >= 0)
-  const ttsByIndex = new Map<number, { pcm: Int16Array; requestId: string | null }>()
-  const ttsBatch = await Promise.all(
-    speechIndexes.map(async (i) => {
-      const step = steps[i] as { kind: 'speech'; text: string }
-      const tts = await elevenTts({
-        apiKey: params.elevenKey,
-        voiceId: resolveElevenVoiceId(params.voiceId),
-        appVoiceKey,
-        text: step.text,
-        previousRequestIds,
-      })
-      return { i, pcm: upsampleTts(pcmFromEleven(tts.audio)), requestId: tts.requestId }
-    }),
-  )
-  for (const row of ttsBatch) ttsByIndex.set(row.i, row)
-
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i]!
-    let pcm: Int16Array
-    if (step.kind === 'silence') {
-      pcm = upsampleTts(silencePcm(step.seconds))
-    } else {
-      const got = ttsByIndex.get(i)
-      if (!got) throw new Error('TTS démo manquant')
-      pcm = levelSpeech(got.pcm)
-      if (got.requestId) previousRequestIds.push(got.requestId)
-    }
-    if (bed) {
-      const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, bedOffset)
-      pcm = mixed.pcm
-      bedOffset = mixed.nextOffset
-    }
-    pcmParts.push(pcm)
-  }
-
-  const mp3 = withAiDisclosureTag(await encodeMp3(concatPcm(pcmParts)))
-  if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-
-  const path = `${params.userId}/${params.sessionId}.mp3`
-  const { error: uploadError } = await params.admin.storage.from('audios').upload(path, mp3, {
-    contentType: 'audio/mpeg',
-    upsert: true,
-  })
-  if (uploadError) {
-    throw new Error(`Storage: ${uploadError.message}`)
-  }
-
-  const { data: signed, error: signedError } = await params.admin.storage
-    .from('audios')
-    .createSignedUrl(path, 60 * 60 * 24 * 7)
-  if (signedError || !signed?.signedUrl) {
-    throw new Error(`Signed URL: ${signedError?.message ?? 'missing'}`)
-  }
-
-  const { error: updateError } = await params.admin
-    .from('sessions')
-    .update({
-      status: 'ready',
-      script: fullScript,
-      audio_path: path,
-      audio_url: signed.signedUrl,
-      audio_bytes: mp3.byteLength,
-      audio_job: null,
-      voice_id: params.voiceId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', params.sessionId)
-
-  if (updateError) {
-    throw new Error(`DB: ${updateError.message}`)
-  }
-
-  return json({ ok: true, accepted: true, status: 'ready' }, 200)
+/** Page HTML ou coupure réseau : le segment suivant peut reprendre. */
+function isTransientGateway(message: string): boolean {
+  return /not valid JSON|<!DOCTYPE|Unexpected token|Failed to fetch|ECONNRESET|gateway|timed out|timeout|502|503|504/i.test(message)
 }
 
-async function setProgress(admin: SupabaseClient, sessionId: string, pct: number, job: AudioJob) {
+async function setProgress(
+  admin: SupabaseClient,
+  sessionId: string,
+  pct: number,
+  job: AudioJob,
+  matchClaimId?: string | null,
+): Promise<boolean> {
   const value = Math.round(Math.min(99, Math.max(1, pct)))
-  const { error } = await admin
+  const owned = matchClaimId === undefined ? job.claimId : matchClaimId
+  if (job.claimId) job.claimedAt = new Date().toISOString()
+  let query = admin
     .from('sessions')
     .update({
       audio_bytes: value,
@@ -231,7 +122,35 @@ async function setProgress(admin: SupabaseClient, sessionId: string, pct: number
       updated_at: new Date().toISOString(),
     })
     .eq('id', sessionId)
-  if (error) console.warn('[generate-session-audio] progress', error.message)
+    .neq('status', 'ready')
+  if (owned) query = query.eq('audio_job->>claimId', owned)
+  const { data, error } = await query.select('id')
+  if (error) {
+    console.warn('[generate-session-audio] progress', error.message)
+    return false
+  }
+  return Boolean(data?.length)
+}
+
+/** Pose le plan, ou prend le droit d’écrire la voix. Un seul appelant gagne. */
+async function claimSession(
+  admin: SupabaseClient,
+  sessionId: string,
+  job: AudioJob,
+  bytes: number,
+  mode: 'install' | 'claim' | 'replace',
+): Promise<boolean> {
+  const { data, error } = await admin.rpc('claim_session_audio', {
+    p_session: sessionId,
+    p_job: job,
+    p_bytes: bytes,
+    p_mode: mode,
+  })
+  if (error) {
+    console.error('[generate-session-audio] claim', error.message)
+    return false
+  }
+  return data === true
 }
 
 async function elevenTts(params: {
@@ -349,7 +268,8 @@ async function holdFinalizeClaim(admin: SupabaseClient, sessionId: string, job: 
   if (!job.claimId) job.claimId = crypto.randomUUID()
   job.claimedAt = new Date().toISOString()
   job.phase = 'finalize'
-  await setProgress(admin, sessionId, 94, job)
+  const kept = await setProgress(admin, sessionId, 94, job)
+  if (!kept) throw new Error('claim perdu')
 }
 
 async function clearParts(admin: SupabaseClient, userId: string, sessionId: string) {
@@ -382,63 +302,23 @@ async function uploadPart(
   if (error) throw new Error(`Storage part: ${error.message}`)
 }
 
-async function encodeStepMp3(params: {
-  step: JobStep
-  speechText?: string
-  elevenKey: string
+async function encodeSilenceMp3(params: {
+  seconds: number
   voiceId: string | null
-  previousRequestIds: string[]
   bedOffset: number
-}): Promise<{
-  mp3: Uint8Array
-  requestId: string | null
-  bedOffset: number
-  previousRequestIds: string[]
-}> {
+}): Promise<{ mp3: Uint8Array; bedOffset: number }> {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
-  let requestId: string | null = null
-  const previousRequestIds = [...params.previousRequestIds]
-
-  if (params.step.kind === 'silence') {
-    const bed = await loadBed(appVoiceKey)
-    let pcm = upsampleTts(silencePcm(params.step.seconds))
-    if (bed) {
-      const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
-      pcm = mixed.pcm
-      const mp3 = await encodeMp3(pcm)
-      if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-      return { mp3, requestId: null, bedOffset: mixed.nextOffset, previousRequestIds }
-    }
-    const mp3 = await encodeMp3(pcm)
-    if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-    return { mp3, requestId: null, bedOffset: params.bedOffset, previousRequestIds }
-  }
-
-  const text = params.speechText?.trim()
-  if (!text) throw new Error('Segment speech sans texte')
-  const tts = await elevenTts({
-    apiKey: params.elevenKey,
-    voiceId: resolveElevenVoiceId(params.voiceId),
-    appVoiceKey,
-    text,
-    previousRequestIds,
-  })
-  const pcm24 = pcmFromEleven(tts.audio)
-  requestId = tts.requestId
-  if (requestId) previousRequestIds.push(requestId)
-
-  let pcm = levelSpeech(upsampleTts(pcm24))
-  let nextOffset = params.bedOffset
   const bed = await loadBed(appVoiceKey)
+  let pcm = upsampleTts(silencePcm(params.seconds))
+  let nextOffset = params.bedOffset
   if (bed) {
     const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
     pcm = mixed.pcm
     nextOffset = mixed.nextOffset
   }
-
   const mp3 = await encodeMp3(pcm)
   if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-  return { mp3, requestId, bedOffset: nextOffset, previousRequestIds }
+  return { mp3, bedOffset: nextOffset }
 }
 
 async function processOneStep(params: {
@@ -546,25 +426,23 @@ async function processOneStep(params: {
         ...(got.requestId ? { requestId: got.requestId } : {}),
       }
       job.bedOffset = nextOffset
-      job.previousRequestIds = previousRequestIds
+      job.previousRequestIds = previousRequestIds.slice(-3)
     } else {
-      const encoded = await encodeStepMp3({
-        step,
-        elevenKey: params.elevenKey,
+      const encoded = await encodeSilenceMp3({
+        seconds: step.seconds,
         voiceId: params.voiceId,
-        previousRequestIds: job.previousRequestIds,
         bedOffset: job.bedOffset,
       })
       await uploadPart(params.admin, path, encoded.mp3)
       job.steps[index] = { kind: 'silence', seconds: step.seconds, partPath: path }
       job.bedOffset = encoded.bedOffset
-      job.previousRequestIds = encoded.previousRequestIds
     }
 
     job.nextIndex = index + 1
     job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
     /** Garde le claim pendant toute la fenêtre parallèle — sinon n8n / le filet relancent trop tôt. */
-    await setProgress(params.admin, params.sessionId, progressPct(job), job)
+    const kept = await setProgress(params.admin, params.sessionId, progressPct(job), job)
+    if (!kept) throw new Error('claim perdu')
   }
 
   if (job.nextIndex >= job.steps.length) job.phase = 'finalize'
@@ -577,9 +455,10 @@ async function processOneStep(params: {
     return { job: await finalizeJob({ ...params, job }), done: true }
   }
 
+  const owned = job.claimId
   job.claimId = null
   job.claimedAt = null
-  await setProgress(params.admin, params.sessionId, progressPct(job), job)
+  await setProgress(params.admin, params.sessionId, progressPct(job), job, owned)
   return { job, done: false }
 }
 
@@ -849,14 +728,13 @@ Deno.serve(async (req) => {
     return json({ ok: true, accepted: true, status: 'ready' }, 202)
   }
 
-  const failedJob = isAudioJob(session.audio_job) ? (session.audio_job as AudioJob) : null
-  /** N8N s’arrête sur failed. Le bouton Relancer, lui, reprend le montage sans effacer les segments. */
-  if (session.status === 'failed' && !force && !reset && (isOrchestrator || !failedJob)) {
+  /** N8N s’arrête sur failed. Le bouton Relancer, lui, reprend : le script s’il n’a pas été écrit, sinon les segments déjà prêts. */
+  if (session.status === 'failed' && !force && !reset && isOrchestrator) {
     return json({
       ok: false,
       error: 'Generation failed',
       status: 'failed',
-    }, isOrchestrator ? 200 : 409)
+    }, 200)
   }
 
   const canBackground = typeof EdgeRuntime !== 'undefined' && Boolean(EdgeRuntime?.waitUntil)
@@ -893,7 +771,7 @@ Deno.serve(async (req) => {
           .eq('id', sessionId)
         return
       }
-      if (!isDemoShortMode() && n8nConfigured) {
+      if (n8nConfigured) {
         await admin
           .from('sessions')
           .update({
@@ -935,7 +813,6 @@ Deno.serve(async (req) => {
     }, 202)
   }
 
-  /** Mode démo : TTS court en fond — le téléphone ne doit pas porter la requête. */
   if (isN8nQueued(session.audio_job) && !isOrchestrator) {
     return json({
       ok: true,
@@ -944,70 +821,6 @@ Deno.serve(async (req) => {
       progress: 17,
       orchestrated: true,
     }, 202)
-  }
-
-  if (isDemoShortMode()) {
-    if (isDemoInProgress(session.audio_job)) {
-      return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
-    }
-
-    await admin
-      .from('sessions')
-      .update({
-        status: 'generating',
-        audio_bytes: 15,
-        audio_job: demoClaimPayload(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
-
-    const runDemo = async () => {
-      try {
-        await handleDemoShort({
-          admin,
-          elevenKey,
-          sessionId,
-          userId: callerUserId!,
-          voiceId: (session.voice_id as string | null) ?? null,
-          answers: session.answers,
-          script: session.script as string | null,
-        })
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Generation failed'
-        console.error('[generate-session-audio] demo', message)
-        await admin
-          .from('sessions')
-          .update({ status: 'failed', updated_at: new Date().toISOString() })
-          .eq('id', sessionId)
-          .neq('status', 'ready')
-      }
-    }
-
-    /** 202 immédiat : n8n / le téléphone ne portent pas le TTS (évite le 502 gateway). */
-    if (canBackground) {
-      EdgeRuntime!.waitUntil(runDemo())
-      return json({
-        ok: true,
-        accepted: true,
-        status: 'generating',
-        progress: 15,
-        orchestrated: n8nConfigured || isOrchestrator,
-      }, 202)
-    }
-
-    await runDemo()
-    const { data: afterDemo } = await admin
-      .from('sessions')
-      .select('status')
-      .eq('id', sessionId)
-      .maybeSingle()
-    if (afterDemo?.status === 'ready') {
-      return json({ ok: true, accepted: true, status: 'ready' }, 200)
-    }
-    if (afterDemo?.status === 'failed') {
-      return json({ ok: false, error: 'Génération démo échouée', status: 'failed' }, 500)
-    }
-    return json({ ok: true, accepted: true, status: 'generating', progress: 15 }, 202)
   }
 
   let job = isAudioJob(session.audio_job) ? (session.audio_job as AudioJob) : null
@@ -1044,21 +857,14 @@ Deno.serve(async (req) => {
   if (!job) {
     job = createAudioJob(script, voiceKey, sessionMinutes(session.answers))
     if (isOrchestrator || n8nConfigured) job.handedToN8n = true
-    const { error: initError } = await admin
-      .from('sessions')
-      .update({
+    const installed = await claimSession(admin, sessionId, job, 5, reset ? 'replace' : 'install')
+    if (!installed) {
+      return json({
+        ok: true,
+        accepted: true,
         status: 'generating',
-        script,
-        audio_bytes: 5,
-        audio_job: job,
-        audio_path: null,
-        audio_url: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
-    if (initError) {
-      console.error('[generate-session-audio] init job', initError.message)
-      return json({ ok: false, error: `Init job: ${initError.message}`, status: 'failed' }, 500)
+        progress: 5,
+      }, 202)
     }
   }
 
@@ -1078,7 +884,16 @@ Deno.serve(async (req) => {
       }, 202)
     }
     job.handedToN8n = true
-    await setProgress(admin, sessionId, progressPct(job), job)
+    await admin
+      .from('sessions')
+      .update({
+        audio_job: job,
+        audio_bytes: progressPct(job),
+        status: 'generating',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', sessionId)
+      .neq('status', 'ready')
     const handed = await notifyN8n(sessionId)
     if (handed) {
       return json({
@@ -1093,15 +908,21 @@ Deno.serve(async (req) => {
     /** Fallback si N8N down : on traite quand même un step ici. */
   }
 
-  const claimId = crypto.randomUUID()
-  job.claimId = claimId
+  job.claimId = crypto.randomUUID()
   job.claimedAt = new Date().toISOString()
-  await setProgress(admin, sessionId, progressPct(job), job)
+  const claimed = await claimSession(admin, sessionId, job, progressPct(job), 'claim')
+  if (!claimed) {
+    return json({
+      ok: true,
+      accepted: true,
+      status: 'generating',
+      progress: progressPct(job),
+    }, 202)
+  }
 
   const runWork = async () => {
     try {
-      const demoDrain = isDemoShortMode()
-      let result = await processOneStep({
+      const result = await processOneStep({
         admin,
         elevenKey,
         sessionId,
@@ -1110,17 +931,6 @@ Deno.serve(async (req) => {
         script,
         job,
       })
-      while (demoDrain && !result.done) {
-        result = await processOneStep({
-          admin,
-          elevenKey,
-          sessionId,
-          userId: callerUserId!,
-          voiceId,
-          script,
-          job: result.job,
-        })
-      }
       if (!result.done && !isOrchestrator) {
         scheduleContinue({
           supabaseUrl,
@@ -1131,7 +941,12 @@ Deno.serve(async (req) => {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Generation failed'
+      if (message === 'claim perdu') {
+        console.warn('[generate-session-audio] claim déjà pris')
+        return
+      }
       console.error('[generate-session-audio]', message)
+      const owned = job?.claimId ?? null
       if (job) {
         job.claimId = null
         job.claimedAt = null
@@ -1144,15 +959,33 @@ Deno.serve(async (req) => {
       if (current?.status === 'ready' || current?.audio_path) {
         return
       }
-      await admin
-        .from('sessions')
-        .update({
-          status: 'failed',
-          audio_job: job,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', sessionId)
-        .neq('status', 'ready')
+      const nextStatus = isTransientGateway(message) ? 'generating' : 'failed'
+      if (isTransientGateway(message)) {
+        console.warn('[generate-session-audio] reprise après coupure', message.slice(0, 160))
+      }
+      if (owned && job) {
+        await admin
+          .from('sessions')
+          .update({
+            status: nextStatus,
+            audio_job: job,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+          .eq('audio_job->>claimId', owned)
+          .neq('status', 'ready')
+      } else if (nextStatus === 'failed') {
+        await admin
+          .from('sessions')
+          .update({
+            status: 'failed',
+            audio_job: job,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+          .neq('status', 'ready')
+      }
+      if (nextStatus === 'generating') return
       throw err
     }
   }

@@ -129,13 +129,27 @@
   color: var(--vs-texte-fort);
 }
 
-.variant-classic:not(.dark) .admin-root,
-.variant-classic:not(.dark) .admin-root * {
-  color: #020c25 !important;
+.admin-root.dark {
+  background-color: #020c25;
+  background-image: radial-gradient(
+    circle at 50% 18%,
+    color-mix(in srgb, #e09a38 10%, transparent) 0%,
+    transparent 60%
+  );
+  color: #e9eff4;
 }
 
-.variant-classic:not(.dark) .admin-root input::placeholder {
-  color: rgb(2 12 37 / 0.55) !important;
+.admin-root.dark,
+.admin-root.dark * {
+  color: #e9eff4 !important;
+}
+
+.admin-root.dark input::placeholder {
+  color: rgb(233 239 244 / 0.65) !important;
+}
+
+.admin-root.dark button[type='submit'] {
+  color: #020c25 !important;
 }
 
 .variant-classic.dark h1 .vs-titre-accent {

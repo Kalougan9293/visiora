@@ -1,7 +1,5 @@
 /** Parse le format Annexe 1 et découpe le texte pour la synthèse vocale. */
 
-import { ANNEX_DEMO_SHORT_SCRIPT } from './annex.ts'
-
 export const PAUSE_SHORT_SECONDS = 3
 /** CDC : pause longue ≈ 9 s */
 export const PAUSE_LONG_SECONDS = 9
@@ -197,15 +195,6 @@ export function partsForDuration(script: string): ScriptPart[] {
   return mergeSilences(out)
 }
 
-/** Démo 15 s : blancs phrase / souffle dans un seul invoke. */
-export function demoSessionParts(script: string): ScriptPart[] {
-  return expandPacing(parseAnnexScript(script))
-}
-
-export function pacedScriptParts(script: string): ScriptPart[] {
-  return longSessionParts(script)
-}
-
 export function chunkSpeech(text: string, max = TTS_CHUNK_CHARS): string[] {
   const clean = text.replace(/\s+/g, ' ').trim()
   if (!clean) return []
@@ -230,32 +219,9 @@ export function chunkSpeech(text: string, max = TTS_CHUNK_CHARS): string[] {
   return chunks
 }
 
-/** Extrait ~15 s seulement si VISIORA_AUDIO_DEMO_SHORT=1. Sinon, séance complète. */
-export function isDemoShortMode(): boolean {
-  return Deno.env.get('VISIORA_AUDIO_DEMO_SHORT') === '1'
-}
-
 export function resolveScript(session: { script?: string | null }): string {
   if (typeof session.script === 'string' && session.script.trim().length > 40) {
     return session.script.trim()
   }
-  if (isDemoShortMode()) return ANNEX_DEMO_SHORT_SCRIPT
   return ''
-}
-
-/** Démo ~15 s : on ne lit que le début du script généré. */
-export function shortAudioScript(script: string, maxSpeech = 420): string {
-  const raw = script.replace(/\r\n/g, '\n').trim()
-  if (!raw) return ANNEX_DEMO_SHORT_SCRIPT
-  let speech = 0
-  const kept: string[] = []
-  for (const line of raw.split('\n')) {
-    kept.push(line)
-    if (!/^\s*\[(pause|Mouvement)/i.test(line)) {
-      speech += line.trim().length
-    }
-    if (speech >= maxSpeech) break
-  }
-  const out = kept.join('\n').trim()
-  return out.length > 40 ? out : ANNEX_DEMO_SHORT_SCRIPT
 }

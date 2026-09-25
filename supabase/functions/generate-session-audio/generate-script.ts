@@ -54,7 +54,11 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
   const durationRaw = Number(src.duration_minutes)
   const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
   const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
-  lines.push(`Durée cible : ${duration} minutes, environ ${words} mots.`)
+  lines.push(
+    duration === 15
+      ? 'Durée cible : 15 minutes. Écris entre 1 200 et 1 400 mots, avec les pauses. Va jusqu’à la fermeture. Ne t’arrête pas au milieu.'
+      : `Durée cible : ${duration} minutes, environ ${words} mots.`,
+  )
   lines.push('')
   lines.push('Génère le script de séance pour ce profil.')
   return lines.join('\n')
@@ -96,7 +100,7 @@ type OpenAiErrorBody = {
 
 export type ScriptUsage = { prompt: number; completion: number }
 
-export type ScriptGenOk = { ok: true; script: string; usage?: ScriptUsage }
+export type ScriptGenOk = { ok: true; script: string; usage?: ScriptUsage; cut?: boolean }
 export type ScriptGenFail = { ok: false; status: number; detail: string }
 
 async function chatCompletion(
@@ -114,7 +118,7 @@ async function chatCompletion(
     body: JSON.stringify({
       model,
       temperature: 0.6,
-      max_tokens: 8000,
+      max_tokens: 16000,
       messages: [
         { role: 'system', content: prompt },
         { role: 'user', content: userContent },
@@ -137,7 +141,7 @@ async function chatCompletion(
   }
 
   let data: {
-    choices?: { message?: { content?: string | null } }[]
+    choices?: { finish_reason?: string; message?: { content?: string | null } }[]
     usage?: { prompt_tokens?: number; completion_tokens?: number }
   }
   try {
@@ -146,11 +150,12 @@ async function chatCompletion(
     return { ok: false, status: res.status, detail: 'réponse JSON invalide' }
   }
   const script = stripFences(data.choices?.[0]?.message?.content ?? '')
+  const cut = data.choices?.[0]?.finish_reason === 'length'
   const usage =
     typeof data.usage?.prompt_tokens === 'number'
       ? { prompt: data.usage.prompt_tokens, completion: data.usage.completion_tokens ?? 0 }
       : undefined
-  return { ok: true, script, usage }
+  return { ok: true, script, usage, cut }
 }
 
 async function anthropicCompletion(
@@ -168,7 +173,7 @@ async function anthropicCompletion(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: prompt,
       messages: [{ role: 'user', content: userContent }],
     }),
@@ -179,6 +184,7 @@ async function anthropicCompletion(
     return { ok: false, status: res.status, detail: `${res.status} ${raw}`.slice(0, 180) }
   }
   let data: {
+    stop_reason?: string
     content?: { type?: string; text?: string }[]
     usage?: { input_tokens?: number; output_tokens?: number }
   }
@@ -189,11 +195,12 @@ async function anthropicCompletion(
   }
   const text = data.content?.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n') ?? ''
   const script = stripFences(text)
+  const cut = data.stop_reason === 'max_tokens'
   const usage =
     typeof data.usage?.input_tokens === 'number'
       ? { prompt: data.usage.input_tokens, completion: data.usage.output_tokens ?? 0 }
       : undefined
-  return { ok: true, script, usage }
+  return { ok: true, script, usage, cut }
 }
 
 export function canGenerateScript(): boolean {
@@ -204,7 +211,6 @@ export function canGenerateScript(): boolean {
 }
 
 const SCRIPT_CLAIM_TTL_MS = 120_000
-const DEMO_CLAIM_TTL_MS = 180_000
 
 function isPhaseClaim(job: unknown, phase: string, ttlMs: number): boolean {
   if (!job || typeof job !== 'object') return false
@@ -216,10 +222,6 @@ function isPhaseClaim(job: unknown, phase: string, ttlMs: number): boolean {
 
 export function isScriptInProgress(job: unknown): boolean {
   return isPhaseClaim(job, 'scripting', SCRIPT_CLAIM_TTL_MS)
-}
-
-export function isDemoInProgress(job: unknown): boolean {
-  return isPhaseClaim(job, 'demo', DEMO_CLAIM_TTL_MS)
 }
 
 const N8N_QUEUE_TTL_MS = 40 * 60 * 1000
@@ -236,10 +238,6 @@ export function scriptClaimPayload(): { phase: 'scripting'; claimedAt: string } 
   return { phase: 'scripting', claimedAt: new Date().toISOString() }
 }
 
-export function demoClaimPayload(): { phase: 'demo'; claimedAt: string } {
-  return { phase: 'demo', claimedAt: new Date().toISOString() }
-}
-
 export function hasStoredScript(script: unknown): boolean {
   return typeof script === 'string' && script.trim().length > 40
 }
@@ -249,6 +247,69 @@ function spokenWords(script: string): number {
     .replace(/\[[^\]]*\]/g, ' ')
     .split(/\s+/)
     .filter(Boolean).length
+}
+
+/** Citation ouverte, fin au milieu d’un mot, ou dernier mouvement à peine commencé. */
+export function scriptIsCut(script: string): boolean {
+  const text = script.trim()
+  if (text.length < 80) return true
+  const open = (text.match(/«/g) ?? []).length
+  const close = (text.match(/»/g) ?? []).length
+  if (open > close) return true
+  if (!/(?:[.!?…»]|\[pause(?:\s+longue)?\])\s*$/i.test(text)) return true
+  const lastMove = text.split(/\[Mouvement[^\]]*\]/i).pop()?.trim() ?? ''
+  if (lastMove.length < 280) return true
+  return false
+}
+
+/** Ce qui manque encore avant d’envoyer le texte à la voix. */
+export function scriptFinishGaps(script: string): string[] {
+  const gaps: string[] = []
+  if (scriptIsCut(script)) gaps.push('coupé')
+  const words = spokenWords(script)
+  if (words < 1100) gaps.push(`${words} mots`)
+  const pauses = (script.match(/\[pause(?:\s+longue)?\]/gi) ?? []).length
+  const longs = (script.match(/\[pause longue\]/gi) ?? []).length
+  if (pauses < 30 || longs < 8) gaps.push(`${pauses} pauses dont ${longs} longues`)
+  if (!/si\b[\s\S]{0,160}\balors\b/i.test(script)) gaps.push('si… alors')
+  const movements = (script.match(/\[Mouvement[^\]]*\]/gi) ?? []).length
+  if (movements < 7) gaps.push(`${movements} mouvements`)
+  const tail = script.trim().slice(-1800)
+  if (!/ouvre les yeux|rouvrir les yeux/i.test(tail)) gaps.push('retour')
+  return gaps
+}
+
+/** Trop court, coupé, ou sans la fermeture : on ne l’envoie pas à la voix. */
+export function scriptNeedsFinish(script: string): boolean {
+  return scriptFinishGaps(script).length > 0
+}
+
+const CONTINUE_PROMPT = `La séance n'est pas finie. Tu écris uniquement la suite, sans répéter le début.
+Il faut le mouvement 7, l'intégration : gratitude, compte jusqu'à cinq, et une dernière phrase qui contient « ouvre les yeux ».
+Ajoute le plan « si… alors… » s'il manque, avec des [pause] et [pause longue].
+Garde le tutoiement, les balises [Mouvement N] et les « je » entre guillemets.
+Réponds uniquement avec la suite.`
+
+async function finishScript(
+  draft: string,
+  model: string,
+  anthropic: boolean,
+  apiKey: string,
+): Promise<string> {
+  let text = draft
+  for (let attempt = 0; attempt < 3 && scriptNeedsFinish(text); attempt++) {
+    const tail = text.trim().slice(-900)
+    const userContent = `Fin actuelle du script :\n\n${tail}`
+    const result = anthropic
+      ? await anthropicCompletion(apiKey, model, CONTINUE_PROMPT, userContent)
+      : await chatCompletion(apiKey, model, CONTINUE_PROMPT, userContent)
+    if (!result.ok) break
+    const extra = result.script.trim()
+    if (extra.length < 40) break
+    text = `${text.trim()} ${extra}`
+    console.log('[generate-session-audio] script continué', spokenWords(text))
+  }
+  return text
 }
 
 function wordTarget(answers: SessionAnswers | null | undefined): number {
@@ -326,7 +387,14 @@ export async function generateSessionScriptDetailed(
       continue
     }
     console.log('[generate-session-audio] script ok', model, result.script.length)
-    const script = await expandIfShort(answers, result.script, model, anthropic, apiKey)
+    const expanded = await expandIfShort(answers, result.script, model, anthropic, apiKey)
+    const script = await finishScript(expanded, model, anthropic, apiKey)
+    const gaps = scriptFinishGaps(script)
+    if (gaps.length) {
+      console.error('[generate-session-audio] script incomplet', gaps.join(', '))
+      throw new Error(`Génération script : fin incomplète (${gaps.join(', ')}), audio non lancé`)
+    }
+    console.log('[generate-session-audio] script complet', spokenWords(script), 'mots')
     return { script, model, usage: result.usage }
   }
 

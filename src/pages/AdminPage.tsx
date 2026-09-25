@@ -224,7 +224,7 @@ export function AdminPage() {
 
   if (checking) {
     return (
-      <div className="admin-root flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6 text-sm text-black dark:text-white">
+      <div className="admin-root dark flex min-h-dvh items-center justify-center bg-[#020c25] px-6 text-sm text-[#e9eff4]">
         …
       </div>
     )
@@ -232,7 +232,7 @@ export function AdminPage() {
 
   if (!authed) {
     return (
-      <div className="admin-root flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6">
+      <div className="admin-root dark flex min-h-dvh items-center justify-center bg-[#020c25] px-6">
         <form onSubmit={(e) => void onSubmit(e)} className="w-full max-w-[240px] space-y-3">
           <input
             type="email"
@@ -292,7 +292,7 @@ export function AdminPage() {
 
   return (
     <div
-      className="admin-root min-h-dvh bg-atmosphere-dark px-4 py-10 text-black dark:text-white sm:px-6"
+      className="admin-root dark min-h-dvh bg-[#020c25] px-4 py-10 text-[#e9eff4] sm:px-6"
     >
       <div className="mx-auto w-full max-w-4xl">
         <div className="relative flex items-center justify-center">

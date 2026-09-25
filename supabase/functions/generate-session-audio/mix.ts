@@ -5,12 +5,6 @@ import {
   RITUEL_LOOP_WAV,
   ONDE_LOOP_WAV,
   ANTONI_LOOP_WAV,
-  RITUEL_3S_MP3,
-  ONDE_3S_MP3,
-  ANTONI_3S_MP3,
-  RITUEL_9S_MP3,
-  ONDE_9S_MP3,
-  ANTONI_9S_MP3,
 } from './beds-data.ts'
 
 const SAMPLE_RATE = 44100
@@ -31,12 +25,6 @@ const BED_WAV_B64: Record<string, string> = {
   antoni: ANTONI_LOOP_WAV,
 }
 
-const BED_SILENCE_B64: Record<string, { s3: string; s9: string }> = {
-  rituel: { s3: RITUEL_3S_MP3, s9: RITUEL_9S_MP3 },
-  onde: { s3: ONDE_3S_MP3, s9: ONDE_9S_MP3 },
-  antoni: { s3: ANTONI_3S_MP3, s9: ANTONI_9S_MP3 },
-}
-
 /** Tapis très discret sous la voix. Même niveau pour les trois fonds. */
 const BED_GAIN: Record<string, number> = {
   rituel: 0.035,
@@ -46,7 +34,6 @@ const BED_GAIN: Record<string, number> = {
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number }
 let bedCache: LoadedBed | null = null
-const silenceMp3Cache = new Map<string, Uint8Array>()
 
 export async function loadBed(appVoiceKey: string): Promise<{ pcm: Int16Array; gain: number } | null> {
   const key = appVoiceKey.toLowerCase()
@@ -62,53 +49,6 @@ export async function loadBed(appVoiceKey: string): Promise<{ pcm: Int16Array; g
     console.warn('[mix] bed missing', key, err)
     return null
   }
-}
-
-function silenceTile(key: string, longPause: boolean): Uint8Array | null {
-  const pack = BED_SILENCE_B64[key]
-  if (!pack) return null
-  const cacheKey = `${key}:${longPause ? 9 : 3}`
-  const cached = silenceMp3Cache.get(cacheKey)
-  if (cached) return cached
-  try {
-    const bytes = b64ToBytes(longPause ? pack.s9 : pack.s3)
-    silenceMp3Cache.set(cacheKey, bytes)
-    return bytes
-  } catch (err) {
-    console.warn('[mix] silence tile missing', cacheKey, err)
-    return null
-  }
-}
-
-/** Silence d’ambiance pré-encodé (pas de lame.js). 3 s ou 9 s CDC, sinon tuile 3 s répétée.
- *  Les blancs < 2,5 s sont mixés en live (tuile 3 s trop longue pour une virgule / un point). */
-export async function silenceBedMp3(appVoiceKey: string, seconds: number): Promise<Uint8Array | null> {
-  if (seconds < 2.5) return null
-  const key = appVoiceKey.toLowerCase()
-  const rounded = Math.max(1, Math.round(seconds))
-  if (rounded >= 8) {
-    const longTile = silenceTile(key, true)
-    if (longTile) return longTile
-  }
-  const shortTile = silenceTile(key, false)
-  if (!shortTile) return null
-  if (rounded <= 4) return shortTile
-  const copies = Math.max(1, Math.round(rounded / 3))
-  const total = shortTile.byteLength * copies
-  const out = new Uint8Array(total)
-  for (let i = 0; i < copies; i++) out.set(shortTile, i * shortTile.byteLength)
-  return out
-}
-
-function concatInt16(parts: Int16Array[]): Int16Array {
-  const total = parts.reduce((n, p) => n + p.length, 0)
-  const out = new Int16Array(total)
-  let offset = 0
-  for (const part of parts) {
-    out.set(part, offset)
-    offset += part.length
-  }
-  return out
 }
 
 function readU32(bytes: Uint8Array, i: number) {
@@ -191,10 +131,13 @@ export function upsampleTts(pcm: Int16Array): Int16Array {
   return resamplePcm(pcm, TTS_RATE, SAMPLE_RATE)
 }
 
+/** Un seul niveau pour toute la séance, appliqué à chaque phrase avant le collage. */
+const SPEECH_RMS_TARGET = 4200
+const SPEECH_GAIN_MAX = 8
+
 /**
- * Chaque phrase est une synthèse à part. On mesure la voix réelle (pas les blancs
- * en bord de morceau) et on la ramène au même niveau. Un morceau trop fort est
- * baissé en entier. On n’amplifie pas au-delà de ×2,5 pour ne pas crier un souffle.
+ * Ramène chaque phrase au même barème. Un passage faible est remonté,
+ * un passage fort est baissé. Le collage ne change plus ce niveau.
  */
 export function levelSpeech(pcm: Int16Array): Int16Array {
   if (pcm.length < 80) return pcm
@@ -204,16 +147,15 @@ export function levelSpeech(pcm: Int16Array): Int16Array {
   for (let i = 0; i < pcm.length; i++) {
     const v = Math.abs(pcm[i]!)
     if (v > peak) peak = v
-    if (v < 400) continue
+    if (v < 180) continue
     sum += v * v
     count += 1
   }
-  if (count < 80) return pcm
+  if (count < 40 || peak < 180) return pcm
   const rms = Math.sqrt(sum / count)
-  if (rms < 200 || peak < 400) return pcm
-  const target = 4200
-  let gain = target / rms
-  if (gain > 2.5) gain = 2.5
+  if (rms < 80) return pcm
+  let gain = SPEECH_RMS_TARGET / rms
+  if (gain > SPEECH_GAIN_MAX) gain = SPEECH_GAIN_MAX
   if (peak * gain > 28000) gain = 28000 / peak
   const fade = Math.min(Math.round(0.012 * SAMPLE_RATE), Math.floor(pcm.length / 10))
   for (let i = 0; i < pcm.length; i++) {
@@ -382,8 +324,4 @@ export async function encodeMp3(pcm: Int16Array): Promise<Uint8Array> {
     offset += c.byteLength
   }
   return out
-}
-
-export function concatPcm(parts: Int16Array[]): Int16Array {
-  return concatInt16(parts)
 }

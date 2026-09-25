@@ -21,14 +21,9 @@ Sans N8N : l’Edge Function traite quand même des chunks + filet front (moins 
 
 YouTube / lien externe : **non** pour le produit (séances uniques + lecture privée mobile).
 
-## Mode démo ~15 s (présentation client)
+## Durée
 
-Par défaut le script court est actif (`VISIORA_AUDIO_DEMO_SHORT` ≠ `0`).
-
-```bash
-# Remettre le vrai Annexe 1 (~15 min) :
-npx supabase secrets set VISIORA_AUDIO_DEMO_SHORT=0 --project-ref zhmgispzaggjhkbvrhwg
-```
+Chaque séance part sur le script complet (environ 15 minutes). Il n’y a plus de raccourci à 15 secondes.
 
 ## Prérequis
 
