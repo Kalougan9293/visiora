@@ -1,5 +1,6 @@
+import { createClient } from '@supabase/supabase-js'
 import { supabase, isSupabaseConfigured, AUDIO_BUCKET } from './supabase'
-import type { ProfileRow } from '@/types/database'
+import type { Database, ProfileRow } from '@/types/database'
 
 export type SignUpInput = {
   email: string
@@ -67,7 +68,19 @@ export const authService = {
   },
 
   async requestPasswordReset(email: string) {
-    const client = requireClient()
+    const url = import.meta.env.VITE_SUPABASE_URL ?? ''
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? ''
+    if (!url || !anonKey) {
+      throw new Error('Supabase non configuré — renseigne VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY')
+    }
+    // Client sans session : un compte déjà ouvert ne doit pas recevoir le lien à la place de l’adresse saisie.
+    const client = createClient<Database>(url, anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    })
     const redirectTo = `${window.location.origin}/nouveau-mot-de-passe`
     const { error } = await client.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo,

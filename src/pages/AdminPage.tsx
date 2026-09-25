@@ -236,7 +236,8 @@ export function AdminPage() {
         <form onSubmit={(e) => void onSubmit(e)} className="w-full max-w-[240px] space-y-3">
           <input
             type="email"
-            autoComplete="email"
+            autoComplete="off"
+            name="visiora-admin-email"
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
