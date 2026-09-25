@@ -129,6 +129,15 @@
   color: var(--vs-texte-fort);
 }
 
+.variant-classic:not(.dark) .admin-root,
+.variant-classic:not(.dark) .admin-root * {
+  color: #020c25 !important;
+}
+
+.variant-classic:not(.dark) .admin-root input::placeholder {
+  color: rgb(2 12 37 / 0.55) !important;
+}
+
 .variant-classic.dark h1 .vs-titre-accent {
   color: var(--vs-azur);
 }
