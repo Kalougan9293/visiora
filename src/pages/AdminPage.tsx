@@ -224,7 +224,7 @@ export function AdminPage() {
 
   if (checking) {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6 text-sm text-white">
+      <div className="flex min-h-dvh items-center justify-center bg-atmosphere-dark px-6 text-sm text-black dark:text-white">
         …
       </div>
     )
@@ -241,7 +241,7 @@ export function AdminPage() {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-white outline-none placeholder:text-white focus:border-[var(--vs-azur)]/50"
+            className="w-full rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2.5 text-center text-base text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
             disabled={busy}
           />
           <input
@@ -250,7 +250,7 @@ export function AdminPage() {
             placeholder="Mot de passe"
             value={pass}
             onChange={(e) => setPass(e.target.value)}
-            className="w-full rounded-xl border border-white/20 bg-white/10 px-3 py-2.5 text-center text-base text-white outline-none placeholder:text-white focus:border-[var(--vs-azur)]/50"
+            className="w-full rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2.5 text-center text-base text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
             disabled={busy}
           />
           <button
@@ -269,12 +269,12 @@ export function AdminPage() {
                 .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Envoi impossible'))
                 .finally(() => setBusy(false))
             }}
-            className="w-full text-[11px] text-white hover:text-white"
+            className="w-full text-[11px] text-black dark:text-white hover:text-black dark:hover:text-white"
           >
             Mot de passe oublié ?
           </button>
           {error && (
-            <p className="text-xs text-white">
+            <p className="text-xs text-black dark:text-white">
               {error}
             </p>
           )}
@@ -292,17 +292,17 @@ export function AdminPage() {
 
   return (
     <div
-      className="min-h-dvh bg-atmosphere-dark px-4 py-10 text-white sm:px-6"
+      className="min-h-dvh bg-atmosphere-dark px-4 py-10 text-black dark:text-white sm:px-6"
     >
       <div className="mx-auto w-full max-w-4xl">
         <div className="relative flex items-center justify-center">
-          <h1 className="text-center font-display text-2xl tracking-tight text-white sm:text-[1.75rem]">
+          <h1 className="text-center font-display text-2xl tracking-tight text-black dark:text-white sm:text-[1.75rem]">
             Tableau de bord
           </h1>
           <button
             type="button"
             onClick={() => void logout()}
-            className="absolute right-0 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wider text-white transition hover:text-white"
+            className="absolute right-0 top-1/2 -translate-y-1/2 text-[11px] uppercase tracking-wider text-black dark:text-white transition hover:text-black dark:hover:text-white"
           >
             Sortir
           </button>
@@ -339,15 +339,15 @@ export function AdminPage() {
                 })
                 .finally(() => setExporting(false))
             }}
-            className="text-base font-medium text-white underline decoration-white/70 underline-offset-4 disabled:opacity-40"
+            className="text-base font-medium text-black dark:text-white underline decoration-black/40 dark:decoration-white/70 underline-offset-4 disabled:opacity-40"
           >
             {exporting ? '…' : 'Télécharger les mesures'}
           </button>
-          {exportError && <p className="text-center text-xs text-white">{exportError}</p>}
+          {exportError && <p className="text-center text-xs text-black dark:text-white">{exportError}</p>}
         </div>
 
         {loadError && tab === 'users' && (
-          <p className="mt-4 text-center text-xs text-white">{loadError}</p>
+          <p className="mt-4 text-center text-xs text-black dark:text-white">{loadError}</p>
         )}
 
         <div className="mt-8 flex justify-center gap-2">
@@ -366,7 +366,7 @@ export function AdminPage() {
         <div className="mt-6 overflow-x-auto rounded-2xl border border-white/15 bg-white/[0.04]">
           <table className="w-full min-w-[480px] border-collapse text-center text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.14em] text-white">
+              <tr className="border-b border-white/10 text-[10px] uppercase tracking-[0.14em] text-black dark:text-white">
                 <th className="px-3 py-3 font-medium">Prénom</th>
                 <th className="px-3 py-3 font-medium">Mail</th>
                 <th className="px-3 py-3 font-medium">Audios</th>
@@ -377,13 +377,13 @@ export function AdminPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-white">
+                  <td colSpan={5} className="px-3 py-8 text-black dark:text-white">
                     …
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-white">
+                  <td colSpan={5} className="px-3 py-8 text-black dark:text-white">
                     —
                   </td>
                 </tr>
@@ -391,9 +391,9 @@ export function AdminPage() {
                 rows.map((r) => (
                   <tr key={r.id} className="border-b border-white/[0.06] last:border-0">
                     <td className="px-3 py-3">{r.firstName || '—'}</td>
-                    <td className="px-3 py-3 text-white">{r.email || '—'}</td>
+                    <td className="px-3 py-3 text-black dark:text-white">{r.email || '—'}</td>
                     <td className="px-3 py-3 tabular-nums">{r.audioCount}</td>
-                    <td className="px-3 py-3 tabular-nums text-white">
+                    <td className="px-3 py-3 tabular-nums text-black dark:text-white">
                       {formatDate(r.lastSeenAt)}
                     </td>
                     <td className="px-2 py-3">
@@ -402,7 +402,7 @@ export function AdminPage() {
                         onClick={() => void onDelete(r)}
                         disabled={deletingId === r.id}
                         aria-label="Supprimer"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white transition hover:text-white disabled:opacity-40"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-black dark:text-white transition hover:text-black dark:hover:text-white disabled:opacity-40"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -421,7 +421,7 @@ export function AdminPage() {
 
         {tab === 'liste' && (
         <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
-          <p className="text-center text-[12px] text-white">
+          <p className="text-center text-[12px] text-black dark:text-white">
             Si quelqu’un écrit l’un de ces mots dans le questionnaire, l’écran santé s’affiche.
           </p>
 
@@ -434,7 +434,7 @@ export function AdminPage() {
                 if (keywordHint) setKeywordHint('')
               }}
               placeholder="Ajouter un mot"
-              className="flex-1 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white focus:border-[var(--vs-azur)]/50"
+              className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
               disabled={keywordBusy}
             />
             <button
@@ -446,7 +446,7 @@ export function AdminPage() {
             </button>
           </form>
           {keywordHint && (
-            <p className="mt-2 text-center text-[11px] text-white">{keywordHint}</p>
+            <p className="mt-2 text-center text-[11px] text-black dark:text-white">{keywordHint}</p>
           )}
 
           <KeywordGrid
@@ -456,7 +456,7 @@ export function AdminPage() {
           />
           {extraKeywords.length > 0 && (
             <>
-              <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-white">
+              <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-black dark:text-white">
                 Ajoutés
               </p>
               <KeywordGrid
@@ -498,11 +498,11 @@ function SharedSessions({
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (error) {
-    return <p className="mt-6 text-center text-xs text-white">{error}</p>
+    return <p className="mt-6 text-center text-xs text-black dark:text-white">{error}</p>
   }
   if (!sessions.length) {
     return (
-      <p className="mt-6 text-center text-sm text-white">
+      <p className="mt-6 text-center text-sm text-black dark:text-white">
         Aucune personne n’a autorisé la lecture de ses séances.
       </p>
     )
@@ -523,14 +523,14 @@ function SharedSessions({
               aria-expanded={open}
               className="flex w-full flex-col items-center gap-1 px-4 py-3 text-center"
             >
-              <span className="block w-full truncate text-sm text-white">{session.title || 'Séance'}</span>
-              <span className="block w-full truncate text-[11px] text-white">
+              <span className="block w-full truncate text-sm text-black dark:text-white">{session.title || 'Séance'}</span>
+              <span className="block w-full truncate text-[11px] text-black dark:text-white">
                 {name} · {formatDate(session.createdAt)} · {session.listens} écoute
                 {session.listens !== 1 ? 's' : ''}
               </span>
               <ChevronDown
                 size={16}
-                className={`text-white transition-transform ${open ? 'rotate-180' : ''}`}
+                className={`text-black dark:text-white transition-transform ${open ? 'rotate-180' : ''}`}
               />
             </button>
             {open && (
@@ -538,13 +538,13 @@ function SharedSessions({
                 <dl className="space-y-2">
                   {answerLines(session.answers).map((line) => (
                     <div key={line.label}>
-                      <dt className="text-[10px] uppercase tracking-[0.12em] text-white">{line.label}</dt>
-                      <dd className="text-sm text-white">{line.text}</dd>
+                      <dt className="text-[10px] uppercase tracking-[0.12em] text-black dark:text-white">{line.label}</dt>
+                      <dd className="text-sm text-black dark:text-white">{line.text}</dd>
                     </div>
                   ))}
                 </dl>
                 {session.script?.trim() && (
-                  <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap text-center text-xs leading-relaxed text-white">
+                  <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap text-center text-xs leading-relaxed text-black dark:text-white">
                     {session.script}
                   </pre>
                 )}
@@ -573,7 +573,7 @@ function TabBubble({
       className={
         active
           ? 'rounded-full bg-[var(--vs-lunaire)] px-4 py-1.5 text-xs font-semibold text-[var(--vs-nuit)]'
-          : 'rounded-full border border-white/15 bg-white/[0.04] px-4 py-1.5 text-xs text-white hover:border-[var(--vs-azur)]/40 hover:text-white'
+          : 'rounded-full border border-white/15 bg-white/[0.04] px-4 py-1.5 text-xs text-black dark:text-white hover:border-[var(--vs-azur)]/40 hover:text-black dark:hover:text-white'
       }
     >
       {children}
@@ -593,7 +593,7 @@ function KeywordGrid({
   added?: boolean
 }) {
   if (!words.length) {
-    return <p className="mt-3 text-center text-[13px] text-white">—</p>
+    return <p className="mt-3 text-center text-[13px] text-black dark:text-white">—</p>
   }
   return (
     <ul className="mt-3 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-5">
@@ -606,13 +606,13 @@ function KeywordGrid({
               : 'relative flex min-w-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] px-5 py-2'
           }
         >
-          <span className="truncate text-center text-xs text-white">{word}</span>
+          <span className="truncate text-center text-xs text-black dark:text-white">{word}</span>
           <button
             type="button"
             onClick={() => onRemove(word)}
             disabled={busy}
             aria-label={`Retirer ${word}`}
-            className="absolute right-1 top-1/2 -translate-y-1/2 text-xs leading-none text-white hover:text-white disabled:opacity-40"
+            className="absolute right-1 top-1/2 -translate-y-1/2 text-xs leading-none text-black dark:text-white hover:text-black dark:hover:text-white disabled:opacity-40"
           >
             ×
           </button>
@@ -634,10 +634,10 @@ function StatSquare({
   return (
     <div className="flex w-[5.5rem] flex-col items-center sm:w-24">
       <div className="flex h-[5.5rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-white/15 bg-white/[0.05] sm:h-24">
-        <p className="text-xl font-semibold tabular-nums text-white sm:text-2xl">{value}</p>
-        <p className="text-[9px] uppercase tracking-[0.12em] text-white">{label}</p>
+        <p className="text-xl font-semibold tabular-nums text-black dark:text-white sm:text-2xl">{value}</p>
+        <p className="text-[9px] uppercase tracking-[0.12em] text-black dark:text-white">{label}</p>
       </div>
-      <p className="mt-1.5 text-[9px] tabular-nums text-white">max {limit}</p>
+      <p className="mt-1.5 text-[9px] tabular-nums text-black dark:text-white">max {limit}</p>
     </div>
   )
 }
