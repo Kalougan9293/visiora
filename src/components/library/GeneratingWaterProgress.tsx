@@ -43,7 +43,7 @@ export function GeneratingWaterProgress({ serverPct }: { serverPct: number }) {
     <div
       className={cn(
         'relative h-[9.5rem] w-full overflow-hidden rounded-2xl sm:h-40',
-        'border border-[var(--vs-bordure)] bg-[var(--vs-abysse)]',
+        'border border-[var(--vs-bordure)] bg-[var(--vs-lunaire)] dark:bg-[var(--vs-abysse)]',
       )}
       role="status"
       aria-live="polite"
@@ -56,10 +56,10 @@ export function GeneratingWaterProgress({ serverPct }: { serverPct: number }) {
       />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center gap-1.5 px-4">
-        <p className="font-display text-4xl tracking-tight tabular-nums text-[var(--vs-lunaire)] sm:text-5xl">
+        <p className="font-display text-4xl tracking-tight tabular-nums text-[#020c25] dark:text-[var(--vs-lunaire)] sm:text-5xl">
           {shown}%
         </p>
-        <p className="max-w-[16rem] text-center text-[11px] leading-relaxed text-[var(--vs-brume)] sm:text-xs">
+        <p className="max-w-[16rem] text-center text-[11px] leading-relaxed text-[#1a2744] dark:text-[var(--vs-brume)] sm:text-xs">
           {APP_COPY.generating}
         </p>
       </div>

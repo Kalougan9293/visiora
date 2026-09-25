@@ -191,6 +191,41 @@ export function upsampleTts(pcm: Int16Array): Int16Array {
   return resamplePcm(pcm, TTS_RATE, SAMPLE_RATE)
 }
 
+/**
+ * Chaque phrase est une synthèse à part. On mesure la voix réelle (pas les blancs
+ * en bord de morceau) et on la ramène au même niveau. Un morceau trop fort est
+ * baissé en entier. On n’amplifie pas au-delà de ×2,5 pour ne pas crier un souffle.
+ */
+export function levelSpeech(pcm: Int16Array): Int16Array {
+  if (pcm.length < 80) return pcm
+  let sum = 0
+  let count = 0
+  let peak = 0
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.abs(pcm[i]!)
+    if (v > peak) peak = v
+    if (v < 400) continue
+    sum += v * v
+    count += 1
+  }
+  if (count < 80) return pcm
+  const rms = Math.sqrt(sum / count)
+  if (rms < 200 || peak < 400) return pcm
+  const target = 4200
+  let gain = target / rms
+  if (gain > 2.5) gain = 2.5
+  if (peak * gain > 28000) gain = 28000 / peak
+  const fade = Math.min(Math.round(0.012 * SAMPLE_RATE), Math.floor(pcm.length / 10))
+  for (let i = 0; i < pcm.length; i++) {
+    let g = gain
+    if (fade > 0 && i < fade) g *= i / fade
+    else if (fade > 0 && i > pcm.length - fade) g *= (pcm.length - i) / fade
+    const s = pcm[i]! * g
+    pcm[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+  }
+  return pcm
+}
+
 export function mixLoopingBed(
   voice: Int16Array,
   bed: Int16Array,

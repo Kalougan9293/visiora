@@ -1,5 +1,9 @@
 import { HEALTH_KEYWORDS, healthMatchKey } from '@/services/healthGate'
-import { isSupabaseConfigured, supabase } from './supabase'
+import { isSupabaseConfigured, supabase, supabaseAdmin } from './supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
+
+type DbClient = SupabaseClient<Database>
 
 const LS_KEY = 'visiora-health-keywords'
 const LS_REMOVED = 'visiora-health-keywords-removed'
@@ -64,18 +68,19 @@ export const healthKeywordsService = {
     return uniqueByMatchKey([...HEALTH_KEYWORDS])
   },
 
-  async snapshot(): Promise<HealthKeywordsSnapshot> {
-    const all = await this.list()
+  async snapshot(client?: DbClient | null): Promise<HealthKeywordsSnapshot> {
+    const all = await this.list(client)
     const defaultKeys = new Set(this.defaults().map(healthMatchKey))
     const extras = all.filter((w) => !defaultKeys.has(healthMatchKey(w)))
     const base = all.filter((w) => defaultKeys.has(healthMatchKey(w)))
     return { all, base, extras }
   },
 
-  async list(): Promise<string[]> {
+  async list(client?: DbClient | null): Promise<string[]> {
+    const dbClient = client ?? supabase
     let db: string[] = []
-    if (isSupabaseConfigured() && supabase) {
-      const { data, error } = await supabase.from('health_keywords').select('word').order('word')
+    if (isSupabaseConfigured() && dbClient) {
+      const { data, error } = await dbClient.from('health_keywords').select('word').order('word')
       if (!error && data) {
         db = data.map((row) => String(row.word ?? '')).filter(Boolean)
       }
@@ -86,13 +91,14 @@ export const healthKeywordsService = {
     return merged.filter((w) => !removed.some((r) => sameKey(r, w)))
   },
 
-  async add(word: string): Promise<string[]> {
+  async add(word: string, client?: DbClient | null): Promise<string[]> {
+    const dbClient = client ?? supabaseAdmin ?? supabase
     const normalized = normalizeWord(word)
-    if (!healthMatchKey(normalized)) return this.list()
-    const current = await this.list()
+    if (!healthMatchKey(normalized)) return this.list(dbClient)
+    const current = await this.list(dbClient)
     if (current.some((w) => sameKey(w, normalized))) return current
-    if (isSupabaseConfigured() && supabase) {
-      const { error } = await supabase.from('health_keywords').insert({ word: normalized })
+    if (isSupabaseConfigured() && dbClient) {
+      const { error } = await dbClient.from('health_keywords').insert({ word: normalized })
       if (error && !/relation|does not exist|schema cache|duplicate/i.test(error.message)) {
         console.warn('[health-keywords] insert', error.message)
       }
@@ -102,12 +108,13 @@ export const healthKeywordsService = {
       readJsonList(LS_REMOVED).filter((w) => !sameKey(w, normalized)),
     )
     writeJsonList(LS_KEY, [...readJsonList(LS_KEY), normalized])
-    return this.list()
+    return this.list(dbClient)
   },
 
-  async remove(word: string): Promise<string[]> {
+  async remove(word: string, client?: DbClient | null): Promise<string[]> {
+    const dbClient = client ?? supabaseAdmin ?? supabase
     const key = healthMatchKey(word)
-    if (!key) return this.list()
+    if (!key) return this.list(dbClient)
     const aliases = uniqueByMatchKey([
       word,
       ...this.defaults(),
@@ -115,13 +122,13 @@ export const healthKeywordsService = {
       ...readJsonList(LS_REMOVED),
     ]).filter((w) => healthMatchKey(w) === key)
 
-    if (isSupabaseConfigured() && supabase) {
-      const { data } = await supabase.from('health_keywords').select('word')
+    if (isSupabaseConfigured() && dbClient) {
+      const { data } = await dbClient.from('health_keywords').select('word')
       const toDelete = (data ?? [])
         .map((row) => String(row.word ?? ''))
         .filter((w) => healthMatchKey(w) === key)
       if (toDelete.length) {
-        const { error } = await supabase.from('health_keywords').delete().in('word', toDelete)
+        const { error } = await dbClient.from('health_keywords').delete().in('word', toDelete)
         if (error && !/relation|does not exist|schema cache/i.test(error.message)) {
           console.warn('[health-keywords] delete', error.message)
         }
@@ -132,6 +139,6 @@ export const healthKeywordsService = {
       readJsonList(LS_KEY).filter((w) => healthMatchKey(w) !== key),
     )
     writeJsonList(LS_REMOVED, [...readJsonList(LS_REMOVED), ...aliases, word])
-    return this.list()
+    return this.list(dbClient)
   },
 }

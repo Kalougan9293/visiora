@@ -5,7 +5,7 @@ import { WIZARD_STEPS } from '@/data/wizard'
 import { healthKeywordsService } from '@/services/healthKeywords'
 import { downloadMetricsCsv } from '@/services/metrics'
 import { authService } from '@/services/auth'
-import { isSupabaseConfigured, supabase } from '@/services/supabase'
+import { isSupabaseConfigured, supabaseAdmin as supabase } from '@/services/supabase'
 
 function formatDate(iso: string | null) {
   if (!iso) return '—'
@@ -121,7 +121,7 @@ export function AdminPage() {
       setShared([])
       setSharedError(err instanceof Error ? err.message : 'Lecture impossible')
     })
-    void healthKeywordsService.snapshot().then((snap) => {
+    void healthKeywordsService.snapshot(supabase).then((snap) => {
       setBaseKeywords(snap.base)
       setExtraKeywords(snap.extras)
     })
@@ -137,8 +137,8 @@ export function AdminPage() {
       const already = [...baseKeywords, ...extraKeywords].some(
         (w) => healthKeywordsService.matchKey(w) === healthKeywordsService.matchKey(draft),
       )
-      await healthKeywordsService.add(draft)
-      const snap = await healthKeywordsService.snapshot()
+      await healthKeywordsService.add(draft, supabase)
+      const snap = await healthKeywordsService.snapshot(supabase)
       setBaseKeywords(snap.base)
       setExtraKeywords(snap.extras)
       setKeywordDraft('')
@@ -153,8 +153,8 @@ export function AdminPage() {
     setKeywordBusy(true)
     setKeywordHint('')
     try {
-      await healthKeywordsService.remove(word)
-      const snap = await healthKeywordsService.snapshot()
+      await healthKeywordsService.remove(word, supabase)
+      const snap = await healthKeywordsService.snapshot(supabase)
       setBaseKeywords(snap.base)
       setExtraKeywords(snap.extras)
       setKeywordHint(`« ${word} » retiré.`)
@@ -202,7 +202,7 @@ export function AdminPage() {
       }
       const { data: isAdmin, error: adminErr } = await supabase.rpc('is_current_user_admin')
       if (adminErr || !isAdmin) {
-        await supabase.auth.signOut()
+        await supabase.auth.signOut({ scope: 'local' })
         setError('Compte non admin')
         return
       }
@@ -215,7 +215,7 @@ export function AdminPage() {
   }
 
   async function logout() {
-    if (supabase) await supabase.auth.signOut()
+    if (supabase) await supabase.auth.signOut({ scope: 'local' })
     setAuthed(false)
     setEmail('')
     setPass('')

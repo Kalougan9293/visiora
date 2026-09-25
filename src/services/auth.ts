@@ -83,7 +83,7 @@ export const authService = {
 
   async signOut() {
     const client = requireClient()
-    const { error } = await client.auth.signOut()
+    const { error } = await client.auth.signOut({ scope: 'local' })
     if (error) throw error
   },
 

@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, RotateCcw, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { AI_DISCLOSURE } from '@/data/uiCopy'
 import { hasListenedEnough } from '@/lib/listenThreshold'
+
+function formatClock(seconds: number) {
+  const total = Math.max(0, Math.round(seconds))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
 
 interface AudioPlayerProps {
   src?: string | null
@@ -15,9 +22,13 @@ interface AudioPlayerProps {
   onListenBegin?: () => void
   /** Position courante. `ended` = la piste est allée au bout. */
   onListenSample?: (sample: { current: number; duration: number; ended: boolean }) => void
+  /** Durée réelle du fichier, dès que le navigateur l’a lue. */
+  onDuration?: (seconds: number) => void
   className?: string
   /** Bouton play seul, pour une ligne de bibliothèque */
   compact?: boolean
+  /** Barre, temps écoulé / restant, et sauts de 10 s. */
+  library?: boolean
   ambiance?: AmbianceChoice
 }
 
@@ -28,21 +39,27 @@ export function AudioPlayer({
   onPlayStart,
   onListenBegin,
   onListenSample,
+  onDuration,
   className,
   compact = false,
+  library = false,
   ambiance = null,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [current, setCurrent] = useState(0)
+  const [durationSec, setDurationSec] = useState(0)
   const countedRef = useRef(false)
   const bedHeldRef = useRef(false)
   const onSampleRef = useRef(onListenSample)
   const onBeginRef = useRef(onListenBegin)
+  const onDurationRef = useRef(onDuration)
   const lastSampleRef = useRef({ current: 0, duration: 0 })
   const lastSentRef = useRef(0)
   onSampleRef.current = onListenSample
   onBeginRef.current = onListenBegin
+  onDurationRef.current = onDuration
 
   const dropBed = () => {
     if (!bedHeldRef.current) return
@@ -58,16 +75,12 @@ export function AudioPlayer({
   }
 
   useEffect(() => {
-    const el = audioRef.current
     setPlaying(false)
     setProgress(0)
+    setCurrent(0)
+    setDurationSec(0)
     countedRef.current = false
     dropBed()
-    if (el && src) {
-      el.pause()
-      el.src = src
-      el.load()
-    }
     return () => dropBed()
   }, [src, ambiance])
 
@@ -91,9 +104,16 @@ export function AudioPlayer({
       lastSentRef.current = now
       onSampleRef.current?.({ current, duration, ended })
     }
+    const syncClock = () => {
+      const duration = Number.isFinite(el.duration) ? el.duration : 0
+      const now = Number.isFinite(el.currentTime) ? el.currentTime : 0
+      setCurrent(now)
+      setDurationSec(duration)
+      if (duration > 0) setProgress((now / duration) * 100)
+    }
     const onTime = () => {
       if (!el.duration || Number.isNaN(el.duration)) return
-      setProgress((el.currentTime / el.duration) * 100)
+      syncClock()
       markIfEnough(false)
       remember(false)
     }
@@ -110,11 +130,20 @@ export function AudioPlayer({
       remember(el.ended, true)
     }
 
+    const onMeta = () => {
+      syncClock()
+      if (Number.isFinite(el.duration) && el.duration > 0) onDurationRef.current?.(el.duration)
+    }
+    el.addEventListener('loadedmetadata', onMeta)
+    el.addEventListener('durationchange', onMeta)
+    onMeta()
     el.addEventListener('timeupdate', onTime)
     el.addEventListener('ended', onEnd)
     el.addEventListener('play', onPlay)
     el.addEventListener('pause', onPause)
     return () => {
+      el.removeEventListener('loadedmetadata', onMeta)
+      el.removeEventListener('durationchange', onMeta)
       el.removeEventListener('timeupdate', onTime)
       el.removeEventListener('ended', onEnd)
       el.removeEventListener('play', onPlay)
@@ -143,6 +172,9 @@ export function AudioPlayer({
       }
       if (fresh) onBeginRef.current?.()
       takeBed()
+      document.querySelectorAll('audio').forEach((node) => {
+        if (node !== el) node.pause()
+      })
       await el.play()
     } catch (err) {
       console.warn('[audio] play failed', err)
@@ -151,9 +183,19 @@ export function AudioPlayer({
     }
   }
 
+  const seekTo = (seconds: number) => {
+    const el = audioRef.current
+    if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
+    const next = Math.min(el.duration, Math.max(0, seconds))
+    el.currentTime = next
+    setCurrent(next)
+    setProgress((next / el.duration) * 100)
+  }
+
   const audioEl = src ? (
     <audio
       ref={audioRef}
+      src={src}
       className="hidden"
       preload="metadata"
       playsInline
@@ -167,7 +209,7 @@ export function AudioPlayer({
       size="sm"
       className={cn(
         '!rounded-full !px-0 !py-0 shrink-0 hover:!translate-y-0',
-        compact ? '!h-9 !w-9' : 'h-12 w-12',
+        library || compact ? '!h-10 !w-10' : 'h-12 w-12',
       )}
       onClick={() => void toggle()}
       disabled={!src}
@@ -176,6 +218,53 @@ export function AudioPlayer({
       {playing ? <Pause size={compact ? 15 : 18} /> : <Play size={compact ? 15 : 18} className="ml-0.5" />}
     </Button>
   )
+
+  if (library) {
+    const remain = Math.max(0, durationSec - current)
+    return (
+      <div className={cn('w-full px-1 pb-1 pt-2', className)}>
+        {audioEl}
+        <input
+          type="range"
+          min={0}
+          max={durationSec > 0 ? durationSec : 0}
+          step={0.1}
+          value={Math.min(current, durationSec || 0)}
+          disabled={!src || durationSec <= 0}
+          aria-label="Position dans la séance"
+          onChange={(event) => seekTo(Number(event.target.value))}
+          className="h-1 w-full cursor-pointer accent-[var(--vs-azur)] disabled:opacity-40"
+        />
+        <div className="mt-1 flex justify-between text-[11px] tabular-nums text-ink/70 dark:text-champagne/85">
+          <span>{formatClock(current)}</span>
+          <span>-{formatClock(remain)}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-center gap-6">
+          <button
+            type="button"
+            aria-label="Reculer de 10 secondes"
+            disabled={!src}
+            onClick={() => seekTo(current - 10)}
+            className="flex h-9 items-center justify-center gap-0.5 rounded-full px-2 text-ink/70 disabled:opacity-40 dark:text-champagne"
+          >
+            <RotateCcw size={16} />
+            <span className="text-[10px] font-semibold leading-none">10</span>
+          </button>
+          {playButton}
+          <button
+            type="button"
+            aria-label="Avancer de 10 secondes"
+            disabled={!src}
+            onClick={() => seekTo(current + 10)}
+            className="flex h-9 items-center justify-center gap-0.5 rounded-full px-2 text-ink/70 disabled:opacity-40 dark:text-champagne"
+          >
+            <span className="text-[10px] font-semibold leading-none">10</span>
+            <RotateCw size={16} />
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (compact) {
     return (

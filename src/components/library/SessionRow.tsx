@@ -11,6 +11,13 @@ import { metricsService } from '@/services/metrics'
 import { formatDateFr, cn } from '@/lib/utils'
 import type { VisualizationSession } from '@/types'
 
+function formatClock(seconds: number) {
+  const total = Math.max(0, Math.round(seconds))
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 export function SessionRow({ session }: { session: VisualizationSession }) {
   const navigate = useNavigate()
   const { removeSession, markListened, retryGeneration } = useSessions()
@@ -25,7 +32,27 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const maxSecondsRef = useRef(0)
   const chainRef = useRef(Promise.resolve())
   const playGenRef = useRef(0)
+  const [fileSeconds, setFileSeconds] = useState<number | null>(null)
+  const [playUrl, setPlayUrl] = useState<string | null>(session.audioUrl ?? null)
   const onHeardEnough = useCallback(() => markListened(session.id), [markListened, session.id])
+  const onFileDuration = useCallback((seconds: number) => {
+    if (Number.isFinite(seconds) && seconds > 0) setFileSeconds(seconds)
+  }, [])
+
+  useEffect(() => {
+    setFileSeconds(null)
+    let cancelled = false
+    const stored = session.audioUrl ?? null
+    setPlayUrl(stored)
+    const path = session.audioStoragePath
+    if (!path) return
+    void audioStorage.refreshSessionUrl(path).then((url) => {
+      if (!cancelled && url) setPlayUrl(url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [session.id, session.audioStoragePath, session.audioUrl])
 
   const onListenBegin = useCallback(() => {
     const gen = ++playGenRef.current
@@ -78,7 +105,8 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
       setDownloading(false)
     }
   }, [session.audioUrl, session.audioStoragePath, session.title, downloading])
-  const ready = session.status === 'ready' || Boolean(session.audioUrl)
+  const ready = session.status === 'ready' || Boolean(session.audioUrl) || Boolean(session.audioStoragePath)
+  const canPlay = Boolean(playUrl)
   const generating = session.status === 'generating'
   const pct = Math.min(99, Math.max(5, Math.round(session.audioProgress ?? 8)))
   const hasScript = Boolean(session.script?.trim()) || ready
@@ -101,7 +129,8 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
 
   return (
     <>
-      <div className={cn(shellClass, 'flex min-h-11 items-center gap-2 px-2.5 py-1.5')}>
+      <div className={cn(shellClass, 'flex min-h-11 flex-col px-2.5 py-1.5')}>
+        <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 flex-col items-start text-left">
           <span
             className={cn(
@@ -127,7 +156,9 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               'text-ink/45 dark:text-champagne/70',
             )}
           >
-            {session.durationMinutes} min · {session.listens} écoute
+            {ready && fileSeconds != null ? formatClock(fileSeconds) : ready ? '…' : `${session.durationMinutes} min`}
+            {' · '}
+            {session.listens} écoute
             {session.listens !== 1 ? 's' : ''}
           </span>
           {ready && (
@@ -207,17 +238,19 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             <Trash2 size={14} />
           </button>
 
-          {ready && (
-            <AudioPlayer
-              compact
-              src={session.audioUrl}
-              title={session.title}
-              onPlayStart={onHeardEnough}
-              onListenBegin={onListenBegin}
-              onListenSample={onListenSample}
-            />
-          )}
         </div>
+        </div>
+        {canPlay && (
+          <AudioPlayer
+            library
+            src={playUrl}
+            title={session.title}
+            onPlayStart={onHeardEnough}
+            onListenBegin={onListenBegin}
+            onListenSample={onListenSample}
+            onDuration={onFileDuration}
+          />
+        )}
       </div>
 
       {askAfter && !afterSent && (

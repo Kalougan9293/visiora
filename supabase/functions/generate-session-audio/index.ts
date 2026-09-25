@@ -32,6 +32,7 @@ import {
   loadBed,
   mixLoopingBed,
   concatPcm,
+  levelSpeech,
 } from './mix.ts'
 
 const corsHeaders = {
@@ -168,7 +169,7 @@ async function handleDemoShort(params: {
     } else {
       const got = ttsByIndex.get(i)
       if (!got) throw new Error('TTS démo manquant')
-      pcm = got.pcm
+      pcm = levelSpeech(got.pcm)
       if (got.requestId) previousRequestIds.push(got.requestId)
     }
     if (bed) {
@@ -426,7 +427,7 @@ async function encodeStepMp3(params: {
   requestId = tts.requestId
   if (requestId) previousRequestIds.push(requestId)
 
-  let pcm = upsampleTts(pcm24)
+  let pcm = levelSpeech(upsampleTts(pcm24))
   let nextOffset = params.bedOffset
   const bed = await loadBed(appVoiceKey)
   if (bed) {
@@ -526,7 +527,7 @@ async function processOneStep(params: {
     if (step.kind === 'speech') {
       const got = ttsByIndex.get(index)
       if (!got) throw new Error(`TTS manquant à l’index ${index}`)
-      let pcm = got.pcm
+      let pcm = levelSpeech(got.pcm)
       let nextOffset = job.bedOffset
       const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase())
       if (bed) {

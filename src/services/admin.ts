@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from './supabase'
+import { isSupabaseConfigured, supabaseAdmin as supabase } from './supabase'
 
 export type AdminUserRow = {
   id: string

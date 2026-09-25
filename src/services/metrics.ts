@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, supabaseAdmin } from './supabase'
 
 export type ListenSample = {
   current: number
@@ -159,8 +159,8 @@ function percent(max: number, duration: number) {
 }
 
 export async function downloadMetricsCsv(): Promise<void> {
-  if (!supabase) throw new Error('Supabase non configuré')
-  const { data, error } = await supabase.rpc('admin_export_metrics')
+  if (!supabaseAdmin) throw new Error('Supabase non configuré')
+  const { data, error } = await supabaseAdmin.rpc('admin_export_metrics')
   if (error) throw error
   const payload = (data ?? {}) as {
     plays?: PlayRow[]
