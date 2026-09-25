@@ -42,7 +42,7 @@ export async function loadBed(appVoiceKey: string): Promise<{ pcm: Int16Array; g
   if (!b64 || gain == null) return null
   if (bedCache?.key === key) return bedCache
   try {
-    const pcm = pcmFromWav(b64ToBytes(b64))
+    const pcm = smoothBed(pcmFromWav(b64ToBytes(b64)))
     bedCache = { key, pcm, gain }
     return bedCache
   } catch (err) {
@@ -57,6 +57,38 @@ function readU32(bytes: Uint8Array, i: number) {
 
 function readU16(bytes: Uint8Array, i: number) {
   return bytes[i]! | (bytes[i + 1]! << 8)
+}
+
+/**
+ * Le lit brut a un sifflement vers 3 kHz, fort quelques secondes par tour.
+ * On ne garde que le grave, plafonné, pour qu’il reste sous la voix et les pauses.
+ */
+function smoothBed(pcm: Int16Array): Int16Array {
+  const cutoffHz = 900
+  const poles = 4
+  const a = 1 - Math.exp((-2 * Math.PI * cutoffHz) / SAMPLE_RATE)
+  let cur = new Float64Array(pcm.length)
+  for (let i = 0; i < pcm.length; i++) cur[i] = pcm[i]!
+  for (let p = 0; p < poles; p++) {
+    let acc = 0
+    for (let i = 0; i < cur.length; i++) {
+      acc += a * (cur[i]! - acc)
+      cur[i] = acc
+    }
+  }
+  let peak = 0
+  for (let i = 0; i < cur.length; i++) {
+    const v = Math.abs(cur[i]!)
+    if (v > peak) peak = v
+  }
+  const ceiling = 400
+  const g = peak > ceiling ? ceiling / peak : 1
+  const out = new Int16Array(pcm.length)
+  for (let i = 0; i < cur.length; i++) {
+    const s = cur[i]! * g
+    out[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+  }
+  return out
 }
 
 /** PCM s16le mono 44.1 kHz depuis un WAV. */

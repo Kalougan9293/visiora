@@ -48,8 +48,8 @@ const DEFAULT_VOICES: Record<string, string> = {
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
 const CLAIM_TTL_MS = 90_000
-/** Phrases TTS lancées ensemble dans un même invoke. */
-const PARALLEL_SPEECH = 4
+/** Deux phrases par passage, l’une après l’autre, pour garder la même voix sans dépasser le délai de l’orchestrateur. */
+const PARALLEL_SPEECH = 2
 
 function elevenModelId(): string {
   return Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_multilingual_v2'
@@ -153,14 +153,56 @@ async function claimSession(
   return data === true
 }
 
+function elevenVoiceSettings(appVoiceKey: string) {
+  const key = appVoiceKey.toLowerCase()
+  return {
+    stability: key === 'rituel' ? 0.8 : 0.72,
+    /** Colle à la voix du début. Le débit reste 1, la stabilité reste celle des cinq premières minutes. */
+    similarity_boost: 0.75,
+    style: 0,
+    use_speaker_boost: false,
+    speed: 1.0,
+  }
+}
+
+/** L’ouverture reste dans les 3 identifiants permis, avec les deux dernières phrases. */
+function stitchIds(job: AudioJob): string[] {
+  const anchor = job.anchorRequestIds?.find((id) => id)
+  const recent = job.previousRequestIds.filter((id) => id && id !== anchor)
+  const tail = recent.slice(-2)
+  return anchor ? [anchor, ...tail].slice(0, 3) : tail.slice(-3)
+}
+
+function sessionSeed(job: AudioJob): number {
+  if (typeof job.seed === 'number' && job.seed >= 0) return job.seed
+  job.seed = Math.floor(Math.random() * 4294967295)
+  return job.seed
+}
+
+function elevenTtsBody(
+  text: string,
+  appVoiceKey: string,
+  previousRequestIds: string[],
+  seed: number,
+) {
+  return {
+    text,
+    model_id: elevenModelId(),
+    language_code: 'fr',
+    seed,
+    ...(previousRequestIds.length ? { previous_request_ids: previousRequestIds.slice(-3) } : {}),
+    voice_settings: elevenVoiceSettings(appVoiceKey),
+  }
+}
+
 async function elevenTts(params: {
   apiKey: string
   voiceId: string
   appVoiceKey: string
   text: string
   previousRequestIds: string[]
+  seed: number
 }): Promise<{ audio: Uint8Array; requestId: string | null }> {
-  const key = params.appVoiceKey.toLowerCase()
   const ttsRes = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=${TTS_PCM_FORMAT}`,
     {
@@ -170,21 +212,9 @@ async function elevenTts(params: {
         'Content-Type': 'application/json',
         Accept: 'application/octet-stream',
       },
-      body: JSON.stringify({
-        text: params.text,
-        model_id: elevenModelId(),
-        language_code: 'fr',
-        ...(params.previousRequestIds.length
-          ? { previous_request_ids: params.previousRequestIds.slice(-3) }
-          : {}),
-        voice_settings: {
-          stability: key === 'rituel' ? 0.8 : 0.72,
-          similarity_boost: 0.55,
-          style: 0,
-          use_speaker_boost: false,
-          speed: 1.0,
-        },
-      }),
+      body: JSON.stringify(
+        elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
+      ),
     },
   )
 
@@ -201,18 +231,9 @@ async function elevenTts(params: {
             'Content-Type': 'application/json',
             Accept: 'application/octet-stream',
           },
-          body: JSON.stringify({
-            text: params.text,
-            model_id: elevenModelId(),
-            language_code: 'fr',
-            voice_settings: {
-              stability: key === 'rituel' ? 0.8 : 0.72,
-              similarity_boost: 0.55,
-              style: 0,
-              use_speaker_boost: false,
-              speed: 1.0,
-            },
-          }),
+          body: JSON.stringify(
+            elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
+          ),
         },
       )
       if (retry.ok) {
@@ -361,6 +382,16 @@ async function processOneStep(params: {
     return { job: await finalizeJob({ ...params, job }), done: true }
   }
 
+  const priorIds: string[] = []
+  for (let i = 0; i < job.nextIndex; i++) {
+    const step = job.steps[i]
+    if (step?.kind === 'speech' && step.requestId) priorIds.push(step.requestId)
+  }
+  if (priorIds.length) {
+    job.anchorRequestIds = [priorIds[0]!]
+    job.previousRequestIds = priorIds.slice(-3)
+  }
+
   const window: { index: number; step: JobStep }[] = []
   let speechCount = 0
   for (let i = job.nextIndex; i < job.steps.length; i++) {
@@ -373,40 +404,28 @@ async function processOneStep(params: {
     window.push({ index: i, step })
   }
 
-  const speechItems = window.filter((item) => item.step.kind === 'speech')
-  const ttsByIndex = new Map<number, { pcm: Int16Array; requestId: string | null }>()
-  if (speechItems.length) {
-    const batch = await Promise.all(
-      speechItems.map(async (item) => {
-        const text = speechTextAt(
-          params.script,
-          item.index,
-          params.job.version >= 7 ? (params.job.durationMinutes ?? 15) : 0,
-        )
-        const tts = await elevenTts({
-          apiKey: params.elevenKey,
-          voiceId: resolveElevenVoiceId(params.voiceId),
-          appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
-          text,
-          previousRequestIds: job.previousRequestIds,
-        })
-        return {
-          index: item.index,
-          pcm: upsampleTts(pcmFromEleven(tts.audio)),
-          requestId: tts.requestId,
-        }
-      }),
-    )
-    for (const row of batch) ttsByIndex.set(row.index, row)
-  }
-
   for (const item of window) {
     const { index, step } = item
     const path = partPath(params.userId, params.sessionId, index)
 
     if (step.kind === 'speech') {
-      const got = ttsByIndex.get(index)
-      if (!got) throw new Error(`TTS manquant à l’index ${index}`)
+      const text = speechTextAt(
+        params.script,
+        index,
+        params.job.version >= 7 ? (params.job.durationMinutes ?? 15) : 0,
+      )
+      const tts = await elevenTts({
+        apiKey: params.elevenKey,
+        voiceId: resolveElevenVoiceId(params.voiceId),
+        appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
+        text,
+        previousRequestIds: stitchIds(job),
+        seed: sessionSeed(job),
+      })
+      const got = {
+        pcm: upsampleTts(pcmFromEleven(tts.audio)),
+        requestId: tts.requestId,
+      }
       let pcm = levelSpeech(got.pcm)
       let nextOffset = job.bedOffset
       const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase())
@@ -419,7 +438,10 @@ async function processOneStep(params: {
       if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
       await uploadPart(params.admin, path, mp3)
       const previousRequestIds = [...job.previousRequestIds]
-      if (got.requestId) previousRequestIds.push(got.requestId)
+      if (got.requestId) {
+        if (!job.anchorRequestIds?.length) job.anchorRequestIds = [got.requestId]
+        previousRequestIds.push(got.requestId)
+      }
       job.steps[index] = {
         kind: 'speech',
         partPath: path,
@@ -440,7 +462,7 @@ async function processOneStep(params: {
 
     job.nextIndex = index + 1
     job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
-    /** Garde le claim pendant toute la fenêtre parallèle — sinon n8n / le filet relancent trop tôt. */
+    /** Garde le claim pendant les phrases enchaînées — sinon n8n / le filet relancent trop tôt. */
     const kept = await setProgress(params.admin, params.sessionId, progressPct(job), job)
     if (!kept) throw new Error('claim perdu')
   }

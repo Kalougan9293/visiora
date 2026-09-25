@@ -19,6 +19,10 @@ export type AudioJob = {
   totalSpeech: number
   doneSpeech: number
   previousRequestIds: string[]
+  /** Première phrase de la séance : toutes les suivantes s’y rattachent. */
+  anchorRequestIds?: string[]
+  /** Même tirage pour toutes les phrases de cette séance. */
+  seed?: number
   bedOffset: number
   claimId: string | null
   claimedAt: string | null
@@ -76,6 +80,8 @@ export function createAudioJob(script: string, voiceKey: string, minutes = 15): 
     totalSpeech,
     doneSpeech: 0,
     previousRequestIds: [],
+    anchorRequestIds: [],
+    seed: Math.floor(Math.random() * 4294967295),
     bedOffset: 0,
     claimId: null,
     claimedAt: null,
