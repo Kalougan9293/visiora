@@ -25,11 +25,15 @@ const BED_WAV_B64: Record<string, string> = {
   antoni: ANTONI_LOOP_WAV,
 }
 
-/** Tapis très discret sous la voix. Même niveau pour les trois fonds. */
+/**
+ * Le lit est déjà normalisé à −42 dBFS dans smoothBed.
+ * Gain 1 : le pic est calé dans smoothBed.
+ * Assez présent pour tenir sous les pauses, assez bas pour rester sous la voix.
+ */
 const BED_GAIN: Record<string, number> = {
-  rituel: 0.035,
-  onde: 0.035,
-  antoni: 0.032,
+  rituel: 1,
+  onde: 1,
+  antoni: 1,
 }
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number }
@@ -61,8 +65,41 @@ function readU16(bytes: Uint8Array, i: number) {
 
 /**
  * Le lit brut a un sifflement vers 3 kHz, fort quelques secondes par tour.
- * On ne garde que le grave, plafonné, pour qu’il reste sous la voix et les pauses.
+ * On ne garde que le grave, on égalise le tour, puis on cale le pic à −32 dBFS
+ * pour que la pause reste un fond continu, sans couvrir la voix.
  */
+const BED_PEAK_TARGET = Math.round(32768 * 10 ** (-32 / 20))
+
+/** Le lit brut a un creux d’environ 1 s à chaque tour. On tient le niveau pour que la pause ne se recoupe pas. */
+function flattenBedEnvelope(cur: Float64Array) {
+  const win = Math.round(0.25 * SAMPLE_RATE)
+  const env = new Float64Array(cur.length)
+  let sum = 0
+  for (let i = 0; i < cur.length; i++) {
+    const s = cur[i]!
+    sum += s * s
+    if (i >= win) sum -= cur[i - win]! ** 2
+    const n = i + 1 < win ? i + 1 : win
+    env[i] = Math.sqrt(Math.max(0, sum) / n)
+  }
+  const probe: number[] = []
+  for (let i = win; i < env.length; i += 400) probe.push(env[i]!)
+  if (!probe.length) return
+  probe.sort((a, b) => a - b)
+  const target = probe[Math.floor(probe.length * 0.7)]!
+  if (target < 1) return
+  const maxGain = 10 ** (24 / 20)
+  const follow = 1 - Math.exp(-1 / (0.12 * SAMPLE_RATE))
+  let g = 1
+  for (let i = 0; i < cur.length; i++) {
+    const base = env[i]!
+    const desired = base > target * 0.015 ? target / base : maxGain
+    const clamped = Math.min(maxGain, Math.max(0.45, desired))
+    g += follow * (clamped - g)
+    cur[i] = cur[i]! * g
+  }
+}
+
 function smoothBed(pcm: Int16Array): Int16Array {
   const cutoffHz = 900
   const poles = 4
@@ -76,13 +113,13 @@ function smoothBed(pcm: Int16Array): Int16Array {
       cur[i] = acc
     }
   }
+  flattenBedEnvelope(cur)
   let peak = 0
   for (let i = 0; i < cur.length; i++) {
     const v = Math.abs(cur[i]!)
     if (v > peak) peak = v
   }
-  const ceiling = 400
-  const g = peak > ceiling ? ceiling / peak : 1
+  const g = peak > 1 ? BED_PEAK_TARGET / peak : 0
   const out = new Int16Array(pcm.length)
   for (let i = 0; i < cur.length; i++) {
     const s = cur[i]! * g
@@ -129,6 +166,29 @@ export function pcmFromWav(bytes: Uint8Array): Int16Array {
   return mono
 }
 
+/** PCM s16le mono 44,1 kHz → WAV. Les segments v8 sont stockés ainsi, puis encodés une seule fois. */
+export function pcmToWav(pcm: Int16Array): Uint8Array {
+  const dataBytes = pcm.length * 2
+  const out = new Uint8Array(44 + dataBytes)
+  const view = new DataView(out.buffer)
+  out.set([0x52, 0x49, 0x46, 0x46], 0)
+  view.setUint32(4, 36 + dataBytes, true)
+  out.set([0x57, 0x41, 0x56, 0x45], 8)
+  out.set([0x66, 0x6d, 0x74, 0x20], 12)
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, SAMPLE_RATE, true)
+  view.setUint32(28, SAMPLE_RATE * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  out.set([0x64, 0x61, 0x74, 0x61], 36)
+  view.setUint32(40, dataBytes, true)
+  const samples = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength)
+  out.set(samples, 44)
+  return out
+}
+
 export function pcmFromEleven(bytes: Uint8Array): Int16Array {
   if (bytes.byteLength >= 12 && String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!) === 'RIFF') {
     return pcmFromWav(bytes)
@@ -163,39 +223,143 @@ export function upsampleTts(pcm: Int16Array): Int16Array {
   return resamplePcm(pcm, TTS_RATE, SAMPLE_RATE)
 }
 
-/** Un seul niveau pour toute la séance, appliqué à chaque phrase avant le collage. */
-const SPEECH_RMS_TARGET = 4200
-const SPEECH_GAIN_MAX = 8
+/** Cible avant le scale 0.88 du mix lit + voix → environ −19 LUFS à l’écoute. */
+const SPEECH_LUFS_TARGET = -18
+/** Un passage très faible n’est pas remonté de plus de 18 dB. Le creux vers 4:50 en demande autant. */
+const SPEECH_BOOST_MAX_DB = 18
+const SPEECH_PEAK_CEILING = 30000
+const FADE_SECONDS = 0.015
+
+type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number }
+
+/** Pondération K (ITU-R BS.1770) à 44,1 kHz : pré-filtre + passe-haut. */
+function kWeightingFilters(): { shelf: Biquad; highpass: Biquad } {
+  return {
+    shelf: highShelf(SAMPLE_RATE, 1681.974450955533, 0.7071752369554196, 3.999843853973347),
+    highpass: highPass(SAMPLE_RATE, 38.13547087602444, 0.5003270373238773),
+  }
+}
+
+const K_WEIGHT = kWeightingFilters()
+
+function highShelf(fs: number, f0: number, q: number, gainDb: number): Biquad {
+  const A = 10 ** (gainDb / 40)
+  const w0 = (2 * Math.PI * f0) / fs
+  const cos = Math.cos(w0)
+  const alpha = Math.sin(w0) / (2 * q)
+  const twoSqrt = 2 * Math.sqrt(A) * alpha
+  const b0 = A * (A + 1 + (A - 1) * cos + twoSqrt)
+  const b1 = -2 * A * (A - 1 + (A + 1) * cos)
+  const b2 = A * (A + 1 + (A - 1) * cos - twoSqrt)
+  const a0 = A + 1 - (A - 1) * cos + twoSqrt
+  const a1 = 2 * (A - 1 - (A + 1) * cos)
+  const a2 = A + 1 - (A - 1) * cos - twoSqrt
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
+}
+
+function highPass(fs: number, f0: number, q: number): Biquad {
+  const w0 = (2 * Math.PI * f0) / fs
+  const cos = Math.cos(w0)
+  const alpha = Math.sin(w0) / (2 * q)
+  const b0 = (1 + cos) / 2
+  const b1 = -(1 + cos)
+  const b2 = (1 + cos) / 2
+  const a0 = 1 + alpha
+  const a1 = -2 * cos
+  const a2 = 1 - alpha
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
+}
+
+function applyBiquad(x: Float64Array, q: Biquad) {
+  let x1 = 0
+  let x2 = 0
+  let y1 = 0
+  let y2 = 0
+  for (let i = 0; i < x.length; i++) {
+    const x0 = x[i]!
+    const y0 = q.b0 * x0 + q.b1 * x1 + q.b2 * x2 - q.a1 * y1 - q.a2 * y2
+    x[i] = y0
+    x2 = x1
+    x1 = x0
+    y2 = y1
+    y1 = y0
+  }
+}
+
+function energyToLufs(meanSquare: number): number {
+  if (meanSquare <= 1e-12) return -100
+  return -0.691 + 10 * Math.log10(meanSquare)
+}
+
+function meanSquare(samples: Float64Array, start: number, length: number): number {
+  let sum = 0
+  const end = start + length
+  for (let i = start; i < end; i++) {
+    const s = samples[i]!
+    sum += s * s
+  }
+  return sum / length
+}
 
 /**
- * Ramène chaque phrase au même barème. Un passage faible est remonté,
- * un passage fort est baissé. Le collage ne change plus ce niveau.
+ * Sonie d’une phrase, en LUFS, pondération K et portes BS.1770.
+ * Null si le passage est du silence.
+ */
+export function measureLufs(pcm: Int16Array): number | null {
+  if (pcm.length < 80) return null
+  const weighted = new Float64Array(pcm.length)
+  for (let i = 0; i < pcm.length; i++) weighted[i] = pcm[i]! / 32768
+  applyBiquad(weighted, K_WEIGHT.shelf)
+  applyBiquad(weighted, K_WEIGHT.highpass)
+
+  const block = Math.round(0.4 * SAMPLE_RATE)
+  const hop = Math.round(0.1 * SAMPLE_RATE)
+  const powers: number[] = []
+  if (weighted.length < block) {
+    powers.push(meanSquare(weighted, 0, weighted.length))
+  } else {
+    for (let start = 0; start + block <= weighted.length; start += hop) {
+      powers.push(meanSquare(weighted, start, block))
+    }
+  }
+  const audible = powers.filter((power) => energyToLufs(power) > -70)
+  if (!audible.length) return null
+  const ungated = energyToLufs(audible.reduce((sum, power) => sum + power, 0) / audible.length)
+  const kept = audible.filter((power) => energyToLufs(power) >= ungated - 10)
+  const used = kept.length ? kept : audible
+  return energyToLufs(used.reduce((sum, power) => sum + power, 0) / used.length)
+}
+
+/**
+ * Ramène chaque phrase vers −18 LUFS, avec un fondu de 15 ms.
+ * Le fondu ne tient que si l’encodage MP3 est fait une seule fois, après le collage.
  */
 export function levelSpeech(pcm: Int16Array): Int16Array {
   if (pcm.length < 80) return pcm
-  let sum = 0
-  let count = 0
-  let peak = 0
-  for (let i = 0; i < pcm.length; i++) {
-    const v = Math.abs(pcm[i]!)
-    if (v > peak) peak = v
-    if (v < 180) continue
-    sum += v * v
-    count += 1
+  const lufs = measureLufs(pcm)
+  let gain = 1
+  if (lufs != null) {
+    let delta = SPEECH_LUFS_TARGET - lufs
+    if (delta > SPEECH_BOOST_MAX_DB) delta = SPEECH_BOOST_MAX_DB
+    gain = 10 ** (delta / 20)
   }
-  if (count < 40 || peak < 180) return pcm
-  const rms = Math.sqrt(sum / count)
-  if (rms < 80) return pcm
-  let gain = SPEECH_RMS_TARGET / rms
-  if (gain > SPEECH_GAIN_MAX) gain = SPEECH_GAIN_MAX
-  if (peak * gain > 28000) gain = 28000 / peak
-  const fade = Math.min(Math.round(0.012 * SAMPLE_RATE), Math.floor(pcm.length / 10))
+  let peak = 0
+  let hot = 0
+  for (let i = 0; i < pcm.length; i++) {
+    const v = Math.abs(pcm[i]!) * gain
+    if (v > peak) peak = v
+    if (v > SPEECH_PEAK_CEILING) hot += 1
+  }
+  if (peak < 8) return pcm
+  /** Un clic isolé ne doit pas garder toute la phrase trop basse. On ne baisse le gain que si le dépassement est large. */
+  if (hot > pcm.length * 0.03 && peak > 0) gain *= SPEECH_PEAK_CEILING / peak
+  const fade = Math.min(Math.round(FADE_SECONDS * SAMPLE_RATE), Math.floor(pcm.length / 10))
   for (let i = 0; i < pcm.length; i++) {
     let g = gain
     if (fade > 0 && i < fade) g *= i / fade
     else if (fade > 0 && i > pcm.length - fade) g *= (pcm.length - i) / fade
-    const s = pcm[i]! * g
-    pcm[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+    const s = Math.round(pcm[i]! * g)
+    pcm[i] = s > SPEECH_PEAK_CEILING ? SPEECH_PEAK_CEILING : s < -SPEECH_PEAK_CEILING ? -SPEECH_PEAK_CEILING : s
   }
   return pcm
 }
@@ -328,32 +492,53 @@ function concatBytes(parts: Uint8Array[]): Uint8Array {
   return out
 }
 
-export async function encodeMp3(pcm: Int16Array): Promise<Uint8Array> {
+const MP3_FRAME = 1152
+
+export type Mp3Stream = {
+  write(pcm: Int16Array): void
+  finish(): Uint8Array
+}
+
+/** Un seul encodeur pour toute la séance : les fondus de 15 ms restent dans le MP3. */
+export async function createMp3Stream(): Promise<Mp3Stream> {
   const encoder = await lameEncoder()
-  const frame = 1152
-  const pad = new Int16Array(frame)
   const chunks: Uint8Array[] = []
-  for (let i = 0; i < pcm.length; i += frame) {
-    const end = Math.min(i + frame, pcm.length)
-    let block: Int16Array
-    if (end - i === frame) {
-      block = pcm.subarray(i, end)
-    } else {
-      pad.fill(0)
-      pad.set(pcm.subarray(i, end))
-      block = pad
-    }
-    const buf = encoder.encodeBuffer(block)
+  let pending = new Int16Array(0)
+
+  function pushFrame(block: Int16Array) {
+    const copy = new Int16Array(MP3_FRAME)
+    copy.set(block.subarray(0, MP3_FRAME))
+    const buf = encoder.encodeBuffer(copy)
     if (buf.length) chunks.push(Uint8Array.from(buf))
   }
-  const tail = encoder.flush()
-  if (tail.length) chunks.push(Uint8Array.from(tail))
-  const total = chunks.reduce((n, c) => n + c.byteLength, 0)
-  const out = new Uint8Array(total)
-  let offset = 0
-  for (const c of chunks) {
-    out.set(c, offset)
-    offset += c.byteLength
+
+  return {
+    write(pcm: Int16Array) {
+      const merged = new Int16Array(pending.length + pcm.length)
+      merged.set(pending, 0)
+      merged.set(pcm, pending.length)
+      const full = merged.length - (merged.length % MP3_FRAME)
+      for (let i = 0; i < full; i += MP3_FRAME) pushFrame(merged.subarray(i, i + MP3_FRAME))
+      const rest = merged.length - full
+      pending = new Int16Array(rest)
+      if (rest) pending.set(merged.subarray(full))
+    },
+    finish() {
+      if (pending.length) {
+        const pad = new Int16Array(MP3_FRAME)
+        pad.set(pending)
+        pushFrame(pad)
+        pending = new Int16Array(0)
+      }
+      const tail = encoder.flush()
+      if (tail.length) chunks.push(Uint8Array.from(tail))
+      return concatBytes(chunks)
+    },
   }
-  return out
+}
+
+export async function encodeMp3(pcm: Int16Array): Promise<Uint8Array> {
+  const stream = await createMp3Stream()
+  stream.write(pcm)
+  return stream.finish()
 }

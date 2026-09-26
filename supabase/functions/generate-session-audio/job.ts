@@ -2,8 +2,8 @@
 
 import { chunkSpeech, longSessionParts, partsForDuration } from './script.ts'
 
-export const JOB_VERSION = 7
-/** Une pause CDC = un step (MP3 pré-encodé, plus de découpe lame.js). */
+export const JOB_VERSION = 8
+/** Une pause CDC = un step. v8 : WAV par segment, un seul MP3 à la fin. */
 export const SILENCE_SLICE_SECONDS = 12
 
 /** Steps compacts (sans texte) → JSON léger, moins de risques d’échec d’update. */
@@ -94,7 +94,7 @@ export function isAudioJob(value: unknown): value is AudioJob {
   if (!value || typeof value !== 'object') return false
   const job = value as AudioJob
   return (
-    (job.version === 6 || job.version === 7) &&
+    (job.version === 6 || job.version === 7 || job.version === 8) &&
     Array.isArray(job.steps) &&
     typeof job.nextIndex === 'number' &&
     (job.phase === 'tts' || job.phase === 'finalize' || job.phase === 'done')
@@ -110,8 +110,9 @@ export function progressPct(job: AudioJob): number {
   return Math.round(5 + ratio * 88)
 }
 
-export function partPath(userId: string, sessionId: string, index: number): string {
-  return `${userId}/${sessionId}/parts/${String(index).padStart(4, '0')}.mp3`
+export function partPath(userId: string, sessionId: string, index: number, version: number): string {
+  const ext = version >= 8 ? 'wav' : 'mp3'
+  return `${userId}/${sessionId}/parts/${String(index).padStart(4, '0')}.${ext}`
 }
 
 export function concatBytes(chunks: Uint8Array[]): Uint8Array {

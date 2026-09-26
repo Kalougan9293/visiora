@@ -24,8 +24,11 @@ import {
   TTS_PCM_FORMAT,
   upsampleTts,
   encodeMp3,
+  createMp3Stream,
   withAiDisclosureTag,
   pcmFromEleven,
+  pcmFromWav,
+  pcmToWav,
   silencePcm,
   loadBed,
   mixLoopingBed,
@@ -302,8 +305,14 @@ async function clearParts(admin: SupabaseClient, userId: string, sessionId: stri
 }
 
 /** Évite de re-facturer ElevenLabs si le segment est déjà en Storage. */
-async function partExists(admin: SupabaseClient, userId: string, sessionId: string, index: number) {
-  const name = `${String(index).padStart(4, '0')}.mp3`
+async function partExists(
+  admin: SupabaseClient,
+  userId: string,
+  sessionId: string,
+  index: number,
+  version: number,
+) {
+  const name = partPath(userId, sessionId, index, version).split('/').pop()!
   const { data } = await admin.storage.from('audios').list(`${userId}/${sessionId}/parts`, {
     limit: 1000,
     search: name,
@@ -315,19 +324,38 @@ async function uploadPart(
   admin: SupabaseClient,
   path: string,
   bytes: Uint8Array,
+  contentType: string,
 ) {
   const { error } = await admin.storage.from('audios').upload(path, bytes, {
-    contentType: 'audio/mpeg',
+    contentType,
     upsert: true,
   })
   if (error) throw new Error(`Storage part: ${error.message}`)
 }
 
-async function encodeSilenceMp3(params: {
+/** v8 garde le PCM en WAV. L’encodage MP3 unique a lieu au montage final. */
+async function storeRenderedPart(
+  admin: SupabaseClient,
+  path: string,
+  pcm: Int16Array,
+  version: number,
+) {
+  if (version >= 8) {
+    const wav = pcmToWav(pcm)
+    if (wav.byteLength < 46) throw new Error('Segment audio trop court')
+    await uploadPart(admin, path, wav, 'audio/wav')
+    return
+  }
+  const mp3 = await encodeMp3(pcm)
+  if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
+  await uploadPart(admin, path, mp3, 'audio/mpeg')
+}
+
+async function renderSilencePcm(params: {
   seconds: number
   voiceId: string | null
   bedOffset: number
-}): Promise<{ mp3: Uint8Array; bedOffset: number }> {
+}): Promise<{ pcm: Int16Array; bedOffset: number }> {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
   const bed = await loadBed(appVoiceKey)
   let pcm = upsampleTts(silencePcm(params.seconds))
@@ -337,9 +365,7 @@ async function encodeSilenceMp3(params: {
     pcm = mixed.pcm
     nextOffset = mixed.nextOffset
   }
-  const mp3 = await encodeMp3(pcm)
-  if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-  return { mp3, bedOffset: nextOffset }
+  return { pcm, bedOffset: nextOffset }
 }
 
 async function processOneStep(params: {
@@ -363,8 +389,8 @@ async function processOneStep(params: {
     const index = job.nextIndex
     const step = job.steps[index]
     if (!step) break
-    const path = partPath(params.userId, params.sessionId, index)
-    if (step.partPath || (await partExists(params.admin, params.userId, params.sessionId, index))) {
+    const path = partPath(params.userId, params.sessionId, index, job.version)
+    if (step.partPath || (await partExists(params.admin, params.userId, params.sessionId, index, job.version))) {
       if (step.kind === 'speech') {
         job.steps[index] = { kind: 'speech', partPath: path, requestId: step.requestId }
       } else {
@@ -406,7 +432,7 @@ async function processOneStep(params: {
 
   for (const item of window) {
     const { index, step } = item
-    const path = partPath(params.userId, params.sessionId, index)
+    const path = partPath(params.userId, params.sessionId, index, job.version)
 
     if (step.kind === 'speech') {
       const text = speechTextAt(
@@ -434,9 +460,7 @@ async function processOneStep(params: {
         pcm = mixed.pcm
         nextOffset = mixed.nextOffset
       }
-      const mp3 = await encodeMp3(pcm)
-      if (mp3.byteLength < 32) throw new Error('Segment audio trop court')
-      await uploadPart(params.admin, path, mp3)
+      await storeRenderedPart(params.admin, path, pcm, job.version)
       const previousRequestIds = [...job.previousRequestIds]
       if (got.requestId) {
         if (!job.anchorRequestIds?.length) job.anchorRequestIds = [got.requestId]
@@ -450,14 +474,14 @@ async function processOneStep(params: {
       job.bedOffset = nextOffset
       job.previousRequestIds = previousRequestIds.slice(-3)
     } else {
-      const encoded = await encodeSilenceMp3({
+      const rendered = await renderSilencePcm({
         seconds: step.seconds,
         voiceId: params.voiceId,
         bedOffset: job.bedOffset,
       })
-      await uploadPart(params.admin, path, encoded.mp3)
+      await storeRenderedPart(params.admin, path, rendered.pcm, job.version)
       job.steps[index] = { kind: 'silence', seconds: step.seconds, partPath: path }
-      job.bedOffset = encoded.bedOffset
+      job.bedOffset = rendered.bedOffset
     }
 
     job.nextIndex = index + 1
@@ -484,6 +508,39 @@ async function processOneStep(params: {
   return { job, done: false }
 }
 
+async function concatStoredMp3s(
+  admin: SupabaseClient,
+  sessionId: string,
+  userId: string,
+  job: AudioJob,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = []
+  for (let i = 0; i < job.steps.length; i++) {
+    if (i > 0 && i % 8 === 0) await holdFinalizeClaim(admin, sessionId, job)
+    const step = job.steps[i]!
+    const path = step.partPath ?? partPath(userId, sessionId, i, job.version)
+    chunks.push(await downloadPart(admin, path, i))
+  }
+  return concatBytes(chunks)
+}
+
+/** Décode les WAV un par un et les passe dans le même encodeur MP3. */
+async function encodeStoredWavs(
+  admin: SupabaseClient,
+  sessionId: string,
+  userId: string,
+  job: AudioJob,
+): Promise<Uint8Array> {
+  const stream = await createMp3Stream()
+  for (let i = 0; i < job.steps.length; i++) {
+    if (i % 4 === 0) await holdFinalizeClaim(admin, sessionId, job)
+    const step = job.steps[i]!
+    const path = step.partPath ?? partPath(userId, sessionId, i, job.version)
+    stream.write(pcmFromWav(await downloadPart(admin, path, i)))
+  }
+  return stream.finish()
+}
+
 async function finalizeJob(params: {
   admin: SupabaseClient
   sessionId: string
@@ -506,15 +563,12 @@ async function finalizeJob(params: {
 
   await holdFinalizeClaim(params.admin, params.sessionId, job)
 
-  const chunks: Uint8Array[] = []
-  for (let i = 0; i < job.steps.length; i++) {
-    if (i > 0 && i % 8 === 0) await holdFinalizeClaim(params.admin, params.sessionId, job)
-    const step = job.steps[i]!
-    const path = step.partPath ?? partPath(params.userId, params.sessionId, i)
-    chunks.push(await downloadPart(params.admin, path, i))
-  }
+  const mp3 =
+    job.version >= 8
+      ? await encodeStoredWavs(params.admin, params.sessionId, params.userId, job)
+      : await concatStoredMp3s(params.admin, params.sessionId, params.userId, job)
 
-  const audioBytes = withAiDisclosureTag(concatBytes(chunks))
+  const audioBytes = withAiDisclosureTag(mp3)
   if (audioBytes.byteLength < 1000) throw new Error('Fichier audio trop court')
 
   const path = `${params.userId}/${params.sessionId}.mp3`
