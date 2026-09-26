@@ -585,8 +585,8 @@ function TabBubble({
       onClick={onClick}
       className={
         active
-          ? 'rounded-full bg-[var(--vs-lunaire)] px-4 py-1.5 text-xs font-semibold text-[var(--vs-nuit)]'
-          : 'rounded-full border border-white/15 bg-white/[0.04] px-4 py-1.5 text-xs text-black dark:text-white hover:border-[var(--vs-azur)]/40 hover:text-black dark:hover:text-white'
+          ? 'admin-tab-active rounded-full bg-[var(--vs-or)] px-4 py-1.5 text-xs font-semibold text-[#020c25]'
+          : 'rounded-full border border-white/15 bg-white/[0.04] px-4 py-1.5 text-xs text-black dark:text-white hover:border-[var(--vs-or)]/50 hover:text-[var(--vs-or)]'
       }
     >
       {children}

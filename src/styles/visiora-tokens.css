@@ -162,7 +162,9 @@ html:has(.admin-root) body {
   color: rgb(233 239 244 / 0.65) !important;
 }
 
-.admin-root.dark button[type='submit'] {
+.admin-root.dark button[type='submit'],
+.admin-root.dark .admin-tab-active,
+.admin-root.dark .admin-tab-active * {
   color: #020c25 !important;
 }
 
