@@ -202,7 +202,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '8/10',
     ambiance: 'eau',
-    preview: '/voices/onde-preview.mp3?v=natural1',
+    preview: '/voices/onde-preview.mp3?v=s4',
   },
 ] as const
 
