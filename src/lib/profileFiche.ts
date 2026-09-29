@@ -25,12 +25,7 @@ function q12Line(answers: Record<string, unknown>): string {
   const registre = asText(answers.q12_registre)
   const voice = asText(answers.q12_voice)
   const tu = 'tutoiement'
-  const reg =
-    registre === 'spirituel'
-      ? 'spirituel ouvert'
-      : registre === 'metaphysique'
-        ? 'entre les deux'
-        : 'laïc'
+  const reg = registre === 'spirituel' ? 'spirituel ouvert' : 'laïc'
   const parts = [`formulation : ${tu}`, `registre : ${reg}`]
   if (voice) parts.unshift(`voix : ${voice}`)
   return `Q12 ${parts.join(' · ')}`

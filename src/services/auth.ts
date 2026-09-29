@@ -17,12 +17,41 @@ function requireClient() {
   return supabase
 }
 
+function describeClient(): string {
+  if (typeof navigator === 'undefined') return ''
+  const ua = navigator.userAgent
+  const device = /iPad/.test(ua)
+    ? 'iPad'
+    : /iPhone/.test(ua)
+      ? 'iPhone'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /Macintosh/.test(ua)
+          ? 'Mac'
+          : /Windows/.test(ua)
+            ? 'Windows'
+            : 'Autre'
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /Chrome\//.test(ua)
+      ? 'Chrome'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Safari\//.test(ua)
+          ? 'Safari'
+          : ''
+  return [device, browser].filter(Boolean).join(' ').slice(0, 40)
+}
+
 async function touchLastSeen(userId: string) {
   const client = requireClient()
   await client
     .from('profiles')
     .update({ last_seen_at: new Date().toISOString() })
     .eq('id', userId)
+  const label = describeClient()
+  if (!label) return
+  await client.from('profiles').update({ client_label: label }).eq('id', userId)
 }
 
 export const authService = {
@@ -98,6 +127,21 @@ export const authService = {
     const client = requireClient()
     const { error } = await client.auth.signOut({ scope: 'local' })
     if (error) throw error
+  },
+
+  /** Efface le compte connecté, ses séances et ses audios. */
+  async deleteOwnAccount() {
+    const client = requireClient()
+    const invoked = await client.functions.invoke<{ ok?: boolean; error?: string }>(
+      'delete-own-account',
+      { method: 'POST', body: {} },
+    )
+    if (invoked.data?.error) throw new Error(invoked.data.error)
+    if (invoked.error || !invoked.data?.ok) {
+      const { error } = await client.rpc('delete_own_account')
+      if (error) throw new Error(error.message)
+    }
+    await client.auth.signOut({ scope: 'local' }).catch(() => {})
   },
 
   async getSession() {

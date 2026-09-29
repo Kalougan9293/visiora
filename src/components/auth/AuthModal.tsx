@@ -187,11 +187,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         : 'Sécuriser le compte'
 
   const subtitle =
-    mode === 'login'
-      ? 'Retrouve tes séances et ton suivi.'
-      : signupStep === 1
-        ? 'Quelques infos pour personnaliser Visiora.'
-        : 'Choisis un mot de passe solide.'
+    mode === 'login' ? 'Retrouve tes séances et ton suivi.' : 'Choisis un mot de passe solide.'
 
   return (
     <AnimatePresence>
@@ -221,7 +217,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
             exit={{ opacity: 0, scale: 0.96, y: 8 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
             className={cn(
-              'relative z-10 w-full max-w-[22.5rem] overflow-hidden rounded-[1.5rem] border p-6 sm:p-7',
+              'relative z-10 max-h-[calc(100dvh-2rem)] w-full max-w-[22.5rem] overflow-y-auto rounded-[1.5rem] border p-6 sm:p-7',
               'border-[var(--vs-bordure)] bg-[var(--vs-surface)]',
             )}
           >
@@ -261,14 +257,21 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
               >
                 {title}
               </h2>
-              <p
-                className={cn(
-                  'mt-1.5 text-xs leading-relaxed',
-                  'text-ink/50 dark:text-champagne/65',
-                )}
-              >
-                {subtitle}
-              </p>
+              {mode === 'signup' && signupStep === 1 ? (
+                <div className="mt-4 text-[13px] leading-relaxed text-ink/80 dark:text-champagne/85">
+                  <p className="text-center font-bold text-ink dark:text-cream">{AI_DISCLOSURE.signupPrivacyTitle}</p>
+                  <p className="mt-2 text-justify hyphens-auto" lang="fr">{AI_DISCLOSURE.signupPrivacy}</p>
+                </div>
+              ) : (
+                <p
+                  className={cn(
+                    'mt-1.5 text-xs leading-relaxed',
+                    'text-ink/50 dark:text-champagne/65',
+                  )}
+                >
+                  {subtitle}
+                </p>
+              )}
             </div>
 
             {mode === 'login' ? (

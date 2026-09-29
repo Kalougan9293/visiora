@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
-import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, type AdminUserRow } from '@/services/admin'
-import { WIZARD_STEPS } from '@/data/wizard'
+import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, type AdminUserRow, type TesterFollow } from '@/services/admin'
+import { TesterOverviewBar, TesterUserList } from '@/components/admin/TesterFollow'
+import { VOICES, WIZARD_STEPS } from '@/data/wizard'
 import { healthKeywordsService } from '@/services/healthKeywords'
 import { downloadMetricsCsv } from '@/services/metrics'
 import { authService } from '@/services/auth'
@@ -57,6 +58,8 @@ export function AdminPage() {
   const [sharedError, setSharedError] = useState('')
   const [exportError, setExportError] = useState('')
   const [exporting, setExporting] = useState(false)
+  const [follow, setFollow] = useState<TesterFollow | null>(null)
+  const [followMissing, setFollowMissing] = useState(false)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -80,6 +83,16 @@ export function AdminPage() {
         setStorageLabel('—')
       })
       .finally(() => setLoading(false))
+    void adminService
+      .loadTesterFollow()
+      .then((pack) => {
+        setFollow(pack.data)
+        setFollowMissing(pack.missing)
+      })
+      .catch(() => {
+        setFollow(null)
+        setFollowMissing(false)
+      })
   }, [])
 
   /** Session Supabase + flag is_admin */
@@ -339,6 +352,13 @@ export function AdminPage() {
           />
         </div>
 
+        {follow && <TesterOverviewBar overview={follow.overview} />}
+        {followMissing && !follow && (
+          <p className="mt-6 text-center text-[12px] leading-relaxed text-black dark:text-white">
+            Le suivi des testeurs s’affiche après avoir exécuté supabase/admin_follow.sql dans Supabase.
+          </p>
+        )}
+
         <div className="mt-6 flex flex-col items-center gap-2">
           <button
             type="button"
@@ -375,7 +395,11 @@ export function AdminPage() {
           </TabBubble>
         </div>
 
-        {tab === 'users' && (
+        {tab === 'users' && follow && (
+          <TesterUserList follow={follow} deletingId={deletingId} onDelete={(row) => void onDelete(row)} />
+        )}
+
+        {tab === 'users' && !follow && (
         <div className="mt-6 overflow-x-auto rounded-2xl border border-white/15 bg-white/[0.04]">
           <table className="w-full min-w-[480px] border-collapse text-center text-sm">
             <thead>
@@ -491,11 +515,14 @@ const ANSWER_LABELS = new Map(
   WIZARD_STEPS.flatMap((step) => step.fields.map((field) => [field.id, field.label] as const)),
 )
 
+const VOICE_NAMES = new Map<string, string>(VOICES.map((voice) => [voice.id, voice.name]))
+
 function answerLines(answers: Record<string, unknown>) {
   const skip = new Set(['health_ack', 'health_ack_at', 'q12_tutoiement', 'duration_minutes'])
   return Object.entries(answers).flatMap(([key, value]) => {
     if (skip.has(key) || value == null || String(value).trim() === '') return []
-    const text = Array.isArray(value) ? value.join(', ') : String(value)
+    const raw = Array.isArray(value) ? value.join(', ') : String(value)
+    const text = key === 'q12_voice' ? (VOICE_NAMES.get(raw.toLowerCase()) ?? raw) : raw
     const label = key === 'q6_scale' ? 'Note avant (1 à 10)' : (ANSWER_LABELS.get(key) ?? key)
     return [{ label, text }]
   })
@@ -538,7 +565,10 @@ function SharedSessions({
             >
               <span className="block w-full truncate text-sm text-black dark:text-white">{session.title || 'Séance'}</span>
               <span className="block w-full truncate text-[11px] text-black dark:text-white">
-                {name} · {formatDate(session.createdAt)} · {session.listens} écoute
+                Compte : {name}{session.email && session.firstName ? ` · ${session.email}` : ''}
+              </span>
+              <span className="block w-full truncate text-[11px] text-black dark:text-white">
+                {formatDate(session.createdAt)} · {session.listens} écoute
                 {session.listens !== 1 ? 's' : ''}
               </span>
               <ChevronDown

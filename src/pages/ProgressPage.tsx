@@ -1,30 +1,39 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { CalendarDays, CircleCheck, HelpCircle, LogIn, Plus, RotateCcw } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { CalendarDays, CircleCheck, HelpCircle, LogIn, Plus } from 'lucide-react'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { WelcomeBack } from '@/components/progress/WelcomeBack'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { LegalFooter } from '@/components/layout/LegalFooter'
-import {
-  MILESTONE_STEPS,
-  MilestonePopup,
-  type MilestoneDays,
-} from '@/components/progress/MilestonePopup'
+import { MILESTONE_STEPS } from '@/components/progress/MilestonePopup'
 import { useAuth } from '@/context/AuthContext'
+import { authService } from '@/services/auth'
 import { useSessions } from '@/context/SessionsContext'
 import { PROGRESS_COPY } from '@/data/uiCopy'
 import { cn } from '@/lib/utils'
 import { nextMilestoneTarget, progressService, rhythmSentence } from '@/services/progress'
-import type { ProgressStats } from '@/types'
 
 const SELECTED_KEY = 'visiora-suivi-session'
 
+function deleteAccountMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const lower = raw.toLowerCase()
+  if (lower.includes('admin')) return 'Ce compte ne peut pas être supprimé ici.'
+  if (lower.includes('not authorized') || lower.includes('unauthorized') || lower.includes('jwt')) {
+    return 'Connexion requise'
+  }
+  if (lower.includes('delete_own_account') || lower.includes('not found') || lower.includes('404')) {
+    return 'La suppression du compte n’est pas encore activée.'
+  }
+  return 'Suppression impossible'
+}
+
 export function ProgressPage() {
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const { sessions, sessionsReady, listenMarks } = useSessions()
   const [authOpen, setAuthOpen] = useState(false)
-  const [popupDays, setPopupDays] = useState<MilestoneDays | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     try {
       return localStorage.getItem(SELECTED_KEY)
@@ -32,7 +41,9 @@ export function ProgressPage() {
       return null
     }
   })
-  const [previewById, setPreviewById] = useState<Record<string, ProgressStats>>({})
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const selected = sessions.find((session) => session.id === selectedId) ?? sessions[0] ?? null
 
@@ -45,9 +56,7 @@ export function ProgressPage() {
     }
   }, [selected])
 
-  const stats = selected
-    ? (previewById[selected.id] ?? progressService.statsForSession(listenMarks, selected.id))
-    : null
+  const stats = selected ? progressService.statsForSession(listenMarks, selected.id) : null
 
   const days = stats?.daysCompletedTowardMilestone ?? 0
   const milestoneTarget = nextMilestoneTarget(days)
@@ -58,22 +67,32 @@ export function ProgressPage() {
   const rhythm = stats ? rhythmSentence(stats.journal) : ''
   const doneFinal = days >= 60
 
-  const runSim = (simDays: MilestoneDays) => {
-    if (!selected) return
-    setPreviewById((prev) => ({
-      ...prev,
-      [selected.id]: progressService.simulateDays(simDays),
-    }))
-    setPopupDays(simDays)
-  }
+  useEffect(() => {
+    if (!deleteOpen) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !deleteBusy) setDeleteOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [deleteOpen, deleteBusy])
 
-  const resetPreview = () => {
-    if (!selected) return
-    setPreviewById((prev) => {
-      const next = { ...prev }
-      delete next[selected.id]
-      return next
-    })
+  const confirmDeleteAccount = async () => {
+    if (deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await authService.deleteOwnAccount()
+      try {
+        await signOut()
+      } catch {
+        /* la session est déjà partie avec le compte */
+      }
+      setDeleteOpen(false)
+      navigate('/', { replace: true })
+    } catch (err) {
+      setDeleteError(deleteAccountMessage(err))
+      setDeleteBusy(false)
+    }
   }
 
   return (
@@ -224,45 +243,6 @@ export function ProgressPage() {
               {rhythm}
             </p>
           </Card>
-
-          {import.meta.env.DEV && (
-            <div
-              className={cn(
-                'w-full rounded-2xl border border-dashed px-4 py-5 text-center',
-                'border-black/15 bg-black/[0.02] dark:border-champagne/20 dark:bg-white/[0.03]',
-              )}
-            >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--vs-azur)]">
-                Zone de test — {selected.title}
-              </p>
-              <div className="mt-4 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
-                <button
-                  type="button"
-                  onClick={() => runSim(21)}
-                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
-                >
-                  <Plus size={15} />
-                  Simuler 21 jours
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runSim(60)}
-                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-black/10 bg-cream-soft px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-black/[0.06] dark:border-champagne/20 dark:bg-white/10 dark:text-cream dark:hover:bg-white/15 sm:w-auto"
-                >
-                  <Plus size={15} />
-                  Simuler 60 jours
-                </button>
-                <button
-                  type="button"
-                  onClick={resetPreview}
-                  className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-full border border-[var(--vs-or)]/35 bg-[var(--vs-or)]/10 px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-[var(--vs-or)]/18 dark:text-cream sm:w-auto"
-                >
-                  <RotateCcw size={15} />
-                  Réinitialiser
-                </button>
-              </div>
-            </div>
-          )}
         </>
       )}
 
@@ -295,9 +275,64 @@ export function ProgressPage() {
 
       {sessions.length === 0 && <LegalFooter />}
 
-      {popupDays !== null && (
-        <MilestonePopup days={popupDays} onClose={() => setPopupDays(null)} />
+      {user && (
+        <button
+          type="button"
+          onClick={() => {
+            setDeleteError('')
+            setDeleteOpen(true)
+          }}
+          className="pt-8 text-xs text-ink/45 underline decoration-ink/25 underline-offset-4 transition-colors hover:text-ink hover:decoration-ink dark:text-champagne/55 dark:decoration-white/20 dark:hover:text-white dark:hover:decoration-white"
+        >
+          {PROGRESS_COPY.deleteAccount}
+        </button>
       )}
+
+      {deleteOpen && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center px-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-account-title"
+        >
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => {
+              if (!deleteBusy) setDeleteOpen(false)
+            }}
+          />
+          <div className="relative w-full max-w-[19rem] rounded-2xl border border-[var(--vs-bordure)] bg-[var(--vs-surface)] px-5 py-5 text-center text-ink dark:text-[var(--vs-ecume)]">
+            <p id="delete-account-title" className="text-sm font-medium">
+              {PROGRESS_COPY.deleteAccountTitle}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-ink/60 dark:text-champagne/75">
+              {PROGRESS_COPY.deleteAccountBody}
+            </p>
+            {deleteError && <p className="mt-2 text-xs text-[var(--vs-or)]">{deleteError}</p>}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={() => setDeleteOpen(false)}
+                className="flex-1 rounded-xl border border-black/12 px-3 py-2 text-xs font-medium text-ink/80 disabled:opacity-40 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)]"
+              >
+                {PROGRESS_COPY.deleteAccountCancel}
+              </button>
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={() => void confirmDeleteAccount()}
+                className="flex-1 rounded-xl bg-[var(--vs-or)] px-3 py-2 text-xs font-medium text-[var(--vs-nuit)] disabled:opacity-40"
+              >
+                {deleteBusy ? '…' : PROGRESS_COPY.deleteAccountConfirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

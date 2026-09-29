@@ -6,6 +6,9 @@ export const AI_DISCLOSURE = {
   player: 'Voix générée artificiellement.',
   privacy:
     'Tes réponses et tes séances ne sont visibles que par toi. Personne chez Visiora n’y accède, sauf si tu l’autorises.',
+  signupPrivacyTitle: 'Ton espace reste privé.',
+  signupPrivacy:
+    'Tes réponses et tes séances ne sont visibles que par toi : personne chez Visiora ne les lit, sauf si tu l’autorises. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
   shareCheckbox: 'J’accepte que Visiora lise mes séances pour améliorer la méthode.',
   shareRevoke: 'Tu peux retirer cette autorisation à tout moment.',
   afterTitle: 'Comment te sens-tu maintenant ?',
@@ -74,6 +77,12 @@ export const PROGRESS_COPY = {
   whyMoment:
     "Beaucoup de pratiques traditionnelles privilégient le réveil et le coucher, quand l'esprit est plus disponible. Essaie les deux et garde le moment qui te convient.",
   welcomeBack: "Content de te retrouver. On reprend là où tu en étais.",
+  deleteAccount: 'Supprimer mon compte',
+  deleteAccountTitle: 'Supprimer mon compte ?',
+  deleteAccountBody:
+    'Tes réponses, tes séances et ton compte sont effacés. On ne peut pas revenir en arrière.',
+  deleteAccountCancel: 'Annuler',
+  deleteAccountConfirm: 'Supprimer',
 } as const
 
 export const APP_COPY = {

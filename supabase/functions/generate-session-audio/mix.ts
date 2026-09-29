@@ -64,9 +64,8 @@ function readU16(bytes: Uint8Array, i: number) {
 }
 
 /**
- * Le lit brut a un sifflement vers 3 kHz, fort quelques secondes par tour.
- * On ne garde que le grave, on égalise le tour, puis on cale le pic à −32 dBFS
- * pour que la pause reste un fond continu, sans couvrir la voix.
+ * Le lit reste large : ne garder que le grave le changeait en bourdonnement.
+ * On égalise à peine le tour, puis on cale le pic à −32 dBFS.
  */
 const BED_PEAK_TARGET = Math.round(32768 * 10 ** (-32 / 20))
 
@@ -88,7 +87,7 @@ function flattenBedEnvelope(cur: Float64Array) {
   probe.sort((a, b) => a - b)
   const target = probe[Math.floor(probe.length * 0.7)]!
   if (target < 1) return
-  const maxGain = 10 ** (24 / 20)
+  const maxGain = 10 ** (6 / 20)
   const follow = 1 - Math.exp(-1 / (0.12 * SAMPLE_RATE))
   let g = 1
   for (let i = 0; i < cur.length; i++) {
@@ -101,18 +100,8 @@ function flattenBedEnvelope(cur: Float64Array) {
 }
 
 function smoothBed(pcm: Int16Array): Int16Array {
-  const cutoffHz = 900
-  const poles = 4
-  const a = 1 - Math.exp((-2 * Math.PI * cutoffHz) / SAMPLE_RATE)
-  let cur = new Float64Array(pcm.length)
+  const cur = new Float64Array(pcm.length)
   for (let i = 0; i < pcm.length; i++) cur[i] = pcm[i]!
-  for (let p = 0; p < poles; p++) {
-    let acc = 0
-    for (let i = 0; i < cur.length; i++) {
-      acc += a * (cur[i]! - acc)
-      cur[i] = acc
-    }
-  }
   flattenBedEnvelope(cur)
   let peak = 0
   for (let i = 0; i < cur.length; i++) {
@@ -126,6 +115,16 @@ function smoothBed(pcm: Int16Array): Int16Array {
     out[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
   }
   return out
+}
+
+/** Fondu court pour qu’une reprise de montage ne claque pas. */
+export function fadeEdge(pcm: Int16Array, seconds: number, edge: 'in' | 'out'): void {
+  const n = Math.min(pcm.length, Math.max(2, Math.round(SAMPLE_RATE * seconds)))
+  for (let i = 0; i < n; i++) {
+    const gain = edge === 'in' ? i / (n - 1) : (n - 1 - i) / (n - 1)
+    const idx = edge === 'in' ? i : pcm.length - n + i
+    pcm[idx] = Math.round(pcm[idx]! * gain)
+  }
 }
 
 /** PCM s16le mono 44.1 kHz depuis un WAV. */
@@ -203,18 +202,73 @@ export function silencePcm(seconds: number): Int16Array {
   return new Int16Array(Math.max(1, Math.round(seconds * TTS_RATE)))
 }
 
+const SINC_TAPS = 32
+const SINC_PHASES = 64
+const SINC_HALF = SINC_TAPS / 2
+
+function sincTable(cutoff: number): Float64Array[] {
+  const table: Float64Array[] = []
+  for (let phase = 0; phase < SINC_PHASES; phase++) {
+    const frac = phase / SINC_PHASES
+    const coeffs = new Float64Array(SINC_TAPS)
+    let sum = 0
+    for (let tap = 0; tap < SINC_TAPS; tap++) {
+      const dist = tap - (SINC_HALF - 1) - frac
+      const ad = Math.abs(dist)
+      let c = 0
+      if (ad < SINC_HALF) {
+        const hann = 0.5 + 0.5 * Math.cos((Math.PI * dist) / SINC_HALF)
+        const x = cutoff * dist
+        const sinc = Math.abs(x) < 1e-8 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x)
+        c = cutoff * sinc * hann
+      }
+      coeffs[tap] = c
+      sum += c
+    }
+    if (sum !== 0) {
+      for (let tap = 0; tap < SINC_TAPS; tap++) coeffs[tap] = coeffs[tap]! / sum
+    }
+    table.push(coeffs)
+  }
+  return table
+}
+
+const SINC_UP = sincTable(0.9)
+
+/** Interpolation à bande limitée. La droite entre deux échantillons laissait un voile sur la voix. */
 export function resamplePcm(pcm: Int16Array, fromRate: number, toRate: number): Int16Array {
   if (fromRate === toRate) return pcm
   const ratio = toRate / fromRate
   const outLen = Math.max(1, Math.round(pcm.length * ratio))
   const out = new Int16Array(outLen)
+  if (toRate < fromRate) {
+    const last = pcm.length - 1
+    for (let i = 0; i < outLen; i++) {
+      const src = i / ratio
+      const i0 = Math.min(last, Math.floor(src))
+      const i1 = Math.min(last, i0 + 1)
+      const t = src - i0
+      out[i] = pcm[i0]! * (1 - t) + pcm[i1]! * t
+    }
+    return out
+  }
+  let energy = 0
+  for (let i = 0; i < pcm.length; i += 32) energy += Math.abs(pcm[i]!)
+  if (energy === 0) return out
   const last = pcm.length - 1
   for (let i = 0; i < outLen; i++) {
     const src = i / ratio
-    const i0 = Math.min(last, Math.floor(src))
-    const i1 = Math.min(last, i0 + 1)
-    const t = src - i0
-    out[i] = pcm[i0]! * (1 - t) + pcm[i1]! * t
+    const center = Math.floor(src)
+    let phase = Math.round((src - center) * SINC_PHASES)
+    if (phase >= SINC_PHASES) phase = SINC_PHASES - 1
+    const coeffs = SINC_UP[phase]!
+    let acc = 0
+    for (let tap = 0; tap < SINC_TAPS; tap++) {
+      const idx = center + tap - (SINC_HALF - 1)
+      if (idx < 0 || idx > last) continue
+      acc += pcm[idx]! * coeffs[tap]!
+    }
+    out[i] = acc > 32767 ? 32767 : acc < -32768 ? -32768 : Math.round(acc)
   }
   return out
 }
@@ -225,10 +279,15 @@ export function upsampleTts(pcm: Int16Array): Int16Array {
 
 /** Cible avant le scale 0.88 du mix lit + voix → environ −19 LUFS à l’écoute. */
 const SPEECH_LUFS_TARGET = -18
-/** Un passage très faible n’est pas remonté de plus de 18 dB. Le creux vers 4:50 en demande autant. */
-const SPEECH_BOOST_MAX_DB = 18
+/** Un passage chuchoté n’est pas remonté de plus de 26 dB. 18 dB laissait le mur du marathon trop bas. */
+const SPEECH_BOOST_MAX_DB = 26
 const SPEECH_PEAK_CEILING = 30000
-const FADE_SECONDS = 0.015
+/** La voix s’ouvre avant le mot. Le premier son n’est plus dans le fondu. */
+const SPEECH_LEAD_SECONDS = 0.04
+/** Clic seulement : trop court pour avaler « Ici » ou « Laisse ». */
+const FADE_IN_SECONDS = 0.005
+/** Identique à avant : la fin de phrase ne change pas. */
+const FADE_OUT_SECONDS = 0.015
 
 type Biquad = { b0: number; b1: number; b2: number; a1: number; a2: number }
 
@@ -331,8 +390,9 @@ export function measureLufs(pcm: Int16Array): number | null {
 }
 
 /**
- * Ramène chaque phrase vers −18 LUFS, avec un fondu de 15 ms.
- * Le fondu ne tient que si l’encodage MP3 est fait une seule fois, après le collage.
+ * Ramène chaque phrase vers −18 LUFS.
+ * 40 ms de silence, puis la phrase telle que la voix l’a dite.
+ * Le fondu d’entrée (5 ms) ne couvre que le clic, pas le premier son.
  */
 export function levelSpeech(pcm: Int16Array): Int16Array {
   if (pcm.length < 80) return pcm
@@ -353,15 +413,18 @@ export function levelSpeech(pcm: Int16Array): Int16Array {
   if (peak < 8) return pcm
   /** Un clic isolé ne doit pas garder toute la phrase trop basse. On ne baisse le gain que si le dépassement est large. */
   if (hot > pcm.length * 0.03 && peak > 0) gain *= SPEECH_PEAK_CEILING / peak
-  const fade = Math.min(Math.round(FADE_SECONDS * SAMPLE_RATE), Math.floor(pcm.length / 10))
+  const lead = Math.round(SPEECH_LEAD_SECONDS * SAMPLE_RATE)
+  const fadeIn = Math.min(Math.round(FADE_IN_SECONDS * SAMPLE_RATE), Math.floor(pcm.length / 10))
+  const fadeOut = Math.min(Math.round(FADE_OUT_SECONDS * SAMPLE_RATE), Math.floor(pcm.length / 10))
+  const out = new Int16Array(lead + pcm.length)
   for (let i = 0; i < pcm.length; i++) {
     let g = gain
-    if (fade > 0 && i < fade) g *= i / fade
-    else if (fade > 0 && i > pcm.length - fade) g *= (pcm.length - i) / fade
+    if (fadeIn > 0 && i < fadeIn) g *= i / fadeIn
+    else if (fadeOut > 0 && i > pcm.length - fadeOut) g *= (pcm.length - i) / fadeOut
     const s = Math.round(pcm[i]! * g)
-    pcm[i] = s > SPEECH_PEAK_CEILING ? SPEECH_PEAK_CEILING : s < -SPEECH_PEAK_CEILING ? -SPEECH_PEAK_CEILING : s
+    out[lead + i] = s > SPEECH_PEAK_CEILING ? SPEECH_PEAK_CEILING : s < -SPEECH_PEAK_CEILING ? -SPEECH_PEAK_CEILING : s
   }
-  return pcm
+  return out
 }
 
 export function mixLoopingBed(
@@ -374,7 +437,8 @@ export function mixLoopingBed(
   const n = bed.length
   /** Fade-in uniquement au tout début de séance, pour que le fond reste continu pendant les pauses. */
   const fadeIn = bedOffset === 0 ? Math.min(Math.round(0.8 * SAMPLE_RATE), voice.length) : 0
-  const xfade = Math.min(Math.floor(n / 4), Math.round(0.12 * SAMPLE_RATE))
+  const xfadeCap = n > 20 * SAMPLE_RATE ? Math.round(2 * SAMPLE_RATE) : Math.round(0.6 * SAMPLE_RATE)
+  const xfade = Math.min(Math.floor(n / 4), xfadeCap)
   /** Légère baisse de la voix → évite le clip (= grésillement) quand le lit s’ajoute. */
   const voiceScale = 0.88
   let offset = ((bedOffset % n) + n) % n
@@ -496,10 +560,26 @@ const MP3_FRAME = 1152
 
 export type Mp3Stream = {
   write(pcm: Int16Array): void
-  finish(): Uint8Array
+  /** Échantillons pas encore dans une frame. */
+  pending(): Int16Array
+  /** Complète la frame avec du silence, sans flush. */
+  padSilence(): void
+  /** `flush` seulement sur le dernier morceau : sinon le padding ajoute un blanc à chaque joint. */
+  finish(flush?: boolean): Uint8Array
 }
 
-/** Un seul encodeur pour toute la séance : les fondus de 15 ms restent dans le MP3. */
+/** 10 ms. Le joint entre deux MP3 séparés claque si la voix y est encore forte. */
+export function fadeSeam(pcm: Int16Array, edge: 'in' | 'out'): void {
+  const n = Math.min(pcm.length, Math.round(0.01 * SAMPLE_RATE))
+  if (n < 2) return
+  for (let i = 0; i < n; i++) {
+    const gain = edge === 'in' ? i / (n - 1) : (n - 1 - i) / (n - 1)
+    const idx = edge === 'in' ? i : pcm.length - n + i
+    pcm[idx] = Math.round(pcm[idx]! * gain)
+  }
+}
+
+/** Un seul encodeur pour toute la séance : les fondus courts restent dans le MP3. */
 export async function createMp3Stream(): Promise<Mp3Stream> {
   const encoder = await lameEncoder()
   const chunks: Uint8Array[] = []
@@ -523,15 +603,27 @@ export async function createMp3Stream(): Promise<Mp3Stream> {
       pending = new Int16Array(rest)
       if (rest) pending.set(merged.subarray(full))
     },
-    finish() {
-      if (pending.length) {
+    pending() {
+      return pending
+    },
+    padSilence() {
+      if (!pending.length) return
+      const pad = new Int16Array(MP3_FRAME)
+      pad.set(pending)
+      pushFrame(pad)
+      pending = new Int16Array(0)
+    },
+    finish(flush = true) {
+      if (flush && pending.length) {
         const pad = new Int16Array(MP3_FRAME)
         pad.set(pending)
         pushFrame(pad)
         pending = new Int16Array(0)
       }
-      const tail = encoder.flush()
-      if (tail.length) chunks.push(Uint8Array.from(tail))
+      if (flush) {
+        const tail = encoder.flush()
+        if (tail.length) chunks.push(Uint8Array.from(tail))
+      }
       return concatBytes(chunks)
     },
   }

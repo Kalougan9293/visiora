@@ -18,6 +18,7 @@ export interface Database {
           created_at: string
           updated_at: string
           last_seen_at: string | null
+          client_label: string | null
         }
         Insert: {
           id: string
@@ -31,6 +32,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           last_seen_at?: string | null
+          client_label?: string | null
         }
         Update: {
           id?: string
@@ -44,6 +46,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
           last_seen_at?: string | null
+          client_label?: string | null
         }
         Relationships: []
       }
@@ -63,6 +66,7 @@ export interface Database {
           script: string | null
           audio_job: Json | null
           health_ack_at: string | null
+          usage: Json | null
           created_at: string
           updated_at: string
         }
@@ -81,6 +85,7 @@ export interface Database {
           script?: string | null
           audio_job?: Json | null
           health_ack_at?: string | null
+          usage?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -99,6 +104,7 @@ export interface Database {
           script?: string | null
           audio_job?: Json | null
           health_ack_at?: string | null
+          usage?: Json | null
           created_at?: string
           updated_at?: string
         }
@@ -274,6 +280,14 @@ export interface Database {
       record_listen: {
         Args: { p_session_id: string }
         Returns: boolean
+      }
+      delete_own_account: {
+        Args: Record<string, never>
+        Returns: boolean
+      }
+      admin_follow_testers: {
+        Args: Record<string, never>
+        Returns: Json
       }
     }
     Enums: Record<string, never>

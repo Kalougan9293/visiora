@@ -75,6 +75,7 @@ export function CreatePage() {
     }
     next.q12_tutoiement = 'tu'
     next.duration_minutes = '15'
+    if (next.q12_registre !== 'spirituel') next.q12_registre = 'neutre'
     setAnswers(next)
     setPhase('wizard')
     setStepIdx(0)

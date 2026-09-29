@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Download, Pencil, Trash2 } from 'lucide-react'
 import { audioStorage } from '@/services/audioStorage'
 import { AudioPlayer } from '@/components/audio/AudioPlayer'
 import { GeneratingWaterProgress } from '@/components/library/GeneratingWaterProgress'
 import { ScriptReader } from '@/components/library/ScriptReader'
+import { usePlayback } from '@/context/PlaybackContext'
 import { useSessions } from '@/context/SessionsContext'
 import { AI_DISCLOSURE, APP_COPY } from '@/data/uiCopy'
 import { metricsService } from '@/services/metrics'
@@ -20,7 +21,8 @@ function formatClock(seconds: number) {
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
   const navigate = useNavigate()
-  const { removeSession, markListened, retryGeneration } = useSessions()
+  const { removeSession, retryGeneration } = useSessions()
+  const playback = usePlayback()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -28,16 +30,8 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const [scale, setScale] = useState<number | null>(null)
   const [remark, setRemark] = useState('')
   const [afterSent, setAfterSent] = useState(false)
-  const playIdRef = useRef<string | null>(null)
-  const maxSecondsRef = useRef(0)
-  const chainRef = useRef(Promise.resolve())
-  const playGenRef = useRef(0)
   const [fileSeconds, setFileSeconds] = useState<number | null>(null)
   const [playUrl, setPlayUrl] = useState<string | null>(session.audioUrl ?? null)
-  const onHeardEnough = useCallback(() => markListened(session.id), [markListened, session.id])
-  const onFileDuration = useCallback((seconds: number) => {
-    if (Number.isFinite(seconds) && seconds > 0) setFileSeconds(seconds)
-  }, [])
 
   useEffect(() => {
     setFileSeconds(null)
@@ -54,35 +48,9 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
     }
   }, [session.id, session.audioStoragePath, session.audioUrl])
 
-  const onListenBegin = useCallback(() => {
-    const gen = ++playGenRef.current
-    playIdRef.current = null
-    maxSecondsRef.current = 0
-    chainRef.current = chainRef.current
-      .then(async () => {
-        const id = await metricsService.startPlay(session.id)
-        if (playGenRef.current === gen) playIdRef.current = id
-      })
-      .catch(() => {})
-  }, [session.id])
-
-  const onListenSample = useCallback(
-    (sample: { current: number; duration: number; ended: boolean }) => {
-      if (sample.ended) setAskAfter(true)
-      maxSecondsRef.current = Math.max(maxSecondsRef.current, sample.current)
-      const maxSeconds = maxSecondsRef.current
-      const gen = playGenRef.current
-      chainRef.current = chainRef.current
-        .then(async () => {
-          if (playGenRef.current !== gen) return
-          if (!playIdRef.current) playIdRef.current = await metricsService.startPlay(session.id)
-          if (playGenRef.current !== gen || !playIdRef.current) return
-          await metricsService.updatePlay(playIdRef.current, sample, maxSeconds)
-        })
-        .catch(() => {})
-    },
-    [session.id],
-  )
+  useEffect(() => {
+    if (playback.sessionId === session.id && playback.ended && !afterSent) setAskAfter(true)
+  }, [playback.sessionId, playback.ended, session.id, afterSent])
 
   const downloadAudio = useCallback(async () => {
     if ((!session.audioUrl && !session.audioStoragePath) || downloading) return
@@ -172,7 +140,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           <button
             type="button"
             aria-expanded={scriptOpen}
-            aria-label={scriptOpen ? 'Masquer le script' : 'Lire le script'}
+            aria-label={scriptOpen ? 'Replier la séance' : 'Déplier la séance'}
             onClick={() => setScriptOpen((v) => !v)}
             className={cn(
               'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors',
@@ -240,16 +208,24 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
 
         </div>
         </div>
-        {canPlay && (
-          <AudioPlayer
-            library
-            src={playUrl}
-            title={session.title}
-            onPlayStart={onHeardEnough}
-            onListenBegin={onListenBegin}
-            onListenSample={onListenSample}
-            onDuration={onFileDuration}
-          />
+        {canPlay && playUrl && (
+          <>
+            <audio
+              src={playUrl}
+              preload="metadata"
+              className="hidden"
+              onLoadedMetadata={(event) => {
+                const seconds = event.currentTarget.duration
+                if (Number.isFinite(seconds) && seconds > 0) setFileSeconds(seconds)
+              }}
+            />
+            <AudioPlayer
+              library
+              sessionId={session.id}
+              src={playUrl}
+              title={session.title}
+            />
+          </>
         )}
       </div>
 
@@ -319,6 +295,14 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             'border border-black/8 bg-cream-card/60 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]/80',
           )}
         >
+          {typeof session.answers.q1 === 'string' && session.answers.q1.trim() && (
+            <p className="mb-4 text-left text-sm leading-relaxed text-ink/85 dark:text-[var(--vs-lunaire)]">
+              <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/45 dark:text-champagne/60">
+                Objectif
+              </span>
+              {session.answers.q1.trim()}
+            </p>
+          )}
           <ScriptReader script={session.script} />
         </div>
       )}

@@ -200,11 +200,12 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           mergeSession({ ...fresh, status: 'failed' })
           continue
         }
-        /** Filet local seulement si N8N ne gère pas la boucle. */
+        /** N8N en marche : on ne double pas. S’il se tait 25 s, on reprend. */
+        const n8nQuiet = orchestratedRef.current.has(id) && age > 25_000
         if (
           fresh.status === 'generating' &&
           age > CONTINUE_KICK_MS &&
-          !orchestratedRef.current.has(id)
+          (n8nQuiet || !orchestratedRef.current.has(id))
         ) {
           void enqueueAudio(id, false)
         }

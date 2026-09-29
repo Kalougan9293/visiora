@@ -139,7 +139,7 @@ export const WIZARD_STEPS: WizardStep[] = [
         id: 'q11',
         label: 'Quelle nouvelle vérité profonde veux-tu croire sur toi ?',
         placeholder: "Ex: J'ai pleinement ma place parmi ces professionnels...",
-        type: 'text',
+        type: 'textarea',
       },
     ],
   },
@@ -157,7 +157,6 @@ export const WIZARD_STEPS: WizardStep[] = [
         choices: [
           { id: 'neutre', label: 'Neutre' },
           { id: 'spirituel', label: 'Spirituel' },
-          { id: 'metaphysique', label: 'Métaphysique' },
         ],
       },
       {

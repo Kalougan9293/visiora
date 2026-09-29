@@ -4,6 +4,7 @@ import {
   isAudioJob,
   partPath,
   progressPct,
+  PROMPT_VERSION,
   concatBytes,
   speechTextAt,
   type AudioJob,
@@ -12,10 +13,11 @@ import {
 import { resolveScript } from './script.ts'
 import {
   canGenerateScript,
-  generateSessionScript,
+  suggestSessionTitle,
   generateSessionScriptDetailed,
+  spokenWords,
   hasStoredScript,
-  isN8nQueued,
+  n8nQueueAgeMs,
   isScriptInProgress,
   n8nQueuePayload,
   scriptClaimPayload,
@@ -33,6 +35,7 @@ import {
   loadBed,
   mixLoopingBed,
   levelSpeech,
+  fadeSeam,
 } from './mix.ts'
 
 const corsHeaders = {
@@ -44,13 +47,17 @@ const corsHeaders = {
 const DEFAULT_VOICES: Record<string, string> = {
   rituel: '1zaEYJSYmxoQNiDl5C42',
   antoni: 'iYo3urNKUm5TVGCFojl0',
-  onde: 'JQ2r7F93aKZaFxO6C5Tu',
+  onde: 'CfDJFNP9FItBtQcWKTwh',
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
   bella: 'EXAVITQu4vr4xnSDxMaL',
 }
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
 const CLAIM_TTL_MS = 90_000
+const MIX_RATE = 44100
+/** Une passe encode au plus ~12 s : plafond CPU de 2 s sur l’Edge Function. */
+const MIX_SLICE_SOFT = 10 * MIX_RATE
+const MIX_SLICE_CAP = 12 * MIX_RATE
 /** Deux phrases par passage, l’une après l’autre, pour garder la même voix sans dépasser le délai de l’orchestrateur. */
 const PARALLEL_SPEECH = 2
 
@@ -67,18 +74,46 @@ function json(body: unknown, status = 200) {
   })
 }
 
+/** Mesure d’usage. Si la colonne n’existe pas encore, la génération continue. */
+async function noteUsage(
+  admin: SupabaseClient,
+  sessionId: string,
+  patch: Record<string, unknown>,
+) {
+  const { data, error: readErr } = await admin
+    .from('sessions')
+    .select('usage')
+    .eq('id', sessionId)
+    .maybeSingle()
+  if (readErr) return
+  const prev = data?.usage && typeof data.usage === 'object' && !Array.isArray(data.usage)
+    ? data.usage as Record<string, unknown>
+    : {}
+  const { error } = await admin
+    .from('sessions')
+    .update({ usage: { ...prev, ...patch } })
+    .eq('id', sessionId)
+  if (error) console.warn('[generate-session-audio] usage', error.message)
+}
+
 async function saveGeneratedScript(
   admin: SupabaseClient,
   sessionId: string,
   answers: unknown,
 ): Promise<string> {
-  const generated = await generateSessionScript(
-    answers && typeof answers === 'object' ? (answers as Record<string, unknown>) : {},
-  )
+  const fiche = answers && typeof answers === 'object' ? (answers as Record<string, unknown>) : {}
+  const generated = await generateSessionScriptDetailed(fiche)
+  let title: string | null = null
+  try {
+    title = await suggestSessionTitle(fiche)
+  } catch (err) {
+    console.warn('[generate-session-audio] titre', err instanceof Error ? err.message : err)
+  }
   const { error } = await admin
     .from('sessions')
     .update({
-      script: generated,
+      script: generated.script,
+      ...(title ? { title } : {}),
       audio_job: null,
       audio_bytes: 12,
       status: 'generating',
@@ -86,7 +121,13 @@ async function saveGeneratedScript(
     })
     .eq('id', sessionId)
   if (error) console.warn('[generate-session-audio] save script', error.message)
-  return generated
+  await noteUsage(admin, sessionId, {
+    promptVersion: PROMPT_VERSION,
+    scriptWords: spokenWords(generated.script),
+    llmPromptTokens: generated.usage?.prompt ?? null,
+    llmCompletionTokens: generated.usage?.completion ?? null,
+  })
+  return generated.script
 }
 
 function resolveElevenVoiceId(appVoiceId: string | null): string {
@@ -292,16 +333,32 @@ async function holdFinalizeClaim(admin: SupabaseClient, sessionId: string, job: 
   if (!job.claimId) job.claimId = crypto.randomUUID()
   job.claimedAt = new Date().toISOString()
   job.phase = 'finalize'
-  const kept = await setProgress(admin, sessionId, 94, job)
+  const kept = await setProgress(admin, sessionId, progressPct(job), job)
   if (!kept) throw new Error('claim perdu')
 }
 
-async function clearParts(admin: SupabaseClient, userId: string, sessionId: string) {
-  const prefix = `${userId}/${sessionId}/parts`
-  const { data } = await admin.storage.from('audios').list(`${userId}/${sessionId}/parts`, { limit: 1000 })
+async function releaseFinalizeClaim(admin: SupabaseClient, sessionId: string, job: AudioJob) {
+  const owned = job.claimId
+  job.claimId = null
+  job.claimedAt = null
+  job.phase = 'finalize'
+  const kept = await setProgress(admin, sessionId, progressPct(job), job, owned)
+  if (!kept) throw new Error('claim perdu')
+}
+
+function mixPartPath(userId: string, sessionId: string, index: number): string {
+  return `${userId}/${sessionId}/mix/${String(index).padStart(4, '0')}.mp3`
+}
+
+async function clearFolder(admin: SupabaseClient, folder: string) {
+  const { data } = await admin.storage.from('audios').list(folder, { limit: 1000 })
   if (!data?.length) return
-  const paths = data.map((f) => `${prefix}/${f.name}`)
-  await admin.storage.from('audios').remove(paths)
+  await admin.storage.from('audios').remove(data.map((f) => `${folder}/${f.name}`))
+}
+
+async function clearParts(admin: SupabaseClient, userId: string, sessionId: string) {
+  await clearFolder(admin, `${userId}/${sessionId}/parts`)
+  await clearFolder(admin, `${userId}/${sessionId}/mix`)
 }
 
 /** Évite de re-facturer ElevenLabs si le segment est déjà en Storage. */
@@ -355,6 +412,7 @@ async function renderSilencePcm(params: {
   seconds: number
   voiceId: string | null
   bedOffset: number
+  fadeOut?: boolean
 }): Promise<{ pcm: Int16Array; bedOffset: number }> {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
   const bed = await loadBed(appVoiceKey)
@@ -364,6 +422,10 @@ async function renderSilencePcm(params: {
     const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
     pcm = mixed.pcm
     nextOffset = mixed.nextOffset
+  }
+  if (params.fadeOut && pcm.length > 1) {
+    const last = pcm.length - 1
+    for (let i = 0; i < pcm.length; i++) pcm[i] = Math.round(pcm[i]! * (1 - i / last))
   }
   return { pcm, bedOffset: nextOffset }
 }
@@ -382,7 +444,8 @@ async function processOneStep(params: {
   if (job.phase === 'done') return { job, done: true }
 
   if (job.phase === 'finalize' || job.nextIndex >= job.steps.length) {
-    return { job: await finalizeJob(params), done: true }
+    const next = await finalizeJob(params)
+    return { job: next, done: next.phase === 'done' }
   }
 
   while (job.nextIndex < job.steps.length) {
@@ -394,7 +457,12 @@ async function processOneStep(params: {
       if (step.kind === 'speech') {
         job.steps[index] = { kind: 'speech', partPath: path, requestId: step.requestId }
       } else {
-        job.steps[index] = { kind: 'silence', seconds: step.seconds, partPath: path }
+        job.steps[index] = {
+          kind: 'silence',
+          seconds: step.seconds,
+          ...(step.fadeOut ? { fadeOut: true } : {}),
+          partPath: path,
+        }
       }
       job.nextIndex = index + 1
       continue
@@ -405,7 +473,8 @@ async function processOneStep(params: {
   if (job.nextIndex >= job.steps.length) {
     job.phase = 'finalize'
     await holdFinalizeClaim(params.admin, params.sessionId, job)
-    return { job: await finalizeJob({ ...params, job }), done: true }
+    const next = await finalizeJob({ ...params, job })
+    return { job: next, done: next.phase === 'done' }
   }
 
   const priorIds: string[] = []
@@ -473,14 +542,21 @@ async function processOneStep(params: {
       }
       job.bedOffset = nextOffset
       job.previousRequestIds = previousRequestIds.slice(-3)
+      job.ttsChars = (job.ttsChars ?? 0) + text.length
     } else {
       const rendered = await renderSilencePcm({
         seconds: step.seconds,
         voiceId: params.voiceId,
         bedOffset: job.bedOffset,
+        fadeOut: step.fadeOut,
       })
       await storeRenderedPart(params.admin, path, rendered.pcm, job.version)
-      job.steps[index] = { kind: 'silence', seconds: step.seconds, partPath: path }
+      job.steps[index] = {
+        kind: 'silence',
+        seconds: step.seconds,
+        ...(step.fadeOut ? { fadeOut: true } : {}),
+        partPath: path,
+      }
       job.bedOffset = rendered.bedOffset
     }
 
@@ -496,9 +572,9 @@ async function processOneStep(params: {
   job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
 
   if (job.phase === 'finalize') {
-    /** Ne pas lâcher le claim : n8n rappelle toutes les 2 s et lancerait un second montage. */
     await holdFinalizeClaim(params.admin, params.sessionId, job)
-    return { job: await finalizeJob({ ...params, job }), done: true }
+    const next = await finalizeJob({ ...params, job })
+    return { job: next, done: next.phase === 'done' }
   }
 
   const owned = job.claimId
@@ -524,21 +600,138 @@ async function concatStoredMp3s(
   return concatBytes(chunks)
 }
 
-/** Décode les WAV un par un et les passe dans le même encodeur MP3. */
-async function encodeStoredWavs(
+function mixHasMore(job: AudioJob): boolean {
+  return (job.mixCursor ?? 0) < job.steps.length || (job.mixSample ?? 0) > 0
+}
+
+function encodeMixCarry(pcm: Int16Array): string | undefined {
+  if (!pcm.length) return undefined
+  const bytes = new Uint8Array(pcm.byteLength)
+  bytes.set(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength))
+  let text = ''
+  for (let i = 0; i < bytes.length; i++) text += String.fromCharCode(bytes[i]!)
+  return btoa(text)
+}
+
+function decodeMixCarry(encoded?: string): Int16Array {
+  if (!encoded) return new Int16Array(0)
+  const bin = atob(encoded)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  const even = bytes.byteLength & ~1
+  const copy = new Uint8Array(even)
+  copy.set(bytes.subarray(0, even))
+  return new Int16Array(copy.buffer)
+}
+
+function concatPcm(chunks: Int16Array[]): Int16Array {
+  let n = 0
+  for (const chunk of chunks) n += chunk.length
+  const out = new Int16Array(n)
+  let offset = 0
+  for (const chunk of chunks) {
+    out.set(chunk, offset)
+    offset += chunk.length
+  }
+  return out
+}
+
+/**
+ * Encode une tranche courte. Le fichier entier dépasse le plafond CPU
+ * de l’Edge Function et la requête était tuée, barre figée à 94.
+ */
+async function writeMixSlice(
+  admin: SupabaseClient,
+  sessionId: string,
+  userId: string,
+  job: AudioJob,
+) {
+  const startCursor = job.mixCursor ?? 0
+  const startSample = job.mixSample ?? 0
+  let cursor = startCursor
+  let offset = startSample
+  let samples = 0
+  const pieces: Int16Array[] = []
+
+  while (cursor < job.steps.length && samples < MIX_SLICE_CAP) {
+    if (pieces.length > 0 && pieces.length % 4 === 0) {
+      await holdFinalizeClaim(admin, sessionId, job)
+    }
+    const step = job.steps[cursor]!
+    const path = step.partPath ?? partPath(userId, sessionId, cursor, job.version)
+    let pcm = pcmFromWav(await downloadPart(admin, path, cursor))
+    if (offset > 0) {
+      if (offset >= pcm.length) {
+        cursor += 1
+        offset = 0
+        continue
+      }
+      pcm = pcm.subarray(offset)
+    }
+    const room = MIX_SLICE_CAP - samples
+    if (pcm.length > room) {
+      if (samples >= MIX_SLICE_SOFT) break
+      const take = Math.max(1, Math.min(pcm.length, room))
+      pieces.push(pcm.slice(0, take))
+      offset += take
+      samples += take
+      break
+    }
+    pieces.push(Int16Array.from(pcm))
+    samples += pcm.length
+    cursor += 1
+    offset = 0
+    if (samples >= MIX_SLICE_SOFT && job.steps[cursor - 1]?.kind === 'silence') break
+  }
+
+  if (!pieces.length) {
+    job.mixCursor = cursor
+    job.mixSample = offset
+    return
+  }
+
+  const atEnd = cursor >= job.steps.length && offset === 0
+  const stream = await createMp3Stream()
+  const carry = decodeMixCarry(job.mixCarry)
+  const merged = concatPcm(carry.length ? [carry, ...pieces] : pieces)
+  const opening = (job.mixPart ?? 0) === 0 && carry.length === 0
+  if (!opening) fadeSeam(merged, 'in')
+  if (!atEnd) fadeSeam(merged, 'out')
+  stream.write(merged)
+  if (!atEnd) stream.padSilence()
+  const mp3 = stream.finish(atEnd)
+  job.mixCarry = atEnd ? undefined : encodeMixCarry(stream.pending().slice())
+  if (mp3.byteLength >= 32) {
+    const partIndex = job.mixPart ?? 0
+    await uploadPart(admin, mixPartPath(userId, sessionId, partIndex), mp3, 'audio/mpeg')
+    job.mixPart = partIndex + 1
+  } else if (atEnd) {
+    throw new Error('Tranche MP3 trop courte')
+  }
+  job.mixCursor = cursor
+  job.mixSample = offset
+}
+
+async function concatMixParts(
   admin: SupabaseClient,
   sessionId: string,
   userId: string,
   job: AudioJob,
 ): Promise<Uint8Array> {
-  const stream = await createMp3Stream()
-  for (let i = 0; i < job.steps.length; i++) {
-    if (i % 4 === 0) await holdFinalizeClaim(admin, sessionId, job)
-    const step = job.steps[i]!
-    const path = step.partPath ?? partPath(userId, sessionId, i, job.version)
-    stream.write(pcmFromWav(await downloadPart(admin, path, i)))
+  const folder = `${userId}/${sessionId}/mix`
+  const { data, error } = await admin.storage.from('audios').list(folder, { limit: 1000 })
+  if (error) throw new Error(`Liste montage: ${error.message}`)
+  const names = (data ?? [])
+    .map((file) => file.name)
+    .filter((name) => /^\d+\.mp3$/.test(name))
+    .sort()
+  if (!names.length) throw new Error('Montage sans segments')
+  const chunks: Uint8Array[] = []
+  for (let i = 0; i < names.length; i++) {
+    if (i % 8 === 0) await holdFinalizeClaim(admin, sessionId, job)
+    chunks.push(await downloadPart(admin, `${folder}/${names[i]}`, i))
   }
-  return stream.finish()
+  return concatBytes(chunks)
 }
 
 async function finalizeJob(params: {
@@ -563,10 +756,20 @@ async function finalizeJob(params: {
 
   await holdFinalizeClaim(params.admin, params.sessionId, job)
 
-  const mp3 =
-    job.version >= 8
-      ? await encodeStoredWavs(params.admin, params.sessionId, params.userId, job)
-      : await concatStoredMp3s(params.admin, params.sessionId, params.userId, job)
+  let mp3: Uint8Array
+  if (job.version >= 8) {
+    if (mixHasMore(job)) {
+      await writeMixSlice(params.admin, params.sessionId, params.userId, job)
+      await holdFinalizeClaim(params.admin, params.sessionId, job)
+    }
+    if (mixHasMore(job)) {
+      await releaseFinalizeClaim(params.admin, params.sessionId, job)
+      return job
+    }
+    mp3 = await concatMixParts(params.admin, params.sessionId, params.userId, job)
+  } else {
+    mp3 = await concatStoredMp3s(params.admin, params.sessionId, params.userId, job)
+  }
 
   const audioBytes = withAiDisclosureTag(mp3)
   if (audioBytes.byteLength < 1000) throw new Error('Fichier audio trop court')
@@ -588,6 +791,8 @@ async function finalizeJob(params: {
   job.phase = 'done'
   job.claimId = null
   job.claimedAt = null
+  job.finishedAt = new Date().toISOString()
+  delete job.error
 
   const { error: updateError } = await params.admin
     .from('sessions')
@@ -603,6 +808,14 @@ async function finalizeJob(params: {
     .eq('id', params.sessionId)
 
   if (updateError) throw new Error(`DB update: ${updateError.message}`)
+
+  await noteUsage(params.admin, params.sessionId, {
+    finishedAt: job.finishedAt,
+    ttsChars: job.ttsChars ?? 0,
+    promptVersion: job.promptVersion ?? PROMPT_VERSION,
+    scriptWords: job.scriptWords ?? null,
+    error: null,
+  })
 
   /** Nettoyage best-effort des segments. */
   try {
@@ -659,6 +872,7 @@ async function notifyN8n(sessionId: string): Promise<boolean> {
         secret,
         source: 'visiora',
       }),
+      signal: AbortSignal.timeout(8_000),
     })
     if (!res.ok) {
       console.warn('[generate-session-audio] n8n webhook', res.status, await res.text().catch(() => ''))
@@ -677,6 +891,33 @@ function sessionMinutes(answers: unknown): number {
     : NaN
   if (raw === 3 || raw === 10 || raw === 15) return raw
   return 15
+}
+
+/**
+ * n8n perd parfois sessionId après la pause (le lien .item casse).
+ * Si une seule séance est encore en cours, l'orchestrateur peut la reprendre.
+ */
+async function findSoloGeneratingSession(admin: SupabaseClient): Promise<string | null> {
+  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+  const { data, error } = await admin
+    .from('sessions')
+    .select('id, updated_at')
+    .eq('status', 'generating')
+    .gte('updated_at', since)
+    .order('updated_at', { ascending: false })
+    .limit(2)
+  if (error || !data?.length) return null
+  const newest = data[0] as { id?: unknown; updated_at?: unknown }
+  const id = typeof newest.id === 'string' ? newest.id : ''
+  if (!id) return null
+  if (data.length === 1) return id
+  const second = data[1] as { updated_at?: unknown }
+  const newestAt = new Date(String(newest.updated_at ?? '')).getTime()
+  const secondAt = new Date(String(second.updated_at ?? '')).getTime()
+  if (Number.isFinite(newestAt) && Number.isFinite(secondAt) && newestAt - secondAt > 60_000) {
+    return id
+  }
+  return null
 }
 
 Deno.serve(async (req) => {
@@ -707,7 +948,7 @@ Deno.serve(async (req) => {
   const headerSecret = req.headers.get('x-visiora-orchestrator-secret') ?? ''
   const isOrchestrator = Boolean(orchSecret && headerSecret && headerSecret === orchSecret)
 
-  let sessionId: string
+  let sessionId = ''
   let force = false
   let reset = false
   let chain = false
@@ -720,13 +961,15 @@ Deno.serve(async (req) => {
       compare?: boolean | string
       model?: string
     }
-    if (!body.sessionId) return json({ error: 'sessionId required' }, 400)
-    sessionId = body.sessionId
+    const fromBody = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
+    const fromQuery = new URL(req.url).searchParams.get('sessionId')?.trim() ?? ''
+    sessionId = fromBody || fromQuery
     force = body.force === true || body.force === 'true'
     reset = body.reset === true || body.reset === 'true'
     chain = body.chain === true || body.chain === 'true'
 
     if (body.compare === true || body.compare === 'true') {
+      if (!sessionId) return json({ error: 'sessionId required' }, 400)
       const model = body.model?.trim()
       if (!model) return json({ error: 'model required' }, 400)
       const adminCompare = createClient(supabaseUrl, serviceKey)
@@ -770,6 +1013,13 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(supabaseUrl, serviceKey)
+  if (!sessionId) {
+    if (!(isOrchestrator && chain)) return json({ error: 'sessionId required' }, 400)
+    const found = await findSoloGeneratingSession(admin)
+    if (!found) return json({ error: 'sessionId required' }, 400)
+    console.warn('[generate-session-audio] sessionId repris, séance en cours', found)
+    sessionId = found
+  }
   const { data: session, error: sessionError } = await admin
     .from('sessions')
     .select('*')
@@ -830,6 +1080,12 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       })
       .eq('id', sessionId)
+    await noteUsage(admin, sessionId, {
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      error: null,
+      ttsChars: null,
+    })
 
     const runScript = async () => {
       try {
@@ -837,6 +1093,11 @@ Deno.serve(async (req) => {
       } catch (err) {
         const message = err instanceof Error ? err.message : 'script failed'
         console.error('[generate-session-audio] script failed', message)
+        await noteUsage(admin, sessionId, {
+          promptVersion: PROMPT_VERSION,
+          finishedAt: new Date().toISOString(),
+          error: message.slice(0, 180),
+        })
         await admin
           .from('sessions')
           .update({
@@ -848,17 +1109,20 @@ Deno.serve(async (req) => {
         return
       }
       if (n8nConfigured) {
-        await admin
-          .from('sessions')
-          .update({
-            audio_job: n8nQueuePayload(),
-            audio_bytes: 17,
-            status: 'generating',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', sessionId)
         const handed = await notifyN8n(sessionId)
-        if (handed) return
+        if (handed) {
+          await admin
+            .from('sessions')
+            .update({
+              audio_job: n8nQueuePayload(),
+              audio_bytes: 17,
+              status: 'generating',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', sessionId)
+          return
+        }
+        console.warn('[generate-session-audio] n8n injoignable, la séance continue ici')
       }
       scheduleContinue({
         supabaseUrl,
@@ -889,7 +1153,8 @@ Deno.serve(async (req) => {
     }, 202)
   }
 
-  if (isN8nQueued(session.audio_job) && !isOrchestrator) {
+  const queuedAge = n8nQueueAgeMs(session.audio_job)
+  if (queuedAge != null && queuedAge < 25_000 && !isOrchestrator && !chain) {
     return json({
       ok: true,
       accepted: true,
@@ -917,6 +1182,10 @@ Deno.serve(async (req) => {
 
   const script = resolveScript(session)
   if (!script.trim()) {
+    await noteUsage(admin, sessionId, {
+      finishedAt: new Date().toISOString(),
+      error: 'Script manquant',
+    })
     await admin
       .from('sessions')
       .update({
@@ -950,7 +1219,10 @@ Deno.serve(async (req) => {
    */
   if (!isOrchestrator && !chain && n8nConfigured && job.phase !== 'finalize') {
     if (session.status === 'failed') job.handedToN8n = false
-    if (job.handedToN8n) {
+    const updatedAt = new Date(String(session.updated_at ?? '')).getTime()
+    const quietMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0
+    const n8nQuiet = Boolean(job.handedToN8n) && quietMs >= 25_000
+    if (job.handedToN8n && !n8nQuiet) {
       return json({
         ok: true,
         accepted: true,
@@ -959,29 +1231,30 @@ Deno.serve(async (req) => {
         orchestrated: true,
       }, 202)
     }
-    job.handedToN8n = true
-    await admin
-      .from('sessions')
-      .update({
-        audio_job: job,
-        audio_bytes: progressPct(job),
-        status: 'generating',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', sessionId)
-      .neq('status', 'ready')
-    const handed = await notifyN8n(sessionId)
-    if (handed) {
-      return json({
-        ok: true,
-        accepted: true,
-        status: 'generating',
-        progress: progressPct(job),
-        orchestrated: true,
-      }, 202)
+    if (!n8nQuiet) {
+      job.handedToN8n = true
+      await admin
+        .from('sessions')
+        .update({
+          audio_job: job,
+          audio_bytes: progressPct(job),
+          status: 'generating',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId)
+        .neq('status', 'ready')
+      const handed = await notifyN8n(sessionId)
+      if (handed) {
+        return json({
+          ok: true,
+          accepted: true,
+          status: 'generating',
+          progress: progressPct(job),
+          orchestrated: true,
+        }, 202)
+      }
+      job.handedToN8n = false
     }
-    job.handedToN8n = false
-    /** Fallback si N8N down : on traite quand même un step ici. */
   }
 
   job.claimId = crypto.randomUUID()
@@ -1007,12 +1280,13 @@ Deno.serve(async (req) => {
         script,
         job,
       })
-      if (!result.done && !isOrchestrator) {
+      if (!result.done && (!isOrchestrator || result.job.phase === 'finalize')) {
         scheduleContinue({
           supabaseUrl,
           anonKey,
           authHeader,
           sessionId,
+          orchestratorSecret: isOrchestrator ? orchSecret : undefined,
         })
       }
     } catch (err) {
@@ -1039,6 +1313,10 @@ Deno.serve(async (req) => {
       if (isTransientGateway(message)) {
         console.warn('[generate-session-audio] reprise après coupure', message.slice(0, 160))
       }
+      if (nextStatus === 'failed' && job) {
+        job.finishedAt = new Date().toISOString()
+        job.error = message.slice(0, 180)
+      }
       if (owned && job) {
         await admin
           .from('sessions')
@@ -1061,6 +1339,15 @@ Deno.serve(async (req) => {
           .eq('id', sessionId)
           .neq('status', 'ready')
       }
+      if (nextStatus === 'failed') {
+        await noteUsage(admin, sessionId, {
+          finishedAt: job?.finishedAt ?? new Date().toISOString(),
+          error: message.slice(0, 180),
+          ttsChars: job?.ttsChars ?? null,
+          promptVersion: job?.promptVersion ?? null,
+          scriptWords: job?.scriptWords ?? null,
+        })
+      }
       if (nextStatus === 'generating') return
       throw err
     }
@@ -1077,7 +1364,7 @@ Deno.serve(async (req) => {
       accepted: true,
       status: 'generating',
       progress: progressPct(job),
-      orchestrated: n8nConfigured || isOrchestrator,
+      orchestrated: job.phase === 'finalize' ? false : n8nConfigured || isOrchestrator,
     }, 202)
   }
 
@@ -1106,7 +1393,7 @@ Deno.serve(async (req) => {
       status: 'generating',
       progress: progressPct(freshJob),
       continue: true,
-      orchestrated: n8nConfigured || isOrchestrator,
+      orchestrated: freshJob.phase === 'finalize' ? false : n8nConfigured || isOrchestrator,
     }, 202)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Generation failed'

@@ -11,6 +11,9 @@ verify_jwt = true
 [functions.list-eleven-voices]
 verify_jwt = true
 
+[functions.delete-own-account]
+verify_jwt = true
+
 
 
 

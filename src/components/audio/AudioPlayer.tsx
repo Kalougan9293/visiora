@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { AI_DISCLOSURE } from '@/data/uiCopy'
 import { hasListenedEnough } from '@/lib/listenThreshold'
+import { usePlayback } from '@/context/PlaybackContext'
 
 function formatClock(seconds: number) {
   const total = Math.max(0, Math.round(seconds))
@@ -29,6 +30,8 @@ interface AudioPlayerProps {
   compact?: boolean
   /** Barre, temps écoulé / restant, et sauts de 10 s. */
   library?: boolean
+  /** Séance branchée sur le lecteur partagé, qui survit au changement d’onglet. */
+  sessionId?: string
   ambiance?: AmbianceChoice
 }
 
@@ -43,8 +46,12 @@ export function AudioPlayer({
   className,
   compact = false,
   library = false,
+  sessionId,
   ambiance = null,
 }: AudioPlayerProps) {
+  const playback = usePlayback()
+  const shared = library && Boolean(sessionId)
+  const active = shared && playback.sessionId === sessionId
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -156,6 +163,12 @@ export function AudioPlayer({
   }, [src, onPlayStart])
 
   const toggle = async () => {
+    if (shared && sessionId) {
+      if (!src) return
+      if (active) await playback.toggle()
+      else await playback.start({ sessionId, title, src })
+      return
+    }
     const el = audioRef.current
     if (!src || !el) return
     if (!el.paused && !el.ended) {
@@ -184,6 +197,10 @@ export function AudioPlayer({
   }
 
   const seekTo = (seconds: number) => {
+    if (shared) {
+      if (active) playback.seek(seconds)
+      return
+    }
     const el = audioRef.current
     if (!el || !Number.isFinite(el.duration) || el.duration <= 0) return
     const next = Math.min(el.duration, Math.max(0, seconds))
@@ -191,6 +208,10 @@ export function AudioPlayer({
     setCurrent(next)
     setProgress((next / el.duration) * 100)
   }
+
+  const shownCurrent = active ? playback.current : current
+  const shownDuration = active ? playback.duration : durationSec
+  const shownPlaying = active ? playback.playing : playing
 
   const audioEl = src ? (
     <audio
@@ -213,30 +234,30 @@ export function AudioPlayer({
       )}
       onClick={() => void toggle()}
       disabled={!src}
-      aria-label={playing ? 'Pause' : 'Lecture'}
+      aria-label={shownPlaying ? 'Pause' : 'Lecture'}
     >
-      {playing ? <Pause size={compact ? 15 : 18} /> : <Play size={compact ? 15 : 18} className="ml-0.5" />}
+      {shownPlaying ? <Pause size={compact ? 15 : 18} /> : <Play size={compact ? 15 : 18} className="ml-0.5" />}
     </Button>
   )
 
   if (library) {
-    const remain = Math.max(0, durationSec - current)
+    const remain = Math.max(0, shownDuration - shownCurrent)
     return (
       <div className={cn('w-full px-1 pb-1 pt-2', className)}>
-        {audioEl}
+        {shared ? null : audioEl}
         <input
           type="range"
           min={0}
-          max={durationSec > 0 ? durationSec : 0}
+          max={shownDuration > 0 ? shownDuration : 0}
           step={0.1}
-          value={Math.min(current, durationSec || 0)}
-          disabled={!src || durationSec <= 0}
+          value={Math.min(shownCurrent, shownDuration || 0)}
+          disabled={!src || shownDuration <= 0}
           aria-label="Position dans la séance"
           onChange={(event) => seekTo(Number(event.target.value))}
           className="h-1 w-full cursor-pointer accent-[var(--vs-azur)] disabled:opacity-40"
         />
         <div className="mt-1 flex justify-between text-[11px] tabular-nums text-ink/70 dark:text-champagne/85">
-          <span>{formatClock(current)}</span>
+          <span>{formatClock(shownCurrent)}</span>
           <span>-{formatClock(remain)}</span>
         </div>
         <div className="mt-1 flex items-center justify-center gap-6">
@@ -244,7 +265,7 @@ export function AudioPlayer({
             type="button"
             aria-label="Reculer de 10 secondes"
             disabled={!src}
-            onClick={() => seekTo(current - 10)}
+            onClick={() => seekTo(shownCurrent - 10)}
             className="flex h-9 items-center justify-center gap-0.5 rounded-full px-2 text-ink/70 disabled:opacity-40 dark:text-champagne"
           >
             <RotateCcw size={16} />
@@ -255,7 +276,7 @@ export function AudioPlayer({
             type="button"
             aria-label="Avancer de 10 secondes"
             disabled={!src}
-            onClick={() => seekTo(current + 10)}
+            onClick={() => seekTo(shownCurrent + 10)}
             className="flex h-9 items-center justify-center gap-0.5 rounded-full px-2 text-ink/70 disabled:opacity-40 dark:text-champagne"
           >
             <span className="text-[10px] font-semibold leading-none">10</span>

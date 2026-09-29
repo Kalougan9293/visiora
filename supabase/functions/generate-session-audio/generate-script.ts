@@ -27,12 +27,7 @@ function q12Line(answers: SessionAnswers): string {
   const registre = asText(answers.q12_registre)
   const voice = asText(answers.q12_voice)
   const tu = 'tutoiement'
-  const reg =
-    registre === 'spirituel'
-      ? 'spirituel ouvert'
-      : registre === 'metaphysique'
-        ? 'entre les deux'
-        : 'laïc'
+  const reg = registre === 'spirituel' ? 'spirituel ouvert' : 'laïc'
   const parts = [`formulation : ${tu}`, `registre : ${reg}`]
   if (voice) parts.unshift(`voix : ${voice}`)
   return `Q12 ${parts.join(' · ')}`
@@ -108,6 +103,7 @@ async function chatCompletion(
   model: string,
   prompt: string,
   userContent: string,
+  maxTokens = 16000,
 ): Promise<ScriptGenOk | ScriptGenFail> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -117,14 +113,14 @@ async function chatCompletion(
     },
     body: JSON.stringify({
       model,
-      temperature: 0.6,
-      max_tokens: 16000,
+      temperature: maxTokens < 200 ? 0.4 : 0.6,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: prompt },
         { role: 'user', content: userContent },
       ],
     }),
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(maxTokens < 200 ? 20_000 : 90_000),
   })
 
   const raw = await res.text().catch(() => '')
@@ -163,6 +159,7 @@ async function anthropicCompletion(
   model: string,
   prompt: string,
   userContent: string,
+  maxTokens = 16000,
 ): Promise<ScriptGenOk | ScriptGenFail> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -173,11 +170,11 @@ async function anthropicCompletion(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 16000,
+      max_tokens: maxTokens,
       system: prompt,
       messages: [{ role: 'user', content: userContent }],
     }),
-    signal: AbortSignal.timeout(90_000),
+    signal: AbortSignal.timeout(maxTokens < 200 ? 20_000 : 90_000),
   })
   const raw = await res.text().catch(() => '')
   if (!res.ok) {
@@ -230,6 +227,15 @@ export function isN8nQueued(job: unknown): boolean {
   return isPhaseClaim(job, 'n8n', N8N_QUEUE_TTL_MS)
 }
 
+/** Âge du passage de relais à n8n. Null si la séance n’est pas dans cette file. */
+export function n8nQueueAgeMs(job: unknown): number | null {
+  if (!job || typeof job !== 'object') return null
+  const v = job as { phase?: string; claimedAt?: string }
+  if (v.phase !== 'n8n' || typeof v.claimedAt !== 'string') return null
+  const age = Date.now() - new Date(v.claimedAt).getTime()
+  return Number.isFinite(age) && age >= 0 ? age : null
+}
+
 export function n8nQueuePayload(): { phase: 'n8n'; claimedAt: string } {
   return { phase: 'n8n', claimedAt: new Date().toISOString() }
 }
@@ -242,15 +248,44 @@ export function hasStoredScript(script: unknown): boolean {
   return typeof script === 'string' && script.trim().length > 40
 }
 
-function spokenWords(script: string): number {
+export function spokenWords(script: string): number {
   return script
     .replace(/\[[^\]]*\]/g, ' ')
     .split(/\s+/)
     .filter(Boolean).length
 }
 
+const MOVEMENT_7 = /\[Mouvement\s*7\b/i
+/** Réveil impératif. « rouvrir / rouvre les yeux » (avant la gratitude) ne compte pas. */
+const AWAKENING = /(?<![Rr])ouvre(?:s|r)?(?:\s+(?!les\b)\S+){0,4}\s+les yeux/i
+
+function movement7At(script: string): number {
+  return script.search(MOVEMENT_7)
+}
+
+/** Le Mouvement 7 est écrit et la personne a déjà l’ordre d’ouvrir les yeux. */
+export function scriptEndingIsClosed(script: string): boolean {
+  const at = movement7At(script)
+  if (at < 0) return false
+  return AWAKENING.test(script.slice(at))
+}
+
+/** Garde le script jusqu’à la première phrase de réveil du Mouvement 7. */
+export function clipScriptAfterAwakening(script: string): string {
+  const at = movement7At(script)
+  if (at < 0) return script
+  const tail = script.slice(at)
+  const wake = AWAKENING.exec(tail)
+  if (!wake) return script
+  const wakeEnd = wake.index + wake[0].length
+  const stop = tail.slice(wakeEnd).search(/[.!?]/)
+  const end = stop >= 0 ? wakeEnd + stop + 1 : tail.length
+  return `${script.slice(0, at)}${tail.slice(0, end)}`.trim()
+}
+
 /** Citation ouverte, fin au milieu d’un mot, ou dernier mouvement à peine commencé. */
 export function scriptIsCut(script: string): boolean {
+  if (scriptEndingIsClosed(script)) return false
   const text = script.trim()
   if (text.length < 80) return true
   const open = (text.match(/«/g) ?? []).length
@@ -265,17 +300,21 @@ export function scriptIsCut(script: string): boolean {
 /** Ce qui manque encore avant d’envoyer le texte à la voix. */
 export function scriptFinishGaps(script: string): string[] {
   const gaps: string[] = []
-  if (scriptIsCut(script)) gaps.push('coupé')
-  const words = spokenWords(script)
-  if (words < 1100) gaps.push(`${words} mots`)
-  const pauses = (script.match(/\[pause(?:\s+longue)?\]/gi) ?? []).length
-  const longs = (script.match(/\[pause longue\]/gi) ?? []).length
-  if (pauses < 30 || longs < 8) gaps.push(`${pauses} pauses dont ${longs} longues`)
-  if (!/si\b[\s\S]{0,160}\balors\b/i.test(script)) gaps.push('si… alors')
+  const closed = scriptEndingIsClosed(script)
+  // Un script déjà fermé sur le réveil ne se rallonge pas : ni mots, ni pauses, ni suite.
+  if (!closed && scriptIsCut(script)) gaps.push('coupé')
+  if (!closed) {
+    const words = spokenWords(script)
+    if (words < 1100) gaps.push(`${words} mots`)
+    const pauses = (script.match(/\[pause(?:\s+longue)?\]/gi) ?? []).length
+    const longs = (script.match(/\[pause longue\]/gi) ?? []).length
+    if (pauses < 30 || longs < 8) gaps.push(`${pauses} pauses dont ${longs} longues`)
+  }
+  const beforeWake = closed ? script.slice(0, movement7At(script)) : script
+  if (!/si\b[\s\S]{0,500}\balors\b/i.test(beforeWake)) gaps.push('si… alors')
   const movements = (script.match(/\[Mouvement[^\]]*\]/gi) ?? []).length
   if (movements < 7) gaps.push(`${movements} mouvements`)
-  const tail = script.trim().slice(-1800)
-  if (!/ouvre les yeux|rouvrir les yeux/i.test(tail)) gaps.push('retour')
+  if (!closed) gaps.push('retour')
   return gaps
 }
 
@@ -284,9 +323,11 @@ export function scriptNeedsFinish(script: string): boolean {
   return scriptFinishGaps(script).length > 0
 }
 
-const CONTINUE_PROMPT = `La séance n'est pas finie. Tu écris uniquement la suite, sans répéter le début.
-Il faut le mouvement 7, l'intégration : gratitude, compte jusqu'à cinq, et une dernière phrase qui contient « ouvre les yeux ».
-Ajoute le plan « si… alors… » s'il manque, avec des [pause] et [pause longue].
+const CONTINUE_PROMPT = `La séance n'est pas finie. Tu écris uniquement ce qui manque, sans répéter le début.
+Si le Mouvement 7 contient déjà « ouvre les yeux », n'écris rien.
+Le plan « si… alors… » se place une seule fois, dans le Mouvement 6. Jamais après le Mouvement 7.
+Le Mouvement 7 se termine sur le réveil : gratitude, compte jusqu'à cinq, puis une phrase avec « ouvre les yeux ».
+N'ajoute aucun texte après cette phrase.
 Garde le tutoiement, les balises [Mouvement N] et les « je » entre guillemets.
 Réponds uniquement avec la suite.`
 
@@ -296,8 +337,8 @@ async function finishScript(
   anthropic: boolean,
   apiKey: string,
 ): Promise<string> {
-  let text = draft
-  for (let attempt = 0; attempt < 3 && scriptNeedsFinish(text); attempt++) {
+  let text = clipScriptAfterAwakening(draft)
+  for (let attempt = 0; attempt < 3 && !scriptEndingIsClosed(text) && scriptNeedsFinish(text); attempt++) {
     const tail = text.trim().slice(-900)
     const userContent = `Fin actuelle du script :\n\n${tail}`
     const result = anthropic
@@ -306,7 +347,7 @@ async function finishScript(
     if (!result.ok) break
     const extra = result.script.trim()
     if (extra.length < 40) break
-    text = `${text.trim()} ${extra}`
+    text = clipScriptAfterAwakening(`${text.trim()} ${extra}`)
     console.log('[generate-session-audio] script continué', spokenWords(text))
   }
   return text
@@ -322,6 +363,8 @@ function wordTarget(answers: SessionAnswers | null | undefined): number {
 
 const EXPAND_PROMPT = `Tu allonges un script de visualisation guidée Visiora, sans en changer la méthode.
 Le texte reçu est trop court. Réécris-le plus développé, en gardant la même structure, les mêmes balises [pause] et les « je » entre guillemets.
+Un seul plan « si… alors… », dans le Mouvement 6.
+Le script se termine au Mouvement 7, sur la phrase « ouvre les yeux ». N’écris rien après.
 Garde le tutoiement et les faits de la fiche. N’invente pas d’objectif, de date ou de symptôme.
 Réponds uniquement avec le script.`
 
@@ -404,4 +447,53 @@ export async function generateSessionScriptDetailed(
 export async function generateSessionScript(answers: SessionAnswers | null | undefined): Promise<string> {
   const result = await generateSessionScriptDetailed(answers)
   return result.script
+}
+
+const TITLE_MAX = 56
+
+const TITLE_PROMPT = `Tu écris le titre d'une séance Visiora, en une seule ligne.
+Court et concret, comme on le dirait : Marathon de Bordeaux, sous 4h15.
+Tu t'appuies sur l'objectif et l'échéance. Tu n'inventes aucun fait.
+Pas de guillemets, pas de point final, 56 caractères maximum.
+Réponds uniquement avec le titre.`
+
+/** Une ligne, sans guillemets, coupée sur un mot si elle dépasse. */
+export function cleanSessionTitle(raw: string): string {
+  const line = stripFences(raw).split('\n').map((part) => part.trim()).find(Boolean) ?? ''
+  const plain = line
+    .replace(/^titre\s*:\s*/i, '')
+    .replace(/^[«"']+|[»"'.…]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (plain.length <= TITLE_MAX) return plain
+  const cut = plain.slice(0, TITLE_MAX)
+  const space = cut.lastIndexOf(' ')
+  return (space >= 24 ? cut.slice(0, space) : cut).replace(/[,:;–-]\s*$/, '').trim()
+}
+
+/** Titre court, après le script. Échec = on garde le titre déjà enregistré. */
+export async function suggestSessionTitle(
+  answers: SessionAnswers | null | undefined,
+): Promise<string | null> {
+  const src = answers && typeof answers === 'object' ? answers : {}
+  const goal = asText(src.q1)
+  if (!goal) return null
+  const when = asText(src.q2)
+  const userContent = [`Objectif : ${goal}`, when ? `Échéance : ${when}` : ''].filter(Boolean).join('\n')
+  const model = preferredModels()[0]
+  if (!model) return null
+  const anthropic = isAnthropicModel(model)
+  const apiKey = anthropic
+    ? Deno.env.get('ANTHROPIC_API_KEY')?.trim() ?? ''
+    : Deno.env.get('OPENAI_API_KEY')?.trim() ?? ''
+  if (!apiKey) return null
+  const result = anthropic
+    ? await anthropicCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
+    : await chatCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
+  if (!result.ok) {
+    console.warn('[generate-session-audio] titre', result.detail)
+    return null
+  }
+  const title = cleanSessionTitle(result.script)
+  return title.length >= 3 ? title : null
 }

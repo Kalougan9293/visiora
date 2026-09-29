@@ -42,7 +42,7 @@
         "conditions": {
           "string": [
             {
-              "value1": "={{ $('Webhook').item.json.body.secret || $('Webhook').item.json.secret }}",
+              "value1": "={{ $('Webhook').first().json.body.secret || $('Webhook').first().json.secret }}",
               "value2": "COLLE_ICI_LE_SECRET_ORCHESTRATEUR"
             }
           ]
@@ -61,7 +61,7 @@
             {
               "id": "sid",
               "name": "sessionId",
-              "value": "={{ $('Webhook').item.json.body.sessionId || $('Webhook').item.json.sessionId }}",
+              "value": "={{ $('Webhook').first().json.body.sessionId || $('Webhook').first().json.sessionId }}",
               "type": "string"
             },
             {
@@ -89,11 +89,11 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $('cles').item.json.serviceRoleKey }}"
+              "value": "=Bearer {{ $('cles').first().json.serviceRoleKey }}"
             },
             {
               "name": "apikey",
-              "value": "={{ $('cles').item.json.serviceRoleKey }}"
+              "value": "={{ $('cles').first().json.serviceRoleKey }}"
             },
             {
               "name": "x-visiora-orchestrator-secret",
@@ -107,9 +107,9 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"sessionId\": \"{{ $('Init boucle').item.json.sessionId }}\",\n  \"chain\": true\n}",
+        "jsonBody": "={{ { sessionId: $json.sessionId || $('Webhook').first().json.body?.sessionId || $('Webhook').first().json.sessionId, chain: true } }}",
         "options": {
-          "timeout": 30000,
+          "timeout": 90000,
           "retry": {
             "maxTries": 4,
             "waitBetweenTries": 4000
@@ -120,7 +120,8 @@
       "name": "Step audio",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, -40]
+      "position": [880, -40],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -163,13 +164,13 @@
             {
               "id": "sid2",
               "name": "sessionId",
-              "value": "={{ $('Init boucle').item.json.sessionId }}",
+              "value": "={{ $('Init boucle').first().json.sessionId || $('Webhook').first().json.body.sessionId || $('Webhook').first().json.sessionId }}",
               "type": "string"
             },
             {
               "id": "i2",
               "name": "i",
-              "value": "={{ ($('Init boucle').item.json.i || 0) + 1 }}",
+              "value": "={{ ($('Compteur').isExecuted ? Number($('Compteur').first().json.i) : 0) + 1 }}",
               "type": "number"
             }
           ]
@@ -189,7 +190,7 @@
             {
               "value1": "={{ $json.i }}",
               "operation": "smaller",
-              "value2": 250
+              "value2": 4000
             }
           ]
         }
@@ -218,7 +219,10 @@
       "main": [[{ "node": "Step audio", "type": "main", "index": 0 }]]
     },
     "Step audio": {
-      "main": [[{ "node": "Encore en cours ?", "type": "main", "index": 0 }]]
+      "main": [
+        [{ "node": "Encore en cours ?", "type": "main", "index": 0 }],
+        [{ "node": "Pause 2s", "type": "main", "index": 0 }]
+      ]
     },
     "Encore en cours ?": {
       "main": [

@@ -115,25 +115,6 @@ export const progressService = {
     }
   },
 
-  /** Simulateur de test — marque N jours d’écoute consécutifs. */
-  simulateDays(days: number): ProgressStats {
-    const journal = buildEmptyJournal(Math.max(28, days))
-    const filled = journal.map((entry, i) => {
-      const fromEnd = journal.length - i
-      if (fromEnd <= days) {
-        return { ...entry, completed: true, listenCount: 1 }
-      }
-      return entry
-    })
-    return {
-      streakDays: days,
-      totalListens: days,
-      milestoneTarget: nextMilestoneTarget(days),
-      daysCompletedTowardMilestone: days,
-      journal: filled,
-    }
-  },
-
   reset(): ProgressStats {
     return defaultStats()
   },
