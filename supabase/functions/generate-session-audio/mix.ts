@@ -27,7 +27,8 @@ const BED_OBJECT: Record<string, string> = {
  * Assez présent pour tenir sous les pauses, assez bas pour rester sous la voix.
  */
 const BED_GAIN: Record<string, number> = {
-  rituel: 1,
+  /** Vanessa : fond un cran plus présent (retour écoute). */
+  rituel: 1.55,
   onde: 1,
   antoni: 1,
   /** Voix ElevenLabs plus « chaudes » : fond un peu plus présent pour coller à Vanessa/Damien. */

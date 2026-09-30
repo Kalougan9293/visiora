@@ -184,7 +184,7 @@ export const VOICES = [
     tag: '10/10',
     /** Fond déjà mixé dans le MP3 d’extrait (= même boucle que le rendu). */
     ambiance: null,
-    preview: '/voices/rituel-preview.mp3?v=bed6',
+    preview: '/voices/rituel-preview.mp3?v=bed7',
   },
   {
     id: 'antoni',
@@ -193,7 +193,7 @@ export const VOICES = [
     gender: 'Masculin',
     tag: '8/10',
     ambiance: null,
-    preview: '/voices/damien-preview.mp3?v=bed6',
+    preview: '/voices/damien-preview.mp3?v=bed7',
   },
   {
     id: 'onde',
@@ -202,7 +202,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '8/10',
     ambiance: null,
-    preview: '/voices/onde-preview.mp3?v=bed6',
+    preview: '/voices/onde-preview.mp3?v=bed7',
   },
   {
     id: 'louis',
@@ -211,7 +211,7 @@ export const VOICES = [
     gender: 'Masculin',
     tag: '',
     ambiance: null,
-    preview: '/voices/louis-preview.mp3?v=bed6',
+    preview: '/voices/louis-preview.mp3?v=bed7',
   },
   {
     id: 'aurore',
@@ -220,7 +220,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '',
     ambiance: null,
-    preview: '/voices/aurore-preview.mp3?v=bed6',
+    preview: '/voices/aurore-preview.mp3?v=bed7',
   },
   {
     id: 'maelis',
@@ -229,7 +229,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '',
     ambiance: null,
-    preview: '/voices/maelis-preview.mp3?v=bed6',
+    preview: '/voices/maelis-preview.mp3?v=bed7',
   },
 ] as const
 
