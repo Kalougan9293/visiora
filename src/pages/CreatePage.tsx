@@ -659,7 +659,7 @@ function VoiceChoice({
       </p>
       <p className="mt-2 text-[13px] text-ink/50 dark:text-cream/50 sm:text-sm">Écoute, puis choisis</p>
       <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
-      <div className="mt-4 flex flex-wrap justify-center gap-2.5">
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-2.5">
         {VOICES.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
@@ -667,7 +667,7 @@ function VoiceChoice({
             <div
               key={v.id}
               className={cn(
-                'inline-flex items-center gap-1.5 rounded-full pl-4 pr-2 py-1.5 transition-all',
+                'inline-flex w-full items-center justify-between gap-1 rounded-full py-1.5 pl-2.5 pr-1.5 transition-all sm:pl-3 sm:pr-1.5',
                 selected
                   ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
                   : 'bg-black/[0.04] text-ink/75 dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-lunaire)]/85',
@@ -676,7 +676,7 @@ function VoiceChoice({
               <button
                 type="button"
                 onClick={() => onChange(v.id)}
-                className="text-[14px] font-semibold sm:text-[15px]"
+                className="min-w-0 flex-1 truncate text-left text-[12px] font-semibold sm:text-[14px]"
               >
                 {v.name}
               </button>
@@ -685,7 +685,7 @@ function VoiceChoice({
                 onClick={() => void togglePreview(v.id, v.preview)}
                 aria-label={playing ? `Arrêter ${v.name}` : `Écouter ${v.name}`}
                 className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded-full transition',
+                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition sm:h-8 sm:w-8',
                   selected
                     ? 'bg-[var(--vs-nuit)]/15'
                     : 'bg-[var(--vs-azur)]/10 text-[var(--vs-azur)]',
