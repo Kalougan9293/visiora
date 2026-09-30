@@ -193,7 +193,7 @@ export const VOICES = [
     gender: 'Masculin',
     tag: '8/10',
     ambiance: null,
-    preview: '/voices/damien-preview.mp3?v=bed7',
+    preview: '/voices/damien-preview.mp3?v=bed8',
   },
   {
     id: 'onde',
@@ -211,7 +211,7 @@ export const VOICES = [
     gender: 'Masculin',
     tag: '',
     ambiance: null,
-    preview: '/voices/louis-preview.mp3?v=bed7',
+    preview: '/voices/louis-preview.mp3?v=bed8',
   },
   {
     id: 'aurore',
@@ -220,7 +220,7 @@ export const VOICES = [
     gender: 'Féminin',
     tag: '',
     ambiance: null,
-    preview: '/voices/aurore-preview.mp3?v=bed7',
+    preview: '/voices/aurore-preview.mp3?v=bed8',
   },
   {
     id: 'maelis',
