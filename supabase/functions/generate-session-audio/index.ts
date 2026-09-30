@@ -427,7 +427,7 @@ async function renderSilencePcm(params: {
   let pcm = upsampleTts(silencePcm(params.seconds))
   let nextOffset = params.bedOffset
   if (bed) {
-    const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset)
+    const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, params.bedOffset, bed.voiceScale)
     pcm = mixed.pcm
     nextOffset = mixed.nextOffset
   }
@@ -534,7 +534,7 @@ async function processOneStep(params: {
       let nextOffset = job.bedOffset
       const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase(), params.admin)
       if (bed) {
-        const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, job.bedOffset)
+        const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, job.bedOffset, bed.voiceScale)
         pcm = mixed.pcm
         nextOffset = mixed.nextOffset
       }

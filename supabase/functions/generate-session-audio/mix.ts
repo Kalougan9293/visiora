@@ -30,12 +30,23 @@ const BED_GAIN: Record<string, number> = {
   rituel: 1,
   onde: 1,
   antoni: 1,
-  louis: 1,
-  aurore: 1,
-  maelis: 1,
+  /** Voix ElevenLabs plus « chaudes » : fond un peu plus présent pour coller à Vanessa/Damien. */
+  louis: 1.75,
+  aurore: 1.6,
+  maelis: 1.6,
 }
 
-type LoadedBed = { key: string; pcm: Int16Array; gain: number }
+/** Baisse un peu la voix sur les IDs plus hot, pour laisser entendre le lit. */
+const VOICE_SCALE: Record<string, number> = {
+  rituel: 0.88,
+  onde: 0.88,
+  antoni: 0.88,
+  louis: 0.72,
+  aurore: 0.74,
+  maelis: 0.74,
+}
+
+type LoadedBed = { key: string; pcm: Int16Array; gain: number; voiceScale: number }
 let bedCache: LoadedBed | null = null
 
 async function downloadBedObject(admin: SupabaseClient, objectName: string): Promise<Uint8Array> {
@@ -58,16 +69,17 @@ async function downloadBedObject(admin: SupabaseClient, objectName: string): Pro
 export async function loadBed(
   appVoiceKey: string,
   admin: SupabaseClient,
-): Promise<{ pcm: Int16Array; gain: number } | null> {
+): Promise<{ pcm: Int16Array; gain: number; voiceScale: number } | null> {
   const key = appVoiceKey.toLowerCase()
   const objectName = BED_OBJECT[key]
   const gain = BED_GAIN[key]
+  const voiceScale = VOICE_SCALE[key] ?? 0.88
   if (!objectName || gain == null) return null
   if (bedCache?.key === key) return bedCache
   try {
     const bytes = await downloadBedObject(admin, objectName)
     const pcm = smoothBed(pcmFromWav(bytes))
-    bedCache = { key, pcm, gain }
+    bedCache = { key, pcm, gain, voiceScale }
     return bedCache
   } catch (err) {
     console.warn('[mix] bed missing', key, err)
@@ -452,6 +464,7 @@ export function mixLoopingBed(
   bed: Int16Array,
   gain: number,
   bedOffset = 0,
+  voiceScale = 0.88,
 ): { pcm: Int16Array; nextOffset: number } {
   if (!bed.length || gain <= 0) return { pcm: voice, nextOffset: bedOffset }
   const n = bed.length
@@ -460,7 +473,6 @@ export function mixLoopingBed(
   const xfadeCap = n > 20 * SAMPLE_RATE ? Math.round(2 * SAMPLE_RATE) : Math.round(0.6 * SAMPLE_RATE)
   const xfade = Math.min(Math.floor(n / 4), xfadeCap)
   /** Légère baisse de la voix → évite le clip (= grésillement) quand le lit s’ajoute. */
-  const voiceScale = 0.88
   let offset = ((bedOffset % n) + n) % n
   for (let i = 0; i < voice.length; i++) {
     const fadeGain = fadeIn > 0 && i < fadeIn ? (i / fadeIn) * gain : gain
