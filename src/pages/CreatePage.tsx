@@ -17,7 +17,7 @@ import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { LegalFooter } from '@/components/layout/LegalFooter'
-import { cn } from '@/lib/utils'
+import { cn, errorMessage } from '@/lib/utils'
 import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
 import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
@@ -153,6 +153,12 @@ export function CreatePage() {
 
   const submitCreate = () => {
     if (adjustBusy) return
+    if (!user) {
+      setPendingStart(true)
+      setAuthOpen(true)
+      setSubmitError('Connecte-toi pour enregistrer la séance')
+      return
+    }
     setAdjustBusy(true)
     setReplaceOpen(false)
     setSubmitError('')
@@ -188,7 +194,7 @@ export function CreatePage() {
         )
       })
       .catch((err: unknown) => {
-        setSubmitError(err instanceof Error ? err.message : 'Impossible d’enregistrer la séance')
+        setSubmitError(errorMessage(err, 'Impossible d’enregistrer la séance'))
       })
       .finally(() => setAdjustBusy(false))
   }

@@ -107,6 +107,15 @@ export const sessionsService = {
     const status = 'generating' as const
 
     if (isSupabaseConfigured() && supabase) {
+      /** Revalide le JWT : un user React encore présent avec un token mort → RLS refuse l’insert. */
+      const { data: authData, error: authErr } = await supabase.auth.getUser()
+      if (authErr || !authData.user) {
+        throw new Error('Session expirée — reconnecte-toi puis réessaie')
+      }
+      if (authData.user.id !== userId) {
+        throw new Error('Compte désynchronisé — reconnecte-toi puis réessaie')
+      }
+
       const storedAnswers = answersForStorage(answers)
       const { data, error } = await supabase
         .from('sessions')
@@ -126,7 +135,15 @@ export const sessionsService = {
 
       if (!error && data) return rowToSession(data)
       console.warn('[sessions] insert failed', error)
-      throw error ?? new Error('Impossible de créer la séance')
+      const detail =
+        error && typeof error === 'object' && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : 'Impossible de créer la séance'
+      const code =
+        error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+          ? ` (${error.code})`
+          : ''
+      throw new Error(`${detail}${code}`)
     }
 
     return {
