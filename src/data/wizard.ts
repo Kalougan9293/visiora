@@ -211,7 +211,7 @@ export const VOICES = [
     gender: 'Masculin',
     tag: '',
     ambiance: null,
-    preview: '/voices/louis-preview.mp3?v=bed8',
+    preview: '/voices/louis-preview.mp3?v=bed9',
   },
   {
     id: 'aurore',
