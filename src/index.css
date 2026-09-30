@@ -134,3 +134,101 @@
     color: var(--vs-nuit);
   }
 }
+
+/* ========== Mode « Version d'essai » — même contenu, autre présence ========== */
+html.vs-atelier {
+  --vs-police-titre: 'Cormorant Garamond', Georgia, serif;
+  --vs-police-texte: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--vs-police-titre);
+  --font-sans: var(--vs-police-texte);
+  --vs-rayon-s: 16px;
+  --vs-rayon-m: 28px;
+  --vs-lueur-centre: radial-gradient(
+    circle at 50% 12%,
+    color-mix(in srgb, var(--vs-azur) 14%, transparent) 0%,
+    color-mix(in srgb, var(--vs-or) 8%, transparent) 28%,
+    transparent 62%
+  );
+}
+
+html.vs-atelier body {
+  font-family: var(--vs-police-texte);
+  letter-spacing: 0.01em;
+}
+
+html.vs-atelier .font-display,
+html.vs-atelier .vs-logotype {
+  font-family: var(--vs-police-titre);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+html.vs-atelier .vs-logotype {
+  font-style: italic;
+}
+
+.vs-atelier-waves {
+  opacity: 0;
+  transition: opacity 0.8s var(--vs-courbe, ease);
+}
+
+html.vs-atelier .vs-atelier-waves {
+  opacity: 1;
+}
+
+@keyframes vs-atelier-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-2.5%, 1.2%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes vs-atelier-drift-slow {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(2%, -1%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.vs-atelier-wave {
+  animation: vs-atelier-drift 18s ease-in-out infinite;
+}
+
+.vs-atelier-wave-slow {
+  animation: vs-atelier-drift-slow 26s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vs-atelier-wave,
+  .vs-atelier-wave-slow {
+    animation: none;
+  }
+}
+
+/* Accueil / bibliothèque / créer : un peu plus de souffle en essai */
+html.vs-atelier main h1.font-display {
+  font-size: clamp(2.1rem, 6.5vw, 3.15rem);
+  line-height: 1.05;
+}
+
+html.vs-atelier .rounded-xl {
+  border-radius: 1.05rem;
+}
+
+html.vs-atelier .rounded-2xl {
+  border-radius: 1.35rem;
+}
+
+html.vs-atelier .rounded-3xl {
+  border-radius: 1.75rem;
+}

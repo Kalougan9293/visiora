@@ -87,6 +87,7 @@ export const PROGRESS_COPY = {
 
 export const APP_COPY = {
   trialBanner: "Version d'essai",
+  trialBannerOn: "Essai actif — recliquer pour quitter",
   generating:
     "Ta séance est en cours d'écriture. Tu peux fermer l'application, elle t'attendra dans ta bibliothèque.",
   generateError: "La génération n'a pas abouti. Tu peux relancer, rien n'est perdu.",
