@@ -1,13 +1,18 @@
 /** Plan de génération audio découpé (une étape = un invoc Edge Function). */
 
-import { chunkSpeech, longSessionParts, partsForDuration } from './script.ts'
+import {
+  chunkSpeech,
+  longSessionParts,
+  partsForDuration,
+  type PacingMode,
+} from './script.ts'
 
-export const JOB_VERSION = 8
+export const JOB_VERSION = 9
 /** Repère affiché dans l’admin. Le texte du prompt reste le secret. */
 export const PROMPT_VERSION = '1.2'
 /** Une pause CDC = un step. v8 : WAV par segment, un seul MP3 à la fin. */
 export const SILENCE_SLICE_SECONDS = 12
-/** Après la dernière phrase : fond seul, puis fondu. Toutes les séances. */
+/** Après le dernier bloc voix : fond seul, puis fondu. Toutes les séances. */
 export const OUTRO_HOLD_SECONDS = 4
 export const OUTRO_FADE_SECONDS = 4
 
@@ -24,9 +29,9 @@ export type AudioJob = {
   totalSpeech: number
   doneSpeech: number
   previousRequestIds: string[]
-  /** Première phrase de la séance : toutes les suivantes s’y rattachent. */
+  /** Premier bloc voix de la séance : tous les suivants s’y rattachent. */
   anchorRequestIds?: string[]
-  /** Même tirage pour toutes les phrases de cette séance. */
+  /** Même tirage pour tous les blocs voix de cette séance. */
   seed?: number
   bedOffset: number
   claimId: string | null
@@ -55,8 +60,17 @@ type FullStep =
   | { kind: 'speech'; text: string }
   | { kind: 'silence'; seconds: number; fadeOut?: boolean }
 
-export function buildFullSteps(script: string, minutes = 0): FullStep[] {
-  const parts = minutes > 0 ? partsForDuration(script) : longSessionParts(script)
+function pacingForJobVersion(version: number): PacingMode {
+  return version >= 9 ? 'paragraph' : 'sentence'
+}
+
+export function buildFullSteps(
+  script: string,
+  minutes = 0,
+  jobVersion = JOB_VERSION,
+): FullStep[] {
+  const mode = pacingForJobVersion(jobVersion)
+  const parts = minutes > 0 ? partsForDuration(script, mode) : longSessionParts(script, mode)
   const steps: FullStep[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -77,8 +91,13 @@ export function buildFullSteps(script: string, minutes = 0): FullStep[] {
   return steps
 }
 
-export function speechTextAt(script: string, index: number, minutes = 0): string {
-  const full = buildFullSteps(script, minutes)
+export function speechTextAt(
+  script: string,
+  index: number,
+  minutes = 0,
+  jobVersion = JOB_VERSION,
+): string {
+  const full = buildFullSteps(script, minutes, jobVersion)
   const step = full[index]
   if (!step || step.kind !== 'speech') {
     throw new Error(`Pas de texte speech à l’index ${index}`)
@@ -88,7 +107,7 @@ export function speechTextAt(script: string, index: number, minutes = 0): string
 
 export function createAudioJob(script: string, voiceKey: string, minutes = 15): AudioJob {
   const durationMinutes = minutes === 3 || minutes === 10 || minutes === 15 ? minutes : 15
-  const full = buildFullSteps(script, durationMinutes)
+  const full = buildFullSteps(script, durationMinutes, JOB_VERSION)
   const steps: JobStep[] = full.map((s) =>
     s.kind === 'speech'
       ? { kind: 'speech' }
@@ -124,7 +143,10 @@ export function isAudioJob(value: unknown): value is AudioJob {
   if (!value || typeof value !== 'object') return false
   const job = value as AudioJob
   return (
-    (job.version === 6 || job.version === 7 || job.version === 8) &&
+    (job.version === 6 ||
+      job.version === 7 ||
+      job.version === 8 ||
+      job.version === 9) &&
     Array.isArray(job.steps) &&
     typeof job.nextIndex === 'number' &&
     (job.phase === 'tts' || job.phase === 'finalize' || job.phase === 'done')
@@ -161,5 +183,3 @@ export function concatBytes(chunks: Uint8Array[]): Uint8Array {
   }
   return out
 }
-
-export type { ScriptPart }

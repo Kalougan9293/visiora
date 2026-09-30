@@ -83,6 +83,21 @@ export type TesterSession = {
   plays: TesterPlay[]
 }
 
+export type ProviderMeter =
+  | { status: 'ready'; characters: number; limit: number | null }
+  | { status: 'missing' }
+  | { status: 'error' }
+
+export type AnthropicMeter =
+  | { status: 'ready'; usd: number }
+  | { status: 'missing' }
+  | { status: 'error' }
+
+export type ProviderUsage = {
+  eleven: ProviderMeter
+  anthropic: AnthropicMeter
+}
+
 export type TesterUser = {
   id: string
   firstName: string
@@ -334,6 +349,15 @@ export const adminService = {
       throw error
     }
     return { data: parseTesterFollow(data), missing: false }
+  },
+
+  async loadProviderUsage(): Promise<ProviderUsage | null> {
+    if (!isSupabaseConfigured() || !supabase) return null
+    const { data, error } = await supabase.functions.invoke<ProviderUsage>('admin-provider-usage', {
+      body: {},
+    })
+    if (error || !data?.eleven || !data?.anthropic) return null
+    return data
   },
 
   async deleteUser(userId: string): Promise<void> {

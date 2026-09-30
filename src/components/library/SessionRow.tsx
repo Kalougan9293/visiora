@@ -12,6 +12,15 @@ import { metricsService } from '@/services/metrics'
 import { formatDateFr, cn } from '@/lib/utils'
 import type { VisualizationSession } from '@/types'
 
+function cardTitle(session: VisualizationSession): string {
+  const title = session.title.trim()
+  const goal = typeof session.answers.q1 === 'string' ? session.answers.q1.trim() : ''
+  if (!goal || !/[….]$/.test(title)) return title
+  const cut = title.replace(/[….]+$/, '').trim()
+  if (cut && goal.startsWith(cut)) return goal
+  return title
+}
+
 function formatClock(seconds: number) {
   const total = Math.max(0, Math.round(seconds))
   const m = Math.floor(total / 60)
@@ -78,6 +87,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
   const generating = session.status === 'generating'
   const pct = Math.min(99, Math.max(5, Math.round(session.audioProgress ?? 8)))
   const hasScript = Boolean(session.script?.trim()) || ready
+  const displayTitle = cardTitle(session)
 
   useEffect(() => {
     if (!confirmOpen) return
@@ -97,8 +107,8 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
 
   return (
     <>
-      <div className={cn(shellClass, 'flex min-h-11 flex-col px-2.5 py-1.5')}>
-        <div className="flex items-center gap-2">
+      <div className={cn(shellClass, 'flex min-h-12 flex-col px-2.5 py-2')}>
+        <div className="flex items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col items-start text-left">
           <span
             className={cn(
@@ -112,11 +122,12 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           </span>
           <p
             className={cn(
-              'w-full truncate text-sm font-medium',
+              'w-full whitespace-normal break-words text-sm font-medium leading-snug line-clamp-2',
               'text-ink dark:text-cream',
             )}
+            title={displayTitle}
           >
-            {session.title}
+            {displayTitle}
           </p>
           <span
             className={cn(
@@ -331,11 +342,11 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             </p>
             <p
               className={cn(
-                'mt-1 truncate text-xs',
+                'mt-1 whitespace-normal break-words text-xs leading-snug line-clamp-2',
                 'text-ink/55 dark:text-champagne/80',
               )}
             >
-              {session.title}
+              {displayTitle}
             </p>
             <div className="mt-4 flex gap-2">
               <button

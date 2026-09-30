@@ -10,6 +10,9 @@ const CURRENT: Record<string, string> = {
   zPy2sgLU4pZ7Xrjh87uz: 'rachel',
   iYo3urNKUm5TVGCFojl0: 'antoni',
   EXAVITQu4vr4xnSDxMaL: 'bella',
+  vBvYVsqjPzJc9Od66elb: 'louis',
+  ucMmKRQbfDEYyb2IIGax: 'aurore',
+  x10MLxaAmShMYt7vs7pl: 'maelis',
 }
 
 function json(body: unknown, status = 200) {

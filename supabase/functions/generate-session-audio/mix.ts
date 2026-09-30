@@ -1,28 +1,24 @@
 /** Mixe un lit d’ambiance sous la voix PCM, puis encode MP3. */
 
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
 import { LAME_SRC } from './assets.ts'
-import {
-  RITUEL_LOOP_WAV,
-  ONDE_LOOP_WAV,
-  ANTONI_LOOP_WAV,
-} from './beds-data.ts'
 
 const SAMPLE_RATE = 44100
 const TTS_RATE = 24000
 
 export const TTS_PCM_FORMAT = 'pcm_24000'
 
-function b64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64)
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
-}
+const BED_BUCKET = 'beds'
 
-const BED_WAV_B64: Record<string, string> = {
-  rituel: RITUEL_LOOP_WAV,
-  onde: ONDE_LOOP_WAV,
-  antoni: ANTONI_LOOP_WAV,
+/** Fichiers dans le bucket Supabase `beds` (pas dans le bundle de la fonction). */
+const BED_OBJECT: Record<string, string> = {
+  rituel: 'rituel-loop.wav',
+  onde: 'onde-loop.wav',
+  antoni: 'antoni-loop.wav',
+  /** Nouvelles voix : réutilisent les 3 boucles existantes. */
+  louis: 'rituel-loop.wav',
+  aurore: 'antoni-loop.wav',
+  maelis: 'onde-loop.wav',
 }
 
 /**
@@ -34,19 +30,43 @@ const BED_GAIN: Record<string, number> = {
   rituel: 1,
   onde: 1,
   antoni: 1,
+  louis: 1,
+  aurore: 1,
+  maelis: 1,
 }
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number }
 let bedCache: LoadedBed | null = null
 
-export async function loadBed(appVoiceKey: string): Promise<{ pcm: Int16Array; gain: number } | null> {
+async function downloadBedObject(admin: SupabaseClient, objectName: string): Promise<Uint8Array> {
+  let last = 'missing'
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    const { data, error } = await admin.storage.from(BED_BUCKET).download(objectName)
+    if (!error && data) {
+      const bytes = new Uint8Array(await data.arrayBuffer())
+      if (bytes.byteLength >= 44) return bytes
+      last = 'fichier trop court'
+    } else {
+      const row = error as { message?: string; statusCode?: string }
+      last = [row?.statusCode, row?.message].filter(Boolean).join(' ') || 'téléchargement impossible'
+    }
+    if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 350 * attempt))
+  }
+  throw new Error(`Lit ${objectName}: ${last}`)
+}
+
+export async function loadBed(
+  appVoiceKey: string,
+  admin: SupabaseClient,
+): Promise<{ pcm: Int16Array; gain: number } | null> {
   const key = appVoiceKey.toLowerCase()
-  const b64 = BED_WAV_B64[key]
+  const objectName = BED_OBJECT[key]
   const gain = BED_GAIN[key]
-  if (!b64 || gain == null) return null
+  if (!objectName || gain == null) return null
   if (bedCache?.key === key) return bedCache
   try {
-    const pcm = smoothBed(pcmFromWav(b64ToBytes(b64)))
+    const bytes = await downloadBedObject(admin, objectName)
+    const pcm = smoothBed(pcmFromWav(bytes))
     bedCache = { key, pcm, gain }
     return bedCache
   } catch (err) {

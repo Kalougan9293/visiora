@@ -48,6 +48,9 @@ const DEFAULT_VOICES: Record<string, string> = {
   rituel: '1zaEYJSYmxoQNiDl5C42',
   antoni: 'iYo3urNKUm5TVGCFojl0',
   onde: 'CfDJFNP9FItBtQcWKTwh',
+  louis: 'vBvYVsqjPzJc9Od66elb',
+  aurore: 'ucMmKRQbfDEYyb2IIGax',
+  maelis: 'x10MLxaAmShMYt7vs7pl',
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
   bella: 'EXAVITQu4vr4xnSDxMaL',
 }
@@ -58,7 +61,7 @@ const MIX_RATE = 44100
 /** Une passe encode au plus ~12 s : plafond CPU de 2 s sur l’Edge Function. */
 const MIX_SLICE_SOFT = 10 * MIX_RATE
 const MIX_SLICE_CAP = 12 * MIX_RATE
-/** Deux phrases par passage, l’une après l’autre, pour garder la même voix sans dépasser le délai de l’orchestrateur. */
+/** Deux blocs voix par passage, l’un après l’autre, pour garder la même voix sans dépasser le délai de l’orchestrateur. */
 const PARALLEL_SPEECH = 2
 
 function elevenModelId(): string {
@@ -138,6 +141,9 @@ function resolveElevenVoiceId(appVoiceId: string | null): string {
     rachel: Deno.env.get('ELEVENLABS_VOICE_RACHEL'),
     antoni: Deno.env.get('ELEVENLABS_VOICE_ANTONI'),
     bella: Deno.env.get('ELEVENLABS_VOICE_BELLA'),
+    louis: Deno.env.get('ELEVENLABS_VOICE_LOUIS'),
+    aurore: Deno.env.get('ELEVENLABS_VOICE_AURORE'),
+    maelis: Deno.env.get('ELEVENLABS_VOICE_MAELIS'),
   }
   return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.rituel
 }
@@ -200,8 +206,9 @@ async function claimSession(
 function elevenVoiceSettings(appVoiceKey: string) {
   const key = appVoiceKey.toLowerCase()
   return {
-    stability: key === 'rituel' ? 0.8 : 0.72,
-    /** Colle à la voix du début. Le débit reste 1, la stabilité reste celle des cinq premières minutes. */
+    /** Plus haut = moins de sautes de ton/rythme entre blocs ; un peu moins d’expressivité. */
+    stability: key === 'rituel' || key === 'louis' ? 0.88 : 0.82,
+    /** Colle à la voix du début. Le débit reste 1. */
     similarity_boost: 0.75,
     style: 0,
     use_speaker_boost: false,
@@ -209,7 +216,7 @@ function elevenVoiceSettings(appVoiceKey: string) {
   }
 }
 
-/** L’ouverture reste dans les 3 identifiants permis, avec les deux dernières phrases. */
+/** L’ouverture reste dans les 3 identifiants permis, avec les deux derniers blocs. */
 function stitchIds(job: AudioJob): string[] {
   const anchor = job.anchorRequestIds?.find((id) => id)
   const recent = job.previousRequestIds.filter((id) => id && id !== anchor)
@@ -413,9 +420,10 @@ async function renderSilencePcm(params: {
   voiceId: string | null
   bedOffset: number
   fadeOut?: boolean
+  admin: SupabaseClient
 }): Promise<{ pcm: Int16Array; bedOffset: number }> {
   const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
-  const bed = await loadBed(appVoiceKey)
+  const bed = await loadBed(appVoiceKey, params.admin)
   let pcm = upsampleTts(silencePcm(params.seconds))
   let nextOffset = params.bedOffset
   if (bed) {
@@ -508,6 +516,7 @@ async function processOneStep(params: {
         params.script,
         index,
         params.job.version >= 7 ? (params.job.durationMinutes ?? 15) : 0,
+        params.job.version,
       )
       const tts = await elevenTts({
         apiKey: params.elevenKey,
@@ -523,7 +532,7 @@ async function processOneStep(params: {
       }
       let pcm = levelSpeech(got.pcm)
       let nextOffset = job.bedOffset
-      const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase())
+      const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase(), params.admin)
       if (bed) {
         const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, job.bedOffset)
         pcm = mixed.pcm
@@ -549,6 +558,7 @@ async function processOneStep(params: {
         voiceId: params.voiceId,
         bedOffset: job.bedOffset,
         fadeOut: step.fadeOut,
+        admin: params.admin,
       })
       await storeRenderedPart(params.admin, path, rendered.pcm, job.version)
       job.steps[index] = {

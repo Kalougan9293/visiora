@@ -1,8 +1,7 @@
 /**
- * Fonds sonores sous la voix (eau / oiseaux / spa).
- * Liés à la voix choisie — pas de choix séparé dans le wizard.
- * Démarrés dans le même geste utilisateur que Play (Safari iPhone).
- * Certaines voix (ex. Damien) n’ont pas encore de fond → null.
+ * Fonds sonores optionnels sous une voix sèche (Web Audio).
+ * Les extraits du wizard ont déjà le fond mixé (= boucles beds de prod) :
+ * ne pas ré-empiler ici. AudioPlayer n’active ça que si `ambiance` est passé.
  */
 
 import { VOICES } from '@/data/wizard'

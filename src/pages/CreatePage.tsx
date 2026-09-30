@@ -18,7 +18,6 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { LegalFooter } from '@/components/layout/LegalFooter'
 import { cn } from '@/lib/utils'
-import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
 import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
@@ -625,18 +624,16 @@ function VoiceChoice({
     const el = audioRef.current
     return () => {
       el?.pause()
-      releaseAmbiance()
     }
   }, [])
 
   const stopPreview = () => {
     const el = audioRef.current
     el?.pause()
-    releaseAmbiance()
     setPlayingId(null)
   }
 
-  const togglePreview = async (id: string, src: string, ambiance: AmbianceChoice) => {
+  const togglePreview = async (id: string, src: string) => {
     const el = audioRef.current
     if (!el) return
     onChange(id)
@@ -645,15 +642,12 @@ function VoiceChoice({
       return
     }
     el.pause()
-    releaseAmbiance()
     el.src = src
-    // Vanessa : l'extrait MP3 contient déjà oiseaux+musique. La boucle Web Audio ajoutait un grésillement.
-    if (ambiance && id !== 'rituel') holdAmbiance(ambiance)
+    // L’extrait MP3 contient déjà le même fond que le rendu final.
     try {
       await el.play()
       setPlayingId(id)
     } catch {
-      releaseAmbiance()
       setPlayingId(null)
     }
   }
@@ -688,7 +682,7 @@ function VoiceChoice({
               </button>
               <button
                 type="button"
-                onClick={() => void togglePreview(v.id, v.preview, v.ambiance)}
+                onClick={() => void togglePreview(v.id, v.preview)}
                 aria-label={playing ? `Arrêter ${v.name}` : `Écouter ${v.name}`}
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full transition',

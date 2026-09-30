@@ -3,7 +3,7 @@
 export const PAUSE_SHORT_SECONDS = 3
 /** CDC : pause longue ≈ 9 s */
 export const PAUSE_LONG_SECONDS = 9
-/** Petit blanc entre deux phrases (points). La voix ne ralentit pas. */
+/** Petit blanc après souffle / affirmation (plus de découpe phrase à phrase). */
 export const SENTENCE_PAUSE_SECONDS = 1
 /** Blanc entre deux paragraphes. */
 export const PARAGRAPH_PAUSE_SECONDS = 1.8
@@ -13,8 +13,13 @@ export const BREATH_PAUSE_SECONDS = 2.4
 const AFFIRMATION_EXTRA_SECONDS = 1.2
 /** Entre deux mouvements, seulement si le script n’a pas déjà posé une pause. */
 const MOVEMENT_HOLD_SECONDS = 2.5
-/** Séance longue : ~20 s de voix max par invoke (évite OOM Edge / lame.js). */
-export const TTS_CHUNK_CHARS = 400
+/**
+ * Plafond caractères par appel TTS. Assez haut pour garder un paragraphe entier ;
+ * au-delà on recoupe sur une fin de phrase (continuité > micro-découpe).
+ */
+export const TTS_CHUNK_CHARS = 900
+
+export type PacingMode = 'sentence' | 'paragraph'
 
 export type ScriptPart =
   | { kind: 'speech'; text: string }
@@ -71,8 +76,11 @@ function softenCommas(text: string): string {
   return text.replace(/;\s+/g, ' … ').replace(/,\s+/g, ', … ')
 }
 
-/** Insère les blancs phrase / paragraphe / respiration, sans changer le débit de la voix. */
-export function expandPacing(parts: ScriptPart[]): ScriptPart[] {
+/**
+ * Ancien mode (jobs < v9) : une phrase = un appel TTS.
+ * Conserve le comportement pour les générations déjà lancées.
+ */
+function expandPacingBySentence(parts: ScriptPart[]): ScriptPart[] {
   const out: ScriptPart[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -126,6 +134,86 @@ export function expandPacing(parts: ScriptPart[]): ScriptPart[] {
   return mergeSilences(out)
 }
 
+/**
+ * Mode v9+ : un paragraphe = un appel TTS (ton / rythme / volume plus stables).
+ * On ne coupe qu’après une consigne de souffle ou une affirmation, pour garder
+ * les blancs volontaires du CDC.
+ */
+function expandPacingByParagraph(parts: ScriptPart[]): ScriptPart[] {
+  const out: ScriptPart[] = []
+  for (const part of parts) {
+    if (part.kind === 'silence') {
+      out.push({ ...part })
+      continue
+    }
+    const paragraphs = part.text
+      .split(/\n{2,}/)
+      .map((p) => p.replace(/\n/g, ' ').trim())
+      .filter(Boolean)
+    paragraphs.forEach((para, pi) => {
+      const sentences = splitSentences(para)
+      let buffer: string[] = []
+      const flush = () => {
+        if (!buffer.length) return
+        out.push({ kind: 'speech', text: softenCommas(buffer.join(' ')) })
+        buffer = []
+      }
+      sentences.forEach((sentence, si) => {
+        buffer.push(sentence)
+        const lastInPara = si === sentences.length - 1
+        const lastPara = pi === paragraphs.length - 1
+        const holdAfter =
+          isBreathCue(sentence) || isAffirmation(sentence)
+
+        if (!lastInPara && holdAfter) {
+          flush()
+          out.push({
+            kind: 'silence',
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence) ? BREATH_PAUSE_SECONDS : SENTENCE_PAUSE_SECONDS,
+            ),
+          })
+          return
+        }
+        if (!lastInPara) return
+
+        flush()
+        if (!lastPara) {
+          out.push({
+            kind: 'silence',
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence)
+                ? Math.max(BREATH_PAUSE_SECONDS, PARAGRAPH_PAUSE_SECONDS)
+                : PARAGRAPH_PAUSE_SECONDS,
+            ),
+          })
+          return
+        }
+        if (holdAfter) {
+          out.push({
+            kind: 'silence',
+            seconds: gapSeconds(
+              sentence,
+              isBreathCue(sentence) ? BREATH_PAUSE_SECONDS : SENTENCE_PAUSE_SECONDS,
+            ),
+          })
+        }
+      })
+    })
+  }
+  return mergeSilences(out)
+}
+
+/** Insère les blancs paragraphe / respiration, sans changer le débit de la voix. */
+export function expandPacing(
+  parts: ScriptPart[],
+  mode: PacingMode = 'paragraph',
+): ScriptPart[] {
+  return mode === 'sentence' ? expandPacingBySentence(parts) : expandPacingByParagraph(parts)
+}
+
 function mergeSilences(parts: ScriptPart[]): ScriptPart[] {
   const out: ScriptPart[] = []
   for (const part of parts) {
@@ -161,9 +249,12 @@ export function parseAnnexScript(raw: string): ScriptPart[] {
   return mergeSilences(parts)
 }
 
-/** Séance longue : pauses CDC + blancs phrase / paragraphe / souffle. */
-export function longSessionParts(script: string): ScriptPart[] {
-  return expandPacing(parseAnnexScript(script))
+/** Séance longue : pauses CDC + blancs paragraphe / souffle. */
+export function longSessionParts(
+  script: string,
+  mode: PacingMode = 'paragraph',
+): ScriptPart[] {
+  return expandPacing(parseAnnexScript(script), mode)
 }
 
 function splitMovements(script: string): string[] {
@@ -179,8 +270,11 @@ function splitMovements(script: string): string[] {
  * On n’étire pas avec de longues plages vides : juste un court maintien
  * entre les mouvements, si le script n’en a pas déjà posé un.
  */
-export function partsForDuration(script: string): ScriptPart[] {
-  const groups = splitMovements(script).map((chunk) => longSessionParts(chunk))
+export function partsForDuration(
+  script: string,
+  mode: PacingMode = 'paragraph',
+): ScriptPart[] {
+  const groups = splitMovements(script).map((chunk) => longSessionParts(chunk, mode))
   if (groups.length <= 1) return groups.flat()
   const out: ScriptPart[] = []
   groups.forEach((group, index) => {

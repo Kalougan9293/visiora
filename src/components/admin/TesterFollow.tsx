@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
-import { AMBIANCES, VOICES } from '@/data/wizard'
+import { VOICES } from '@/data/wizard'
 import {
   formatStorage,
   type AdminUserRow,
+  type ProviderUsage,
   type TesterFollow,
   type TesterOverview,
   type TesterPlay,
@@ -44,16 +45,37 @@ function formatCount(value: number | null) {
   return Math.round(value).toLocaleString('fr-FR')
 }
 
+function readyProviderCells(provider: ProviderUsage | null): [string, string][] {
+  if (!provider) return []
+  const cells: [string, string][] = []
+  if (provider.eleven.status === 'ready') {
+    const used = provider.eleven.characters.toLocaleString('fr-FR')
+    const value = provider.eleven.limit == null
+      ? `${used} car.`
+      : `${used} / ${provider.eleven.limit.toLocaleString('fr-FR')}`
+    cells.push(['ElevenLabs', value])
+  }
+  if (provider.anthropic.status === 'ready') {
+    const value = `${provider.anthropic.usd.toLocaleString('fr-FR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} $`
+    cells.push(['Anthropic', value])
+  }
+  return cells
+}
+
 function voiceName(id: string | null) {
   if (!id) return '—'
   return VOICES.find((voice) => voice.id === id.toLowerCase())?.name ?? id
 }
 
 function bedName(id: string | null) {
-  const voice = VOICES.find((item) => item.id === (id ?? '').toLowerCase())
-  if (!voice) return '—'
-  if (!voice.ambiance) return 'Fond court'
-  return AMBIANCES.find((item) => item.id === voice.ambiance)?.label ?? '—'
+  const key = (id ?? '').toLowerCase()
+  if (key === 'rituel' || key === 'louis') return 'Musique Vanessa'
+  if (key === 'onde' || key === 'maelis') return 'Musique Sabrina'
+  if (key === 'antoni' || key === 'aurore') return 'Fond Damien'
+  return '—'
 }
 
 function registerName(id: string | null) {
@@ -84,16 +106,27 @@ function listenReach(play: TesterPlay) {
   return reached
 }
 
-export function TesterOverviewBar({ overview }: { overview: TesterOverview }) {
-  const rate = overview.completeRate == null ? '—' : `${Math.round(overview.completeRate * 100)} %`
-  const cells = [
-    ['Actifs, 7 jours', String(overview.active7d)],
-    ['Séances créées', String(overview.created)],
-    ['Séances en échec', String(overview.failed)],
-    ['Écoutes complètes', rate],
-    ['Écart de note', formatGap(overview.scoreGap)],
-    ['Génération moyenne', overview.generationSeconds == null ? '—' : formatClock(overview.generationSeconds)],
-  ]
+export function TesterOverviewBar({
+  overview,
+  provider,
+}: {
+  overview: TesterOverview | null
+  provider: ProviderUsage | null
+}) {
+  const cells: [string, string][] = []
+  if (overview) {
+    const rate = overview.completeRate == null ? '—' : `${Math.round(overview.completeRate * 100)} %`
+    cells.push(
+      ['Actifs, 7 jours', String(overview.active7d)],
+      ['Séances créées', String(overview.created)],
+      ['Séances en échec', String(overview.failed)],
+      ['Écoutes complètes', rate],
+      ['Écart de note', formatGap(overview.scoreGap)],
+      ['Génération moyenne', overview.generationSeconds == null ? '—' : formatClock(overview.generationSeconds)],
+    )
+  }
+  cells.push(...readyProviderCells(provider))
+  if (!cells.length) return null
   return (
     <div className="mt-8">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

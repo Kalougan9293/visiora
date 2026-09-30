@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
-import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, type AdminUserRow, type TesterFollow } from '@/services/admin'
+import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, type AdminUserRow, type ProviderUsage, type TesterFollow } from '@/services/admin'
 import { TesterOverviewBar, TesterUserList } from '@/components/admin/TesterFollow'
 import { VOICES, WIZARD_STEPS } from '@/data/wizard'
 import { healthKeywordsService } from '@/services/healthKeywords'
@@ -60,6 +60,7 @@ export function AdminPage() {
   const [exporting, setExporting] = useState(false)
   const [follow, setFollow] = useState<TesterFollow | null>(null)
   const [followMissing, setFollowMissing] = useState(false)
+  const [provider, setProvider] = useState<ProviderUsage | null>(null)
 
   const refresh = useCallback(() => {
     setLoading(true)
@@ -93,6 +94,11 @@ export function AdminPage() {
         setFollow(null)
         setFollowMissing(false)
       })
+    void adminService.loadProviderUsage().then((usage) => {
+      setProvider(usage ?? { eleven: { status: 'error' }, anthropic: { status: 'error' } })
+    }).catch(() => {
+      setProvider({ eleven: { status: 'error' }, anthropic: { status: 'error' } })
+    })
   }, [])
 
   /** Session Supabase + flag is_admin */
@@ -352,7 +358,9 @@ export function AdminPage() {
           />
         </div>
 
-        {follow && <TesterOverviewBar overview={follow.overview} />}
+        {follow || provider ? (
+          <TesterOverviewBar overview={follow?.overview ?? null} provider={provider} />
+        ) : null}
         {followMissing && !follow && (
           <p className="mt-6 text-center text-[12px] leading-relaxed text-black dark:text-white">
             Le suivi des testeurs s’affiche après avoir exécuté supabase/admin_follow.sql dans Supabase.

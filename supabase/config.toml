@@ -1,6 +1,6 @@
 # Visiora — config Supabase (Edge Functions)
 # Déploiement : supabase functions deploy generate-session-audio
-# Secret : supabase secrets set ELEVENLABS_API_KEY=sk_...
+# Secrets : ELEVENLABS_API_KEY (voix, déjà en place) et ANTHROPIC_ADMIN_KEY (clé d'admin Anthropic, à poser plus tard).
 
 [edge_runtime]
 policy = "per_worker"
@@ -12,6 +12,9 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.delete-own-account]
+verify_jwt = true
+
+[functions.admin-provider-usage]
 verify_jwt = true
 
 
