@@ -1,6 +1,7 @@
 import { Pause, Play } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { usePlayback } from '@/context/PlaybackContext'
+import { useTrialMode } from '@/context/TrialModeContext'
 import { cn } from '@/lib/utils'
 
 function formatClock(seconds: number) {
@@ -14,6 +15,7 @@ function formatClock(seconds: number) {
 export function MiniPlayer() {
   const { pathname } = useLocation()
   const playback = usePlayback()
+  const { atelier } = useTrialMode()
   const visible = Boolean(playback.sessionId) && !playback.ended && pathname !== '/bibliotheque'
   if (!visible) return null
 
@@ -28,13 +30,17 @@ export function MiniPlayer() {
         className={cn(
           'flex items-center gap-3 rounded-2xl border px-3 py-2 shadow-lg',
           'border-[var(--vs-bordure)] bg-[var(--vs-surface)]',
+          atelier && 'vs-atelier-player',
         )}
       >
         <button
           type="button"
           onClick={() => void playback.toggle()}
           aria-label={playback.playing ? 'Pause' : 'Lecture'}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--vs-or)] text-[var(--vs-nuit)]"
+          className={cn(
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--vs-or)] text-[var(--vs-nuit)]',
+            atelier && 'vs-atelier-or-glow',
+          )}
         >
           {playback.playing ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
         </button>
@@ -43,8 +49,11 @@ export function MiniPlayer() {
           <p className="text-[11px] tabular-nums text-ink/55 dark:text-champagne/75">
             {formatClock(playback.current)}
           </p>
-          <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
-            <div className="h-full rounded-full bg-[var(--vs-azur)]" style={{ width: `${progress}%` }} />
+          <div className="vs-atelier-track mt-1 h-0.5 overflow-hidden rounded-full bg-black/10 dark:bg-white/15">
+            <div
+              className="vs-atelier-track-fill h-full rounded-full bg-[var(--vs-azur)]"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
       </div>

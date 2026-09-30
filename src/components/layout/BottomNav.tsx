@@ -1,5 +1,6 @@
 import { BookOpen, Home, PlusCircle, TrendingUp } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useTrialMode } from '@/context/TrialModeContext'
 import { cn } from '@/lib/utils'
 
 const tabs = [
@@ -10,9 +11,14 @@ const tabs = [
 ]
 
 export function BottomNav() {
+  const { atelier } = useTrialMode()
+
   return (
     <nav
-      className="fixed bottom-0 left-1/2 z-50 w-full max-w-[35rem] -translate-x-1/2 border-t border-[var(--vs-bordure)] bg-[var(--vs-surface)] dark:bg-[var(--vs-nuit)]/95"
+      className={cn(
+        'fixed bottom-0 left-1/2 z-50 w-full max-w-[35rem] -translate-x-1/2 border-t border-[var(--vs-bordure)] bg-[var(--vs-surface)] dark:bg-[var(--vs-nuit)]/95',
+        atelier && 'vs-atelier-nav',
+      )}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
     >
       <div className="flex items-stretch justify-around px-1.5 py-1">
@@ -33,7 +39,12 @@ export function BottomNav() {
             {({ isActive }) => (
               <>
                 {isActive && (
-                  <span className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-[var(--vs-azur)]" />
+                  <span
+                    className={cn(
+                      'absolute inset-x-5 top-0 h-0.5 rounded-full bg-[var(--vs-azur)]',
+                      atelier && 'vs-atelier-nav-dot',
+                    )}
+                  />
                 )}
                 <Icon size={22} strokeWidth={isActive ? 2.4 : 1.75} />
                 <span>{label}</span>

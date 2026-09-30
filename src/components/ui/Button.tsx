@@ -25,7 +25,7 @@ export function Button({
         size === 'md' && 'px-5 py-3 text-sm',
         size === 'lg' && 'px-6 py-3.5 text-base',
         variant === 'primary' &&
-          'bg-[var(--vs-or)] text-[var(--vs-nuit)] hover:brightness-105 dark:bg-[var(--vs-or)] dark:text-[var(--vs-nuit)] dark:hover:brightness-110',
+          'vs-atelier-cta bg-[var(--vs-or)] text-[var(--vs-nuit)] hover:brightness-105 dark:bg-[var(--vs-or)] dark:text-[var(--vs-nuit)] dark:hover:brightness-110',
         variant === 'ghost' && 'bg-transparent text-current hover:bg-black/5 dark:hover:bg-white/5',
         variant === 'outline' &&
           'border border-black/10 bg-transparent text-ink hover:border-[var(--vs-azur)]/50 dark:border-[var(--vs-ardoise)] dark:text-[var(--vs-lunaire)] dark:hover:border-[var(--vs-azur)]',

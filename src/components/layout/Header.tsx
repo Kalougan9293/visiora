@@ -125,9 +125,9 @@ export function Header() {
             onClick={toggleAtelier}
             aria-pressed={atelier}
             className={cn(
-              'mx-auto mb-1.5 block rounded-full px-3 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] transition-colors',
+              'mx-auto mb-1.5 block rounded-full px-3 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] transition-all',
               atelier
-                ? 'bg-[var(--vs-azur)]/15 text-[var(--vs-azur)]'
+                ? 'bg-[var(--vs-azur)]/15 text-[var(--vs-azur)] shadow-[0_0_24px_color-mix(in_srgb,var(--vs-azur)_25%,transparent)]'
                 : 'text-[var(--vs-azur)]/80 hover:text-[var(--vs-azur)]',
             )}
           >

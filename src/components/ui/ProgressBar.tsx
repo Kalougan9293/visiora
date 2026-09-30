@@ -17,9 +17,9 @@ export function ProgressBar({ value, max = 100, className, label }: ProgressBarP
           {label} · {Math.round(pct)}%
         </p>
       )}
-      <div className="h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/8">
+      <div className="h-1.5 overflow-hidden rounded-full bg-black/8 dark:bg-white/8 vs-atelier-track">
         <div
-          className="h-full rounded-full bg-[var(--vs-azur)] transition-[width] duration-500 ease-[var(--ease-out-expo)]"
+          className="h-full rounded-full bg-[var(--vs-azur)] transition-[width] duration-500 ease-[var(--ease-out-expo)] vs-atelier-track-fill"
           style={{ width: `${pct}%` }}
         />
       </div>

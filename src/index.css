@@ -144,27 +144,28 @@ html.vs-atelier {
   --vs-rayon-s: 16px;
   --vs-rayon-m: 28px;
   --vs-lueur-centre: radial-gradient(
-    circle at 50% 12%,
-    color-mix(in srgb, var(--vs-azur) 14%, transparent) 0%,
-    color-mix(in srgb, var(--vs-or) 8%, transparent) 28%,
-    transparent 62%
+    circle at 50% 10%,
+    color-mix(in srgb, var(--vs-azur) 16%, transparent) 0%,
+    color-mix(in srgb, var(--vs-or) 9%, transparent) 26%,
+    transparent 64%
   );
 }
 
 html.vs-atelier body {
   font-family: var(--vs-police-texte);
-  letter-spacing: 0.01em;
+  letter-spacing: 0.015em;
 }
 
 html.vs-atelier .font-display,
 html.vs-atelier .vs-logotype {
   font-family: var(--vs-police-titre);
   font-weight: 500;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
 }
 
 html.vs-atelier .vs-logotype {
   font-style: italic;
+  letter-spacing: 0.22em;
 }
 
 .vs-atelier-waves {
@@ -174,6 +175,15 @@ html.vs-atelier .vs-logotype {
 
 html.vs-atelier .vs-atelier-waves {
   opacity: 1;
+}
+
+.vs-atelier-glow {
+  background: radial-gradient(
+    ellipse 80% 70% at 50% 0%,
+    color-mix(in srgb, var(--vs-azur) 18%, transparent),
+    transparent 70%
+  );
+  animation: vs-atelier-breathe 14s ease-in-out infinite;
 }
 
 @keyframes vs-atelier-drift {
@@ -200,8 +210,45 @@ html.vs-atelier .vs-atelier-waves {
   }
 }
 
+@keyframes vs-atelier-drift-mid {
+  0% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+  }
+  50% {
+    transform: translate3d(-1.5%, 0.6%, 0) scaleX(1.02);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+  }
+}
+
+@keyframes vs-atelier-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes vs-atelier-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .vs-atelier-wave {
   animation: vs-atelier-drift 18s ease-in-out infinite;
+}
+
+.vs-atelier-wave-mid {
+  animation: vs-atelier-drift-mid 22s ease-in-out infinite;
 }
 
 .vs-atelier-wave-slow {
@@ -210,25 +257,191 @@ html.vs-atelier .vs-atelier-waves {
 
 @media (prefers-reduced-motion: reduce) {
   .vs-atelier-wave,
-  .vs-atelier-wave-slow {
+  .vs-atelier-wave-mid,
+  .vs-atelier-wave-slow,
+  .vs-atelier-glow {
     animation: none;
   }
 }
 
-/* Accueil / bibliothèque / créer : un peu plus de souffle en essai */
-html.vs-atelier main h1.font-display {
-  font-size: clamp(2.1rem, 6.5vw, 3.15rem);
-  line-height: 1.05;
+html.vs-atelier main {
+  animation: vs-atelier-rise 0.7s var(--vs-courbe, ease) both;
+}
+
+html.vs-atelier main h1.font-display,
+html.vs-atelier main h1 {
+  font-size: clamp(2.15rem, 6.8vw, 3.25rem);
+  line-height: 1.04;
+}
+
+html.vs-atelier main h2 {
+  letter-spacing: 0.32em;
+  font-weight: 500;
+}
+
+html.vs-atelier .rounded-full {
+  border-radius: 9999px;
 }
 
 html.vs-atelier .rounded-xl {
-  border-radius: 1.05rem;
+  border-radius: 1.15rem;
 }
 
 html.vs-atelier .rounded-2xl {
-  border-radius: 1.35rem;
+  border-radius: 1.45rem;
 }
 
 html.vs-atelier .rounded-3xl {
-  border-radius: 1.75rem;
+  border-radius: 1.9rem;
+}
+
+/* Header plus aérien */
+html.vs-atelier header > div {
+  border-bottom-color: color-mix(in srgb, var(--vs-azur) 18%, transparent);
+  background: color-mix(in srgb, var(--vs-surface) 72%, transparent);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+html.vs-atelier.dark header > div {
+  background: color-mix(in srgb, var(--vs-nuit) 78%, transparent);
+}
+
+/* Nav basse : pastille plus douce */
+html.vs-atelier .vs-atelier-nav {
+  border-top-color: color-mix(in srgb, var(--vs-azur) 16%, transparent);
+  background: color-mix(in srgb, var(--vs-surface) 88%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+html.vs-atelier.dark .vs-atelier-nav {
+  background: color-mix(in srgb, var(--vs-nuit) 88%, transparent);
+}
+
+html.vs-atelier .vs-atelier-nav a[aria-current='page'] {
+  background: color-mix(in srgb, var(--vs-azur) 18%, transparent);
+}
+
+html.vs-atelier .vs-atelier-nav-dot {
+  background: var(--vs-or);
+  height: 2px;
+  inset-inline: 1.4rem;
+}
+
+/* Cartes / glass */
+html.vs-atelier .glass {
+  background: color-mix(in srgb, var(--vs-surface) 78%, transparent);
+  border-color: color-mix(in srgb, var(--vs-azur) 22%, transparent);
+  box-shadow: 0 12px 40px color-mix(in srgb, var(--vs-nuit) 8%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+html.vs-atelier.dark .glass {
+  background: color-mix(in srgb, var(--vs-abysse) 70%, transparent);
+  border-color: color-mix(in srgb, var(--vs-azur) 24%, transparent);
+  box-shadow: 0 16px 48px color-mix(in srgb, #000 28%, transparent);
+}
+
+html.vs-atelier:not(.dark) .glass {
+  background: color-mix(in srgb, #ffffff 55%, var(--vs-lunaire));
+  border-color: color-mix(in srgb, var(--vs-ardoise) 16%, transparent);
+  box-shadow: 0 10px 32px color-mix(in srgb, var(--vs-ardoise) 8%, transparent);
+}
+
+/* CTA or */
+html.vs-atelier .vs-atelier-cta,
+html.vs-atelier .vs-atelier-or-glow {
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--vs-or) 28%, transparent);
+  letter-spacing: 0.02em;
+}
+
+/* Lignes de bibliothèque / blocs séance */
+html.vs-atelier .border-black\/8,
+html.vs-atelier .border-black\/10 {
+  border-color: color-mix(in srgb, var(--vs-azur) 18%, transparent);
+}
+
+html.vs-atelier .bg-cream-card\/80,
+html.vs-atelier .bg-cream-card\/60 {
+  background: color-mix(in srgb, var(--vs-surface) 82%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+/* Mini-lecteur */
+html.vs-atelier .vs-atelier-player {
+  border-radius: 1.6rem;
+  border-color: color-mix(in srgb, var(--vs-azur) 22%, transparent);
+  background: color-mix(in srgb, var(--vs-surface) 86%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 14px 36px color-mix(in srgb, var(--vs-nuit) 16%, transparent);
+}
+
+/* Barres de progression */
+html.vs-atelier .vs-atelier-track {
+  background: color-mix(in srgb, var(--vs-azur) 14%, transparent);
+}
+
+html.vs-atelier .vs-atelier-track-fill {
+  background: linear-gradient(
+    90deg,
+    var(--vs-azur),
+    color-mix(in srgb, var(--vs-ecume) 70%, var(--vs-azur))
+  );
+}
+
+/* Champs texte / questionnaire */
+html.vs-atelier textarea,
+html.vs-atelier input[type='text'],
+html.vs-atelier input[type='email'],
+html.vs-atelier input[type='password'] {
+  border-radius: 1.1rem;
+  border-color: color-mix(in srgb, var(--vs-azur) 22%, transparent);
+  background: color-mix(in srgb, var(--vs-surface) 55%, transparent);
+}
+
+html.vs-atelier textarea:focus,
+html.vs-atelier input[type='text']:focus,
+html.vs-atelier input[type='email']:focus,
+html.vs-atelier input[type='password']:focus {
+  border-color: var(--vs-azur);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--vs-azur) 18%, transparent);
+}
+
+/* Pastilles voix / choix */
+html.vs-atelier .bg-black\/\[0\.04\] {
+  background: color-mix(in srgb, var(--vs-azur) 8%, transparent);
+}
+
+html.vs-atelier .bg-\[var\(--vs-azur\)\] {
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--vs-azur) 25%, transparent);
+}
+
+/* Accent titres d’accueil */
+html.vs-atelier h1 .vs-titre-accent {
+  background: linear-gradient(
+    120deg,
+    var(--vs-azur),
+    color-mix(in srgb, var(--vs-ecume) 55%, var(--vs-azur))
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html.vs-atelier:not(.dark) h1 .vs-titre-accent {
+  background: linear-gradient(120deg, var(--vs-azur), var(--vs-abysse));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Badge / eyebrow */
+html.vs-atelier .uppercase.tracking-\[0\.18em\],
+html.vs-atelier .uppercase.tracking-\[0\.28em\],
+html.vs-atelier .uppercase.tracking-\[0\.14em\] {
+  letter-spacing: 0.28em;
+  font-weight: 500;
 }
