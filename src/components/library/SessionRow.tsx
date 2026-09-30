@@ -120,15 +120,29 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               ? 'connexion'
               : formatDateFr(session.createdAt)}
           </span>
-          <p
-            className={cn(
-              'w-full whitespace-normal break-words text-sm font-medium leading-snug line-clamp-2',
-              'text-ink dark:text-cream',
+          <div className="flex w-full items-center gap-2">
+            <p
+              className={cn(
+                'min-w-0 flex-1 whitespace-normal break-words text-sm font-medium leading-snug line-clamp-2',
+                'text-ink dark:text-cream',
+              )}
+              title={displayTitle}
+            >
+              {displayTitle}
+            </p>
+            {session.status === 'failed' && !ready && (
+              <button
+                type="button"
+                onClick={() => void retryGeneration(session.id)}
+                className={cn(
+                  'max-w-[12.5rem] shrink-0 text-left text-[10px] leading-snug underline',
+                  'text-[var(--vs-or)]',
+                )}
+              >
+                {APP_COPY.generateError}
+              </button>
             )}
-            title={displayTitle}
-          >
-            {displayTitle}
-          </p>
+          </div>
           <span
             className={cn(
               'truncate text-[10px]',
@@ -166,19 +180,6 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
         )}
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
-        {session.status === 'failed' && !ready && (
-            <button
-              type="button"
-              onClick={() => void retryGeneration(session.id)}
-              className={cn(
-                'max-w-[12.5rem] shrink-0 text-left text-[10px] leading-snug underline',
-                'text-[var(--vs-or)]',
-              )}
-            >
-              {APP_COPY.generateError}
-            </button>
-          )}
-
           {ready && (session.audioUrl || session.audioStoragePath) && (
             <button
               type="button"
