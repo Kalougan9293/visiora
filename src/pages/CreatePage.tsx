@@ -30,7 +30,7 @@ export function CreatePage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const adjustId = searchParams.get('adjust')
-  const { addSession, adjustSession, forgetSessions, sessions, sessionsReady } = useSessions()
+  const { addSession, adjustSession, forgetSessions, sessions, sessionsReady, generationBusy } = useSessions()
   const { user } = useAuth()
   const [phase, setPhase] = useState<'intro' | 'wizard'>(adjustId ? 'wizard' : 'intro')
   const [stepIdx, setStepIdx] = useState(0)
@@ -111,6 +111,7 @@ export function CreatePage() {
   }
 
   const onStartClick = () => {
+    if (generationBusy) return
     if (!user) {
       setPendingStart(true)
       setAuthOpen(true)
@@ -143,6 +144,7 @@ export function CreatePage() {
       setHealthGate(true)
       return
     }
+    if (generationBusy) return
     if (!adjustId && !sessionsReady) return
     if (!adjustId && sessionsEvictedByNewOne(sessions).length) {
       setReplaceOpen(true)
@@ -152,7 +154,7 @@ export function CreatePage() {
   }
 
   const submitCreate = () => {
-    if (adjustBusy) return
+    if (adjustBusy || generationBusy) return
     if (!user) {
       setPendingStart(true)
       setAuthOpen(true)
@@ -194,6 +196,7 @@ export function CreatePage() {
         )
       })
       .catch((err: unknown) => {
+        if (err instanceof Error && err.message === 'generation-busy') return
         setSubmitError(errorMessage(err, 'Impossible d’enregistrer la séance'))
       })
       .finally(() => setAdjustBusy(false))
@@ -307,6 +310,7 @@ export function CreatePage() {
         <Button
           size="lg"
           className="mt-4 w-full max-w-md rounded-full"
+          disabled={generationBusy}
           onClick={onStartClick}
         >
           {CREATE_INTRO.cta}
@@ -389,7 +393,12 @@ export function CreatePage() {
         {!healthGate && (
         <Button
           className="flex-1 rounded-full !py-2.5 text-[15px]"
-          disabled={!canContinue || adjustBusy || (!adjustId && stepIdx === WIZARD_STEPS.length - 1 && !sessionsReady)}
+          disabled={
+            !canContinue ||
+            adjustBusy ||
+            (stepIdx === WIZARD_STEPS.length - 1 &&
+              (generationBusy || (!adjustId && !sessionsReady)))
+          }
           onClick={goNext}
         >
           {stepIdx === WIZARD_STEPS.length - 1

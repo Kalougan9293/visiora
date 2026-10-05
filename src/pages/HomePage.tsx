@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { SCIENCE_CARDS } from '@/data/questionnaire'
 import { HOME_COPY } from '@/data/uiCopy'
+import { useSessions } from '@/context/SessionsContext'
 import { ScienceCarousel } from '@/components/home/ScienceCarousel'
 import { LegalFooter } from '@/components/layout/LegalFooter'
+import { cn } from '@/lib/utils'
 
 const icons = {
   plasticite: Brain,
@@ -15,6 +17,8 @@ const icons = {
 } as const
 
 export function HomePage() {
+  const { generationBusy } = useSessions()
+
   return (
     <div className="flex flex-col items-center space-y-10 pb-6 md:space-y-14">
       <section className="relative flex w-full flex-col items-center pt-6 md:pt-10">
@@ -41,8 +45,15 @@ export function HomePage() {
           </p>
 
           <div className="mt-8 w-full max-w-sm">
-            <Link to="/creer" className="block">
-              <Button size="lg" className="w-full rounded-full">
+            <Link
+              to="/creer"
+              className={cn('block', generationBusy && 'pointer-events-none')}
+              aria-disabled={generationBusy}
+              onClick={(event) => {
+                if (generationBusy) event.preventDefault()
+              }}
+            >
+              <Button size="lg" className="w-full rounded-full" disabled={generationBusy}>
                 {HOME_COPY.cta}
                 <ArrowRight size={18} />
               </Button>

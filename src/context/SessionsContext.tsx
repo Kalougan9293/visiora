@@ -33,6 +33,8 @@ interface SessionsContextValue {
   forgetSessions: (ids: string[]) => Promise<void>
   markListened: (id: string) => void
   retryGeneration: (sessionId: string) => Promise<void>
+  /** Une séance est déjà en train d’être écrite. Les autres lancements restent fermés. */
+  generationBusy: boolean
 }
 
 const SessionsContext = createContext<SessionsContextValue | null>(null)
@@ -238,16 +240,22 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
 
   const addSession = useCallback(
     async (answers: VisualizationAnswers) => {
+      if (sessions.some((s) => s.status === 'generating')) {
+        throw new Error('generation-busy')
+      }
       const session = await sessionsService.create(answers, userId)
       setSessions((prev) => [session, ...prev.filter((s) => s.id !== session.id)])
       /** Un seul kick via l’effet generatingKey — évite double TTS / même audio ×2. */
       return session
     },
-    [userId],
+    [userId, sessions],
   )
 
   const adjustSession = useCallback(
     async (sessionId: string, answers: VisualizationAnswers) => {
+      if (sessions.some((s) => s.status === 'generating')) {
+        throw new Error('generation-busy')
+      }
       if (!userId) throw new Error('Connexion requise')
       const current = sessions.find((s) => s.id === sessionId)
       const keepTitle = current?.title || sessionsService.titleFromAnswers(answers)
@@ -274,6 +282,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const retryGeneration = useCallback(
     async (sessionId: string) => {
       if (!userId) return
+      if (sessions.some((s) => s.status === 'generating')) return
       kickedRef.current.delete(sessionId)
       delete lastKickAtRef.current[sessionId]
       setSessions((prev) =>
@@ -286,7 +295,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       /** Reprise sans reset : segments déjà payés / uploadés sont réutilisés. */
       await enqueueAudio(sessionId, false)
     },
-    [userId, enqueueAudio],
+    [userId, sessions, enqueueAudio],
   )
 
   const removeSession = useCallback(
@@ -366,6 +375,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       forgetSessions,
       markListened,
       retryGeneration,
+      generationBusy: sessions.some((s) => s.status === 'generating'),
     }),
     [
       sessions,

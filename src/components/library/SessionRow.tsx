@@ -30,7 +30,7 @@ function formatClock(seconds: number) {
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
   const navigate = useNavigate()
-  const { removeSession, retryGeneration } = useSessions()
+  const { removeSession, retryGeneration, generationBusy } = useSessions()
   const playback = usePlayback()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
@@ -133,10 +133,11 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             {session.status === 'failed' && !ready && (
               <button
                 type="button"
+                disabled={generationBusy}
                 onClick={() => void retryGeneration(session.id)}
                 className={cn(
                   'max-w-[12.5rem] shrink-0 text-left text-[10px] leading-snug underline',
-                  'text-[var(--vs-or)]',
+                  'text-[var(--vs-or)] disabled:pointer-events-none disabled:opacity-40',
                 )}
               >
                 {APP_COPY.generateError}
@@ -199,8 +200,9 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             <button
               type="button"
               aria-label="Ajuster"
+              disabled={generationBusy}
               onClick={() => navigate(`/creer?adjust=${session.id}`)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-black/5 dark:text-champagne/70 dark:hover:bg-white/5"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 transition-colors hover:bg-black/5 disabled:pointer-events-none disabled:opacity-40 dark:text-champagne/70 dark:hover:bg-white/5"
             >
               <Pencil size={14} />
             </button>
