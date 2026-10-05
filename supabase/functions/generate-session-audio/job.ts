@@ -36,6 +36,9 @@ export type AudioJob = {
   bedOffset: number
   claimId: string | null
   claimedAt: string | null
+  /** Reprises au même endroit après une coupure. Au-delà, on arrête au lieu de tourner. */
+  stepAttempts?: number
+  attemptIndex?: number
   phase: 'tts' | 'finalize' | 'done'
   handedToN8n?: boolean
   /** Montage final : prochain segment, et offset dans ce segment si la passe s’est arrêtée au milieu. */

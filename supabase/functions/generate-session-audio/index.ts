@@ -56,7 +56,7 @@ const DEFAULT_VOICES: Record<string, string> = {
 }
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
-const CLAIM_TTL_MS = 90_000
+const CLAIM_TTL_MS = 45_000
 const MIX_RATE = 44100
 /** Une passe encode au plus ~12 s : plafond CPU de 2 s sur l’Edge Function. */
 const MIX_SLICE_SOFT = 10 * MIX_RATE
@@ -230,6 +230,16 @@ function sessionSeed(job: AudioJob): number {
   return job.seed
 }
 
+/**
+ * « sens » et « sent » partent souvent en anglais (/sɛns/, /sɛnt/).
+ * « sans » est le même son /sɑ̃/, et la voix le dit juste.
+ * Le script affiché garde « sens » / « sent ».
+ */
+function frenchForSpeech(text: string): string {
+  const sans = (word: string) => (word[0] === word[0]?.toUpperCase() ? 'Sans' : 'sans')
+  return text.replace(/\bsens\b/gi, sans).replace(/\bsent\b/gi, sans)
+}
+
 function elevenTtsBody(
   text: string,
   appVoiceKey: string,
@@ -237,7 +247,7 @@ function elevenTtsBody(
   seed: number,
 ) {
   return {
-    text,
+    text: frenchForSpeech(text),
     model_id: elevenModelId(),
     language_code: 'fr',
     seed,
@@ -266,6 +276,7 @@ async function elevenTts(params: {
       body: JSON.stringify(
         elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
       ),
+      signal: AbortSignal.timeout(35_000),
     },
   )
 
@@ -285,6 +296,7 @@ async function elevenTts(params: {
           body: JSON.stringify(
             elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
           ),
+          signal: AbortSignal.timeout(35_000),
         },
       )
       if (retry.ok) {
@@ -448,6 +460,29 @@ async function processOneStep(params: {
   job: AudioJob
 }): Promise<{ job: AudioJob; done: boolean }> {
   let job = params.job
+  /** Sans ça, un appel lent (voix) dépasse 90 s, un autre passage reprend la phrase à zéro. */
+  const beat = setInterval(() => {
+    if (!job.claimId) return
+    void setProgress(params.admin, params.sessionId, progressPct(job), job)
+  }, 12_000)
+
+  try {
+    return await runAudioStep({ ...params, job })
+  } finally {
+    clearInterval(beat)
+  }
+}
+
+async function runAudioStep(params: {
+  admin: SupabaseClient
+  elevenKey: string
+  sessionId: string
+  userId: string
+  voiceId: string | null
+  script: string
+  job: AudioJob
+}): Promise<{ job: AudioJob; done: boolean }> {
+  const job = params.job
 
   if (job.phase === 'done') return { job, done: true }
 
@@ -571,6 +606,7 @@ async function processOneStep(params: {
     }
 
     job.nextIndex = index + 1
+    job.stepAttempts = 0
     job.doneSpeech = job.steps.filter((s) => s.kind === 'speech' && s.partPath).length
     /** Garde le claim pendant les phrases enchaînées — sinon n8n / le filet relancent trop tôt. */
     const kept = await setProgress(params.admin, params.sessionId, progressPct(job), job)
@@ -647,6 +683,36 @@ function concatPcm(chunks: Int16Array[]): Int16Array {
 }
 
 /**
+ * Si la tranche doit couper une phrase, recule jusqu’à un souffle dans
+ * la dernière demi-seconde. Le joint reste, mais il tombe dans le silence.
+ */
+function seamCut(pcm: Int16Array, take: number): number {
+  const win = Math.round(0.02 * MIX_RATE)
+  if (take < win * 4 || take > pcm.length) return Math.min(take, pcm.length)
+  const search = Math.min(take - win, Math.round(0.5 * MIX_RATE))
+  const start = take - search
+  const power = (at: number) => {
+    let acc = 0
+    const end = Math.min(pcm.length, at + win)
+    for (let i = at; i < end; i++) acc += pcm[i]! * pcm[i]!
+    return acc / win
+  }
+  const edge = power(Math.max(0, take - win))
+  let bestAt = take
+  let best = edge
+  const step = Math.round(0.005 * MIX_RATE)
+  for (let i = start; i + win <= take; i += step) {
+    const v = power(i)
+    if (v < best) {
+      best = v
+      bestAt = i
+    }
+  }
+  if (bestAt < win || best > edge * 0.16) return take
+  return bestAt
+}
+
+/**
  * Encode une tranche courte. Le fichier entier dépasse le plafond CPU
  * de l’Edge Function et la requête était tuée, barre figée à 94.
  */
@@ -681,7 +747,7 @@ async function writeMixSlice(
     const room = MIX_SLICE_CAP - samples
     if (pcm.length > room) {
       if (samples >= MIX_SLICE_SOFT) break
-      const take = Math.max(1, Math.min(pcm.length, room))
+      const take = seamCut(pcm, Math.max(1, Math.min(pcm.length, room)))
       pieces.push(pcm.slice(0, take))
       offset += take
       samples += take
@@ -1267,6 +1333,39 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (job.claimedAt) {
+    const age = Date.now() - new Date(job.claimedAt).getTime()
+    if (age >= CLAIM_TTL_MS) {
+      if (job.attemptIndex !== job.nextIndex) {
+        job.attemptIndex = job.nextIndex
+        job.stepAttempts = 1
+      } else {
+        job.stepAttempts = (job.stepAttempts ?? 0) + 1
+      }
+      if ((job.stepAttempts ?? 0) >= 4) {
+        const error = 'La génération s’est interrompue plusieurs fois au même endroit.'
+        job.claimId = null
+        job.claimedAt = null
+        job.error = error
+        job.finishedAt = new Date().toISOString()
+        await admin
+          .from('sessions')
+          .update({
+            status: 'failed',
+            audio_job: job,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId)
+          .neq('status', 'ready')
+        await noteUsage(admin, sessionId, {
+          finishedAt: job.finishedAt,
+          error,
+        })
+        return json({ ok: false, error, status: 'failed' }, isOrchestrator ? 200 : 500)
+      }
+    }
+  }
+
   job.claimId = crypto.randomUUID()
   job.claimedAt = new Date().toISOString()
   const claimed = await claimSession(admin, sessionId, job, progressPct(job), 'claim')
@@ -1290,13 +1389,13 @@ Deno.serve(async (req) => {
         script,
         job,
       })
-      if (!result.done && (!isOrchestrator || result.job.phase === 'finalize')) {
+      if (!result.done) {
         scheduleContinue({
           supabaseUrl,
           anonKey,
           authHeader,
           sessionId,
-          orchestratorSecret: isOrchestrator ? orchSecret : undefined,
+          orchestratorSecret: orchSecret || undefined,
         })
       }
     } catch (err) {
@@ -1306,6 +1405,7 @@ Deno.serve(async (req) => {
         return
       }
       console.error('[generate-session-audio]', message)
+      await noteUsage(admin, sessionId, { error: message.slice(0, 180) })
       const owned = job?.claimId ?? null
       if (job) {
         job.claimId = null
@@ -1358,7 +1458,16 @@ Deno.serve(async (req) => {
           scriptWords: job?.scriptWords ?? null,
         })
       }
-      if (nextStatus === 'generating') return
+      if (nextStatus === 'generating') {
+        scheduleContinue({
+          supabaseUrl,
+          anonKey,
+          authHeader,
+          sessionId,
+          orchestratorSecret: orchSecret || undefined,
+        })
+        return
+      }
       throw err
     }
   }

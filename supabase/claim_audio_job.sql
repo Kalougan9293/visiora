@@ -47,7 +47,7 @@ begin
       and (
         coalesce(audio_job->>'claimId', '') = ''
         or audio_job->>'claimedAt' is null
-        or (audio_job->>'claimedAt')::timestamptz < now() - interval '90 seconds'
+        or (audio_job->>'claimedAt')::timestamptz < now() - interval '45 seconds'
       );
   end if;
   get diagnostics n = row_count;

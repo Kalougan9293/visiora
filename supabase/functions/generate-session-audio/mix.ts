@@ -22,10 +22,12 @@ const BED_OBJECT: Record<string, string> = {
 }
 
 /**
- * Le lit est déjà normalisé à −42 dBFS dans smoothBed.
+ * Le lit est déjà normalisé à −32 dBFS dans smoothBed.
  * Gain 1 : le pic est calé dans smoothBed.
- * Assez présent pour tenir sous les pauses, assez bas pour rester sous la voix.
+ * BED_LIFT : +2,5 dB sur les 6 voix. Le fond restait trop en retrait sous la parole.
  */
+const BED_LIFT = 10 ** (2.5 / 20)
+
 const BED_GAIN: Record<string, number> = {
   /** Vanessa : fond un cran plus présent (retour écoute). */
   rituel: 1.55,
@@ -73,9 +75,10 @@ export async function loadBed(
 ): Promise<{ pcm: Int16Array; gain: number; voiceScale: number } | null> {
   const key = appVoiceKey.toLowerCase()
   const objectName = BED_OBJECT[key]
-  const gain = BED_GAIN[key]
+  const baseGain = BED_GAIN[key]
   const voiceScale = VOICE_SCALE[key] ?? 0.88
-  if (!objectName || gain == null) return null
+  if (!objectName || baseGain == null) return null
+  const gain = baseGain * BED_LIFT
   if (bedCache?.key === key) return bedCache
   try {
     const bytes = await downloadBedObject(admin, objectName)
@@ -102,50 +105,93 @@ function readU16(bytes: Uint8Array, i: number) {
  */
 const BED_PEAK_TARGET = Math.round(32768 * 10 ** (-32 / 20))
 
-/** Le lit brut a un creux d’environ 1 s à chaque tour. On tient le niveau pour que la pause ne se recoupe pas. */
-function flattenBedEnvelope(cur: Float64Array) {
-  const win = Math.round(0.25 * SAMPLE_RATE)
-  const env = new Float64Array(cur.length)
-  let sum = 0
-  for (let i = 0; i < cur.length; i++) {
-    const s = cur[i]!
-    sum += s * s
-    if (i >= win) sum -= cur[i - win]! ** 2
-    const n = i + 1 < win ? i + 1 : win
-    env[i] = Math.sqrt(Math.max(0, sum) / n)
+function smoothBed(pcm: Int16Array): Int16Array {
+  const n = pcm.length
+  const shelf = lowShelf(SAMPLE_RATE, 180, 0.7, -4)
+  const filtered = new Int16Array(n)
+  let x1 = 0
+  let x2 = 0
+  let y1 = 0
+  let y2 = 0
+  for (let i = 0; i < n; i++) {
+    const x0 = pcm[i]!
+    const y0 = shelf.b0 * x0 + shelf.b1 * x1 + shelf.b2 * x2 - shelf.a1 * y1 - shelf.a2 * y2
+    x2 = x1
+    x1 = x0
+    y2 = y1
+    y1 = y0
+    filtered[i] = y0 > 32767 ? 32767 : y0 < -32768 ? -32768 : y0
+  }
+
+  /**
+   * Enveloppe par tranches. Le « vent » est le grave du morceau qui gonfle,
+   * puis retombe d’un coup au tour de boucle. On tient le niveau, et on baisse
+   * ce grave quand il dépasse le calme du début.
+   */
+  const hop = 441
+  const frames = Math.max(1, Math.ceil(n / hop))
+  const env = new Float32Array(frames)
+  const lowEnv = new Float32Array(frames)
+  const lpA = 1 - Math.exp((-2 * Math.PI * 140) / SAMPLE_RATE)
+  let lp = 0
+  for (let f = 0; f < frames; f++) {
+    const a = f * hop
+    const b = Math.min(n, a + hop)
+    let sum = 0
+    let lowSum = 0
+    for (let i = a; i < b; i++) {
+      const s = filtered[i]!
+      lp += lpA * (s - lp)
+      sum += s * s
+      lowSum += lp * lp
+    }
+    const len = b - a
+    env[f] = Math.sqrt(sum / len)
+    lowEnv[f] = Math.sqrt(lowSum / len)
   }
   const probe: number[] = []
-  for (let i = win; i < env.length; i += 400) probe.push(env[i]!)
-  if (!probe.length) return
+  const lowProbe: number[] = []
+  for (let f = 0; f < frames; f += 4) {
+    probe.push(env[f]!)
+    lowProbe.push(lowEnv[f]!)
+  }
   probe.sort((a, b) => a - b)
-  const target = probe[Math.floor(probe.length * 0.7)]!
-  if (target < 1) return
+  lowProbe.sort((a, b) => a - b)
+  const target = probe[Math.floor(probe.length * 0.7)] ?? 1
+  const lowTarget = lowProbe[Math.floor(lowProbe.length * 0.35)] ?? 1
   const maxGain = 10 ** (6 / 20)
-  const follow = 1 - Math.exp(-1 / (0.12 * SAMPLE_RATE))
+  const follow = 1 - Math.exp(-hop / (0.12 * SAMPLE_RATE))
+  const out = new Int16Array(n)
   let g = 1
-  for (let i = 0; i < cur.length; i++) {
-    const base = env[i]!
-    const desired = base > target * 0.015 ? target / base : maxGain
-    const clamped = Math.min(maxGain, Math.max(0.45, desired))
-    g += follow * (clamped - g)
-    cur[i] = cur[i]! * g
-  }
-}
-
-function smoothBed(pcm: Int16Array): Int16Array {
-  const cur = new Float64Array(pcm.length)
-  for (let i = 0; i < pcm.length; i++) cur[i] = pcm[i]!
-  flattenBedEnvelope(cur)
+  let gLow = 1
+  lp = 0
   let peak = 0
-  for (let i = 0; i < cur.length; i++) {
-    const v = Math.abs(cur[i]!)
-    if (v > peak) peak = v
+  for (let f = 0; f < frames; f++) {
+    const base = env[f]!
+    const desired = target > 1 && base > target * 0.015 ? target / base : maxGain
+    const clamped = Math.min(maxGain, Math.max(0.3, desired))
+    g += follow * (clamped - g)
+    const lowBase = lowEnv[f]!
+    const lowDesired = lowBase > lowTarget * 0.02 ? lowTarget / lowBase : 1
+    const lowClamped = Math.min(1, Math.max(0.4, lowDesired))
+    gLow += follow * (lowClamped - gLow)
+    const a = f * hop
+    const b = Math.min(n, a + hop)
+    for (let i = a; i < b; i++) {
+      const s0 = filtered[i]!
+      lp += lpA * (s0 - lp)
+      const s = (s0 - lp + lp * gLow) * g
+      const v = Math.abs(s)
+      if (v > peak) peak = v
+      out[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+    }
   }
-  const g = peak > 1 ? BED_PEAK_TARGET / peak : 0
-  const out = new Int16Array(pcm.length)
-  for (let i = 0; i < cur.length; i++) {
-    const s = cur[i]! * g
-    out[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+  const norm = peak > 1 ? BED_PEAK_TARGET / peak : 0
+  if (norm > 0 && norm !== 1) {
+    for (let i = 0; i < n; i++) {
+      const s = out[i]! * norm
+      out[i] = s > 32767 ? 32767 : s < -32768 ? -32768 : s
+    }
   }
   return out
 }
@@ -333,6 +379,21 @@ function kWeightingFilters(): { shelf: Biquad; highpass: Biquad } {
 }
 
 const K_WEIGHT = kWeightingFilters()
+
+function lowShelf(fs: number, f0: number, q: number, gainDb: number): Biquad {
+  const A = 10 ** (gainDb / 40)
+  const w0 = (2 * Math.PI * f0) / fs
+  const cos = Math.cos(w0)
+  const alpha = Math.sin(w0) / (2 * q)
+  const twoSqrt = 2 * Math.sqrt(A) * alpha
+  const b0 = A * (A + 1 - (A - 1) * cos + twoSqrt)
+  const b1 = 2 * A * (A - 1 - (A + 1) * cos)
+  const b2 = A * (A + 1 - (A - 1) * cos - twoSqrt)
+  const a0 = A + 1 + (A - 1) * cos + twoSqrt
+  const a1 = -2 * (A - 1 + (A + 1) * cos)
+  const a2 = A + 1 + (A - 1) * cos - twoSqrt
+  return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: a1 / a0, a2: a2 / a0 }
+}
 
 function highShelf(fs: number, f0: number, q: number, gainDb: number): Biquad {
   const A = 10 ** (gainDb / 40)

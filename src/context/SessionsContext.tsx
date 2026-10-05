@@ -50,6 +50,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
   const lastKickAtRef = useRef<Record<string, number>>({})
   /** Séances confiées à N8N : pas de re-kick agressif côté téléphone. */
   const orchestratedRef = useRef(new Set<string>())
+  const progressMark = useRef<Record<string, { pct: number; at: number }>>({})
 
   if (seenUserId.current !== userId) {
     seenUserId.current = userId
@@ -200,12 +201,18 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           mergeSession({ ...fresh, status: 'failed' })
           continue
         }
-        /** N8N en marche : on ne double pas. S’il se tait 25 s, on reprend. */
+        const pct = fresh.audioProgress ?? 0
+        const mark = progressMark.current[id]
+        const now = Date.now()
+        if (!mark || mark.pct !== pct) progressMark.current[id] = { pct, at: now }
+        const progressAge = now - (progressMark.current[id]?.at ?? now)
+        /** N8N en marche : on ne double pas. S’il se tait, ou si le pourcentage ne bouge plus, on reprend. */
         const n8nQuiet = orchestratedRef.current.has(id) && age > 25_000
+        const stalled = fresh.status === 'generating' && progressAge > 20_000
         if (
           fresh.status === 'generating' &&
           age > CONTINUE_KICK_MS &&
-          (n8nQuiet || !orchestratedRef.current.has(id))
+          (stalled || n8nQuiet || !orchestratedRef.current.has(id))
         ) {
           void enqueueAudio(id, false)
         }
