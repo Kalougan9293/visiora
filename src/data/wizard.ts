@@ -199,15 +199,6 @@ export const VOICES = [
   },
 ] as const
 
-/** Anciennes voix, pour relire les séances déjà créées. */
-const RETIRED_VOICE_NAMES: Record<string, string> = {
-  rituel: 'Vanessa',
-  antoni: 'Damien',
-  onde: 'Sabrina',
-  louis: 'Louis',
-  maelis: 'Maëlis',
-}
-
 const ADDED_VOICE = /^v\d{10,16}$/
 
 export function catalogVoiceId(id: string | null | undefined): string {
@@ -219,7 +210,7 @@ export function catalogVoiceId(id: string | null | undefined): string {
 export function voiceLabel(id: string | null | undefined): string {
   if (!id) return '—'
   const key = id.toLowerCase()
-  return VOICES.find((voice) => voice.id === key)?.name ?? RETIRED_VOICE_NAMES[key] ?? id
+  return VOICES.find((voice) => voice.id === key)?.name ?? id
 }
 
 export const AMBIANCES = [

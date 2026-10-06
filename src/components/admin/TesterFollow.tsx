@@ -71,9 +71,7 @@ function voiceName(id: string | null) {
 
 function bedName(id: string | null) {
   const key = (id ?? '').toLowerCase()
-  if (key === 'rituel' || key === 'louis') return 'Musique Vanessa'
-  if (key === 'onde' || key === 'maelis') return 'Musique Sabrina'
-  if (key === 'antoni' || key === 'aurore' || key === 'steve') return 'Fond Damien'
+  if (key === 'antoni' || key === 'aurore' || key === 'steve') return 'Sleep Music'
   return '—'
 }
 

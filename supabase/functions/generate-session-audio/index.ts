@@ -45,15 +45,8 @@ const corsHeaders = {
 }
 
 const DEFAULT_VOICES: Record<string, string> = {
-  rituel: '1zaEYJSYmxoQNiDl5C42',
-  antoni: 'iYo3urNKUm5TVGCFojl0',
-  onde: 'CfDJFNP9FItBtQcWKTwh',
-  louis: 'vBvYVsqjPzJc9Od66elb',
   aurore: 'ucMmKRQbfDEYyb2IIGax',
   steve: 'jfEwztGDkpbpy89xeku6',
-  maelis: 'x10MLxaAmShMYt7vs7pl',
-  rachel: 'zPy2sgLU4pZ7Xrjh87uz',
-  bella: 'EXAVITQu4vr4xnSDxMaL',
 }
 
 /** Autre invoke en cours : ne pas double-traiter le même step. */
@@ -146,15 +139,8 @@ function resolveElevenVoiceId(appVoiceId: string | null, override?: string | nul
   if (forced) return forced
   const key = (appVoiceId ?? DEFAULT_APP_VOICE).toLowerCase()
   const envMap: Record<string, string | undefined> = {
-    rituel: Deno.env.get('ELEVENLABS_VOICE_RITUEL'),
-    onde: Deno.env.get('ELEVENLABS_VOICE_ONDE'),
-    rachel: Deno.env.get('ELEVENLABS_VOICE_RACHEL'),
-    antoni: Deno.env.get('ELEVENLABS_VOICE_ANTONI'),
-    bella: Deno.env.get('ELEVENLABS_VOICE_BELLA'),
-    louis: Deno.env.get('ELEVENLABS_VOICE_LOUIS'),
     aurore: Deno.env.get('ELEVENLABS_VOICE_AURORE'),
     steve: Deno.env.get('ELEVENLABS_VOICE_STEVE'),
-    maelis: Deno.env.get('ELEVENLABS_VOICE_MAELIS'),
   }
   return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.aurore
 }
@@ -245,11 +231,10 @@ async function claimSession(
   return data === true
 }
 
-function elevenVoiceSettings(appVoiceKey: string) {
-  const key = appVoiceKey.toLowerCase()
+function elevenVoiceSettings(_appVoiceKey: string) {
   return {
     /** Plus haut = moins de sautes de ton/rythme entre blocs ; un peu moins d’expressivité. */
-    stability: key === 'rituel' || key === 'louis' ? 0.88 : 0.82,
+    stability: 0.82,
     /** Colle à la voix du début. Le débit reste 1. */
     similarity_boost: 0.75,
     style: 0,

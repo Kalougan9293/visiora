@@ -10,16 +10,10 @@ export const TTS_PCM_FORMAT = 'pcm_24000'
 
 const BED_BUCKET = 'beds'
 
-/** Fichiers dans le bucket Supabase `beds` (pas dans le bundle de la fonction). */
+/** Fichier dans le bucket Supabase `beds` : Sleep Music, sous Aurore et Steve. */
 const BED_OBJECT: Record<string, string> = {
-  rituel: 'rituel-loop.wav',
-  onde: 'onde-loop.wav',
-  antoni: 'antoni-loop.wav',
-  /** Nouvelles voix : réutilisent les 3 boucles existantes. */
-  louis: 'rituel-loop.wav',
   aurore: 'antoni-loop.wav',
   steve: 'antoni-loop.wav',
-  maelis: 'onde-loop.wav',
 }
 
 /**
@@ -30,26 +24,14 @@ const BED_OBJECT: Record<string, string> = {
 const BED_LIFT = 10 ** (2.5 / 20)
 
 const BED_GAIN: Record<string, number> = {
-  /** Vanessa : fond un cran plus présent (retour écoute). */
-  rituel: 1.55,
-  onde: 1,
-  antoni: 1,
-  /** Voix ElevenLabs plus « chaudes » : fond un peu plus présent pour coller à Vanessa/Damien. */
-  louis: 1.75,
   aurore: 1.6,
   steve: 1.6,
-  maelis: 1.6,
 }
 
 /** Baisse un peu la voix sur les IDs plus hot, pour laisser entendre le lit. */
 const VOICE_SCALE: Record<string, number> = {
-  rituel: 0.88,
-  onde: 0.88,
-  antoni: 0.88,
-  louis: 0.72,
   aurore: 0.74,
   steve: 0.74,
-  maelis: 0.74,
 }
 
 type LoadedBed = { key: string; pcm: Int16Array; gain: number; voiceScale: number }
@@ -72,11 +54,9 @@ async function downloadBedObject(admin: SupabaseClient, objectName: string): Pro
   throw new Error(`Lit ${objectName}: ${last}`)
 }
 
-/** Fonds préparés. Le gain et le niveau de voix restent ceux du créneau (Aurore, Steve). */
+/** Fond en place : Sleep Music. Le gain et le niveau de voix restent ceux d’Aurore et de Steve. */
 export const BED_CHOICES = {
   antoni: 'antoni-loop.wav',
-  rituel: 'rituel-loop.wav',
-  onde: 'onde-loop.wav',
 } as const
 
 export type BedChoice = keyof typeof BED_CHOICES
@@ -87,7 +67,7 @@ const CUSTOM_BED = /^custom\/(?:bed|aurore|steve|v\d{10,16})-\d{10,16}\.wav$/
 export function bedFile(choice: string | null | undefined, voiceKey: string): string | undefined {
   if (choice && CUSTOM_BED.test(choice)) return choice
   const picked = choice && choice in BED_CHOICES ? BED_CHOICES[choice as BedChoice] : undefined
-  return picked || BED_OBJECT[voiceKey]
+  return picked || BED_OBJECT[voiceKey] || BED_OBJECT.aurore
 }
 
 export async function loadBed(
