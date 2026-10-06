@@ -17,6 +17,9 @@ verify_jwt = true
 [functions.admin-provider-usage]
 verify_jwt = true
 
+[functions.admin-voice-studio]
+verify_jwt = true
+
 
 
 

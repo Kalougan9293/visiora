@@ -18,6 +18,7 @@ const BED_OBJECT: Record<string, string> = {
   /** Nouvelles voix : réutilisent les 3 boucles existantes. */
   louis: 'rituel-loop.wav',
   aurore: 'antoni-loop.wav',
+  steve: 'antoni-loop.wav',
   maelis: 'onde-loop.wav',
 }
 
@@ -36,6 +37,7 @@ const BED_GAIN: Record<string, number> = {
   /** Voix ElevenLabs plus « chaudes » : fond un peu plus présent pour coller à Vanessa/Damien. */
   louis: 1.75,
   aurore: 1.6,
+  steve: 1.6,
   maelis: 1.6,
 }
 
@@ -46,6 +48,7 @@ const VOICE_SCALE: Record<string, number> = {
   antoni: 0.88,
   louis: 0.72,
   aurore: 0.74,
+  steve: 0.74,
   maelis: 0.74,
 }
 
@@ -69,21 +72,42 @@ async function downloadBedObject(admin: SupabaseClient, objectName: string): Pro
   throw new Error(`Lit ${objectName}: ${last}`)
 }
 
+/** Fonds préparés. Le gain et le niveau de voix restent ceux du créneau (Aurore, Steve). */
+export const BED_CHOICES = {
+  antoni: 'antoni-loop.wav',
+  rituel: 'rituel-loop.wav',
+  onde: 'onde-loop.wav',
+} as const
+
+export type BedChoice = keyof typeof BED_CHOICES
+
+/** Fond envoyé par l’admin, un fichier par voix. */
+const CUSTOM_BED = /^custom\/(?:bed|aurore|steve|v\d{10,16})-\d{10,16}\.wav$/
+
+export function bedFile(choice: string | null | undefined, voiceKey: string): string | undefined {
+  if (choice && CUSTOM_BED.test(choice)) return choice
+  const picked = choice && choice in BED_CHOICES ? BED_CHOICES[choice as BedChoice] : undefined
+  return picked || BED_OBJECT[voiceKey]
+}
+
 export async function loadBed(
   appVoiceKey: string,
   admin: SupabaseClient,
+  bedChoice?: string | null,
 ): Promise<{ pcm: Int16Array; gain: number; voiceScale: number } | null> {
   const key = appVoiceKey.toLowerCase()
-  const objectName = BED_OBJECT[key]
-  const baseGain = BED_GAIN[key]
-  const voiceScale = VOICE_SCALE[key] ?? 0.88
+  const objectName = bedFile(bedChoice, key)
+  /** Une voix ajoutée reprend les niveaux d’Aurore et de Steve. */
+  const baseGain = BED_GAIN[key] ?? BED_GAIN.aurore
+  const voiceScale = VOICE_SCALE[key] ?? VOICE_SCALE.aurore
   if (!objectName || baseGain == null) return null
   const gain = baseGain * BED_LIFT
-  if (bedCache?.key === key) return bedCache
+  const cacheKey = `${key}:${objectName}`
+  if (bedCache?.key === cacheKey) return bedCache
   try {
     const bytes = await downloadBedObject(admin, objectName)
     const pcm = smoothBed(pcmFromWav(bytes))
-    bedCache = { key, pcm, gain, voiceScale }
+    bedCache = { key: cacheKey, pcm, gain, voiceScale }
     return bedCache
   } catch (err) {
     console.warn('[mix] bed missing', key, err)

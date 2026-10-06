@@ -30,7 +30,8 @@ function formatClock(seconds: number) {
 
 export function SessionRow({ session }: { session: VisualizationSession }) {
   const navigate = useNavigate()
-  const { removeSession, retryGeneration, generationBusy } = useSessions()
+  const { removeSession, retryGeneration, generationBusy, setShareRead } = useSessions()
+  const [shareBusy, setShareBusy] = useState(false)
   const playback = usePlayback()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [scriptOpen, setScriptOpen] = useState(false)
@@ -160,6 +161,33 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               {AI_DISCLOSURE.player}
             </span>
           )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={session.shareRead === true}
+            disabled={shareBusy}
+            onClick={() => {
+              const next = session.shareRead !== true
+              setShareBusy(true)
+              void setShareRead(session.id, next).finally(() => setShareBusy(false))
+            }}
+            className="mt-2 flex w-full items-center gap-2 text-left text-[11px] leading-snug text-ink/70 disabled:opacity-50 dark:text-champagne/80"
+          >
+            <span
+              className={cn(
+                'relative h-4 w-7 shrink-0 rounded-full transition-colors',
+                session.shareRead ? 'bg-[var(--vs-azur)]' : 'bg-black/15 dark:bg-white/20',
+              )}
+            >
+              <span
+                className={cn(
+                  'absolute top-0.5 h-3 w-3 rounded-full bg-white transition-transform',
+                  session.shareRead ? 'left-3.5' : 'left-0.5',
+                )}
+              />
+            </span>
+            <span>{AI_DISCLOSURE.shareCheckbox}</span>
+          </button>
         </div>
 
         {hasScript && ready && (

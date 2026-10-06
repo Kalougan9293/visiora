@@ -152,6 +152,39 @@ export interface Database {
         }
         Relationships: []
       }
+      voice_slots: {
+        Row: {
+          slot: string
+          label: string
+          eleven_voice_id: string
+          bed: string
+          bed_label: string | null
+          preview_url: string | null
+          dry_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          slot: string
+          label: string
+          eleven_voice_id: string
+          bed: string
+          bed_label?: string | null
+          preview_url?: string | null
+          dry_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          slot?: string
+          label?: string
+          eleven_voice_id?: string
+          bed?: string
+          bed_label?: string | null
+          preview_url?: string | null
+          dry_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       listen_plays: {
         Row: {
           id: string

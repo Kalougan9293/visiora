@@ -44,6 +44,8 @@ export interface VisualizationSession {
   audioProgress?: number
   listens: number
   tags?: string[]
+  /** La personne accepte que Visiora lise cette séance. */
+  shareRead?: boolean
 }
 
 /** Une journée validée pour une visualisation (table `listens`). */

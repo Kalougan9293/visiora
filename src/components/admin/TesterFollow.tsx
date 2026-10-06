@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
-import { VOICES } from '@/data/wizard'
+import { voiceLabel } from '@/data/wizard'
 import {
   formatStorage,
   type AdminUserRow,
@@ -66,15 +66,14 @@ function readyProviderCells(provider: ProviderUsage | null): [string, string][] 
 }
 
 function voiceName(id: string | null) {
-  if (!id) return '—'
-  return VOICES.find((voice) => voice.id === id.toLowerCase())?.name ?? id
+  return voiceLabel(id)
 }
 
 function bedName(id: string | null) {
   const key = (id ?? '').toLowerCase()
   if (key === 'rituel' || key === 'louis') return 'Musique Vanessa'
   if (key === 'onde' || key === 'maelis') return 'Musique Sabrina'
-  if (key === 'antoni' || key === 'aurore') return 'Fond Damien'
+  if (key === 'antoni' || key === 'aurore' || key === 'steve') return 'Fond Damien'
   return '—'
 }
 

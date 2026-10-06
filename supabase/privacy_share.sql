@@ -66,7 +66,7 @@ begin
     s.created_at
   from public.sessions s
   join public.profiles p on p.id = s.user_id
-  where p.share_sessions = true
+  where s.answers->>'share_read' = '1'
     and coalesce(p.is_admin, false) = false
   order by s.created_at desc;
 end;

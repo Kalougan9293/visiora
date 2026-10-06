@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, type AdminUserRow, type ProviderUsage, type TesterFollow } from '@/services/admin'
+import { VoiceStudio } from '@/components/admin/VoiceStudio'
 import { TesterOverviewBar, TesterUserList } from '@/components/admin/TesterFollow'
-import { VOICES, WIZARD_STEPS } from '@/data/wizard'
+import { WIZARD_STEPS, voiceLabel } from '@/data/wizard'
 import { healthKeywordsService } from '@/services/healthKeywords'
 import { downloadMetricsCsv } from '@/services/metrics'
 import { authService } from '@/services/auth'
@@ -53,7 +54,7 @@ export function AdminPage() {
   const [keywordDraft, setKeywordDraft] = useState('')
   const [keywordHint, setKeywordHint] = useState('')
   const [keywordBusy, setKeywordBusy] = useState(false)
-  const [tab, setTab] = useState<'users' | 'liste' | 'partage'>('users')
+  const [tab, setTab] = useState<'users' | 'liste' | 'partage' | 'voix'>('users')
   const [shared, setShared] = useState<AdminSharedSession[]>([])
   const [sharedError, setSharedError] = useState('')
   const [exportError, setExportError] = useState('')
@@ -401,6 +402,9 @@ export function AdminPage() {
           <TabBubble active={tab === 'partage'} onClick={() => setTab('partage')}>
             Partagées
           </TabBubble>
+          <TabBubble active={tab === 'voix'} onClick={() => setTab('voix')}>
+            Voix
+          </TabBubble>
         </div>
 
         {tab === 'users' && follow && (
@@ -464,6 +468,8 @@ export function AdminPage() {
           <SharedSessions sessions={shared} error={sharedError} />
         )}
 
+        {tab === 'voix' && <VoiceStudio />}
+
         {tab === 'liste' && (
         <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
           <p className="text-center text-[12px] text-black dark:text-white">
@@ -523,15 +529,21 @@ const ANSWER_LABELS = new Map(
   WIZARD_STEPS.flatMap((step) => step.fields.map((field) => [field.id, field.label] as const)),
 )
 
-const VOICE_NAMES = new Map<string, string>(VOICES.map((voice) => [voice.id, voice.name]))
-
 function answerLines(answers: Record<string, unknown>) {
-  const skip = new Set(['health_ack', 'health_ack_at', 'q12_tutoiement', 'duration_minutes'])
+  const skip = new Set(['health_ack', 'health_ack_at', 'q12_tutoiement', 'duration_minutes', 'share_read'])
   return Object.entries(answers).flatMap(([key, value]) => {
     if (skip.has(key) || value == null || String(value).trim() === '') return []
     const raw = Array.isArray(value) ? value.join(', ') : String(value)
-    const text = key === 'q12_voice' ? (VOICE_NAMES.get(raw.toLowerCase()) ?? raw) : raw
-    const label = key === 'q6_scale' ? 'Note avant (1 à 10)' : (ANSWER_LABELS.get(key) ?? key)
+    const text = key === 'q12_voice'
+      ? voiceLabel(raw)
+      : key === 'q12_sans_fond'
+        ? (raw === '1' ? 'Sans fond' : raw)
+        : raw
+    const label = key === 'q6_scale'
+      ? 'Note avant (1 à 10)'
+      : key === 'q12_sans_fond'
+        ? 'Fond'
+        : (ANSWER_LABELS.get(key) ?? key)
     return [{ label, text }]
   })
 }
@@ -551,7 +563,7 @@ function SharedSessions({
   if (!sessions.length) {
     return (
       <p className="mt-6 text-center text-sm text-black dark:text-white">
-        Aucune personne n’a autorisé la lecture de ses séances.
+        Aucune séance n’est partagée.
       </p>
     )
   }

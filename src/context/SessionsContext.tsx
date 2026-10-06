@@ -30,6 +30,7 @@ interface SessionsContextValue {
   addSession: (answers: VisualizationAnswers) => Promise<VisualizationSession>
   adjustSession: (sessionId: string, answers: VisualizationAnswers) => Promise<VisualizationSession>
   removeSession: (id: string) => void
+  setShareRead: (id: string, on: boolean) => Promise<void>
   forgetSessions: (ids: string[]) => Promise<void>
   markListened: (id: string) => void
   retryGeneration: (sessionId: string) => Promise<void>
@@ -298,6 +299,21 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
     [userId, sessions, enqueueAudio],
   )
 
+  const setShareRead = useCallback(
+    async (id: string, on: boolean) => {
+      if (!userId) throw new Error('Connexion requise')
+      const current = sessions.find((session) => session.id === id)
+      if (!current) return
+      const answers = await sessionsService.setShareRead(id, userId, on, current.answers)
+      setSessions((prev) =>
+        prev.map((session) =>
+          session.id === id ? { ...session, answers, shareRead: on } : session,
+        ),
+      )
+    },
+    [sessions, userId],
+  )
+
   const removeSession = useCallback(
     (id: string) => {
       kickedRef.current.delete(id)
@@ -372,6 +388,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       addSession,
       adjustSession,
       removeSession,
+      setShareRead,
       forgetSessions,
       markListened,
       retryGeneration,
@@ -385,6 +402,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       addSession,
       adjustSession,
       removeSession,
+      setShareRead,
       forgetSessions,
       markListened,
       retryGeneration,

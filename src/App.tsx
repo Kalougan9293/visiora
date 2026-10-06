@@ -13,6 +13,7 @@ import { ResetPasswordPage } from '@/pages/ResetPasswordPage'
 import { AdminPage } from '@/pages/AdminPage'
 import { VoicesLabPage } from '@/pages/VoicesLabPage'
 import { ModelsLabPage } from '@/pages/ModelsLabPage'
+import { LegalPage } from '@/pages/LegalPage'
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
                   <Route path="bibliotheque" element={<LibraryPage />} />
                   <Route path="suivi" element={<ProgressPage />} />
                   <Route path="profil" element={<ProfilePage />} />
+                  <Route path="legal/:slug" element={<LegalPage />} />
                   <Route path="nouveau-mot-de-passe" element={<ResetPasswordPage />} />
                   {import.meta.env.DEV && (
                     <>

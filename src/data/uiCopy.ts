@@ -5,11 +5,11 @@ export const AI_DISCLOSURE = {
     'Tu réponds à une intelligence artificielle, pas à une personne. Tes réponses servent à générer automatiquement le texte et la voix de ta séance.',
   player: 'Voix générée artificiellement.',
   privacy:
-    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez Visiora n’y accède, sauf si tu l’autorises.',
+    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez Visiora n’y accède, sauf si tu choisis de partager une séance.',
   signupPrivacyTitle: 'Ton espace reste privé.',
   signupPrivacy:
-    'Tes réponses et tes séances ne sont visibles que par toi : personne chez Visiora ne les lit, sauf si tu l’autorises. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
-  shareCheckbox: 'J’accepte que Visiora lise mes séances pour améliorer la méthode.',
+    'Tes réponses et tes séances ne sont visibles que par toi : personne chez Visiora ne les lit, sauf si tu choisis de partager une séance. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
+  shareCheckbox: "J'accepte que Visiora lise cette séance pour améliorer la méthode.",
   shareRevoke: 'Tu peux retirer cette autorisation à tout moment.',
   afterTitle: 'Comment te sens-tu maintenant ?',
   afterScaleHint: '1, très bas. 10, très bien.',

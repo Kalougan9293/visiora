@@ -47,6 +47,7 @@ function rowToSession(row: SessionRow): VisualizationSession {
     audioProgress: progressFromRow(row),
     listens: row.listens,
     script: row.script ?? null,
+    shareRead: (row.answers as { share_read?: unknown } | null)?.share_read === '1',
   }
 }
 
@@ -166,6 +167,19 @@ export const sessionsService = {
     sessions: VisualizationSession[],
   ): Promise<VisualizationSession[]> {
     return sessions.map((s) => (s.id === id ? { ...s, ...patch, updatedAt: new Date().toISOString() } : s))
+  },
+
+  async setShareRead(id: string, userId: string, on: boolean, answers: VisualizationAnswers): Promise<VisualizationAnswers> {
+    const next = { ...answers, share_read: on ? '1' : '0' }
+    if (isSupabaseConfigured() && supabase) {
+      const { error } = await supabase
+        .from('sessions')
+        .update({ answers: next })
+        .eq('id', id)
+        .eq('user_id', userId)
+      if (error) throw error
+    }
+    return next
   },
 
   async remove(id: string, userId?: string): Promise<void> {

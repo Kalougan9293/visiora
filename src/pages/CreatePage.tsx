@@ -4,10 +4,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Check, Compass, Pause, Play } from 'lucide-react'
 import {
   CREATE_INTRO,
-  VOICES,
   WIZARD_STEPS,
+  catalogVoiceId,
   type WizardField,
 } from '@/data/wizard'
+import { offersFromSlots, voiceCatalogService, type VoiceOffer } from '@/services/voiceCatalog'
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
@@ -37,7 +38,7 @@ export function CreatePage() {
   const [authOpen, setAuthOpen] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
   const [answers, setAnswers] = useState<Answers>({
-    q12_voice: 'rituel',
+    q12_voice: 'aurore',
     q12_tutoiement: 'tu',
     q12_registre: 'neutre',
     duration_minutes: '15',
@@ -47,6 +48,7 @@ export function CreatePage() {
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [replaceOpen, setReplaceOpen] = useState(false)
+  const [shareRead, setShareRead] = useState(false)
   const hydratedAdjustRef = useRef<string | null>(null)
   const wizardAttemptRef = useRef<string | null>(null)
 
@@ -64,7 +66,7 @@ export function CreatePage() {
     if (!session) return
     hydratedAdjustRef.current = adjustId
     const next: Answers = {
-      q12_voice: 'rituel',
+      q12_voice: 'aurore',
       q12_tutoiement: 'tu',
       q12_registre: 'neutre',
       duration_minutes: String(session.durationMinutes || 15),
@@ -72,6 +74,7 @@ export function CreatePage() {
     for (const [key, value] of Object.entries(session.answers)) {
       next[key] = Array.isArray(value) ? value.join(', ') : String(value ?? '')
     }
+    next.q12_voice = catalogVoiceId(next.q12_voice)
     next.q12_tutoiement = 'tu'
     next.duration_minutes = '15'
     if (next.q12_registre !== 'spirituel') next.q12_registre = 'neutre'
@@ -164,7 +167,12 @@ export function CreatePage() {
     setAdjustBusy(true)
     setReplaceOpen(false)
     setSubmitError('')
-    const payload: Answers = { ...answers, q12_tutoiement: 'tu', duration_minutes: '15' }
+    const payload: Answers = {
+      ...answers,
+      q12_tutoiement: 'tu',
+      duration_minutes: '15',
+      ...(adjustId ? {} : { share_read: shareRead ? '1' : '0' }),
+    }
     const dropping = adjustId ? [] : sessionsEvictedByNewOne(sessions)
     const run = async () => {
       if (adjustId) {
@@ -385,6 +393,17 @@ export function CreatePage() {
           onConfirm={() => void submitCreate()}
         />
       )}
+      {!healthGate && !adjustId && stepIdx === WIZARD_STEPS.length - 1 && (
+        <label className="mx-auto flex w-full max-w-md cursor-pointer items-start gap-2.5 pt-2 text-left text-[13px] leading-snug text-ink/70 dark:text-[var(--vs-lunaire)]/80">
+          <input
+            type="checkbox"
+            checked={shareRead}
+            onChange={(event) => setShareRead(event.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--vs-azur)]"
+          />
+          <span>{AI_DISCLOSURE.shareCheckbox}</span>
+        </label>
+      )}
       <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
         <Button variant="outline" className="flex-1 rounded-full !py-2.5 text-[15px]" onClick={goBack}>
           <ArrowLeft size={17} />
@@ -449,6 +468,8 @@ function FieldBlock({
         fieldLabel={field.label}
         value={answers.q12_voice}
         onChange={(id) => setField('q12_voice', id)}
+        sansFond={answers.q12_sans_fond === '1'}
+        onSansFond={(on) => setField('q12_sans_fond', on ? '1' : '')}
       />
     )
   }
@@ -513,7 +534,11 @@ function FieldBlock({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={field.placeholder}
-          className={cn(inputClass, locked && 'opacity-70')}
+          className={cn(
+            inputClass,
+            field.id === 'q13' && 'mx-auto block max-w-[15rem]',
+            locked && 'opacity-70',
+          )}
           readOnly={locked}
           disabled={locked}
         />
@@ -627,13 +652,32 @@ function VoiceChoice({
   fieldLabel,
   value,
   onChange,
+  sansFond,
+  onSansFond,
 }: {
   fieldLabel: string
   value: string
   onChange: (id: string) => void
+  sansFond: boolean
+  onSansFond: (on: boolean) => void
 }) {
   const [playingId, setPlayingId] = useState<string | null>(null)
+  const [offers, setOffers] = useState<VoiceOffer[]>(() => offersFromSlots([]))
   const audioRef = useRef<HTMLAudioElement>(null)
+  const playingIdRef = useRef<string | null>(null)
+  playingIdRef.current = playingId
+
+  useEffect(() => {
+    void voiceCatalogService.list().then((rows) => {
+      if (rows.length) setOffers(offersFromSlots(rows))
+    })
+  }, [])
+
+  const sampleOf = (id: string) => {
+    const voice = offers.find((item) => item.id === id)
+    if (!voice) return ''
+    return sansFond ? voice.dry : voice.preview
+  }
 
   useEffect(() => {
     const el = audioRef.current
@@ -642,13 +686,21 @@ function VoiceChoice({
     }
   }, [])
 
+  useEffect(() => {
+    const el = audioRef.current
+    const id = playingIdRef.current
+    if (!el || !id || el.paused) return
+    el.src = sampleOf(id)
+    void el.play().catch(() => setPlayingId(null))
+  }, [sansFond])
+
   const stopPreview = () => {
     const el = audioRef.current
     el?.pause()
     setPlayingId(null)
   }
 
-  const togglePreview = async (id: string, src: string) => {
+  const togglePreview = async (id: string) => {
     const el = audioRef.current
     if (!el) return
     onChange(id)
@@ -657,7 +709,7 @@ function VoiceChoice({
       return
     }
     el.pause()
-    el.src = src
+    el.src = sampleOf(id)
     // L’extrait MP3 contient déjà le même fond que le rendu final.
     try {
       await el.play()
@@ -674,15 +726,15 @@ function VoiceChoice({
       </p>
       <p className="mt-2 text-[13px] text-ink/50 dark:text-cream/50 sm:text-sm">Écoute, puis choisis</p>
       <audio ref={audioRef} playsInline preload="none" onEnded={stopPreview} />
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-2.5">
-        {VOICES.map((v) => {
+      <div className="mx-auto mt-4 flex w-fit max-w-full flex-wrap justify-center gap-2 sm:gap-2.5">
+        {offers.map((v) => {
           const selected = value === v.id
           const playing = playingId === v.id
           return (
             <div
               key={v.id}
               className={cn(
-                'inline-flex w-full items-center justify-between gap-1 rounded-full py-1.5 pl-2.5 pr-1.5 transition-all sm:pl-3 sm:pr-1.5',
+                'inline-flex h-9 w-[6.5rem] items-center justify-center gap-2 rounded-full transition-all',
                 selected
                   ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
                   : 'bg-black/[0.04] text-ink/75 dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-lunaire)]/85',
@@ -691,27 +743,36 @@ function VoiceChoice({
               <button
                 type="button"
                 onClick={() => onChange(v.id)}
-                className="min-w-0 flex-1 truncate text-left text-[12px] font-semibold sm:text-[14px]"
+                className="text-[13px] font-semibold leading-none sm:text-[14px]"
               >
                 {v.name}
               </button>
               <button
                 type="button"
-                onClick={() => void togglePreview(v.id, v.preview)}
+                onClick={() => void togglePreview(v.id)}
                 aria-label={playing ? `Arrêter ${v.name}` : `Écouter ${v.name}`}
                 className={cn(
-                  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition sm:h-8 sm:w-8',
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition',
                   selected
                     ? 'bg-[var(--vs-nuit)]/15'
                     : 'bg-[var(--vs-azur)]/10 text-[var(--vs-azur)]',
                 )}
               >
-                {playing ? <Pause size={12} className="fill-current" /> : <Play size={12} className="fill-current" />}
+                {playing ? <Pause size={12} className="fill-current" /> : <Play size={12} className="ml-0.5 fill-current" />}
               </button>
             </div>
           )
         })}
       </div>
+      <label className="mx-auto mt-3 flex w-fit cursor-pointer items-center gap-2 text-[13px] font-medium text-ink/70 dark:text-[var(--vs-lunaire)]/80">
+        <input
+          type="checkbox"
+          checked={sansFond}
+          onChange={(event) => onSansFond(event.target.checked)}
+          className="h-4 w-4 rounded accent-[var(--vs-azur)]"
+        />
+        Sans fond
+      </label>
     </div>
   )
 }

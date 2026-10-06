@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowRight, Check, Eye, EyeOff, X } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -46,7 +47,6 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   const [email, setEmail] = useState('')
   const [signupPass, setSignupPass] = useState('')
   const [acceptCgu, setAcceptCgu] = useState(false)
-  const [shareSessions, setShareSessions] = useState(false)
   const [hint, setHint] = useState('')
   const [busy, setBusy] = useState(false)
   const [showLoginPass, setShowLoginPass] = useState(false)
@@ -142,7 +142,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         password: signupPass,
         firstName,
         cguAccepted: acceptCgu,
-        shareSessions,
+        shareSessions: false,
       })
       if (needsEmailConfirm) {
         setHint('Compte créé — vérifie ton e-mail')
@@ -459,26 +459,12 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                         )}
                         disabled={busy}
                       />
-                      <span>J&apos;accepte les CGU et la politique de confidentialité</span>
-                    </label>
-
-                    <label
-                      className={cn(
-                        'flex cursor-pointer items-start gap-2.5 rounded-2xl px-0.5 text-left text-[11px] leading-snug sm:text-xs',
-                        'text-ink/60 dark:text-champagne/70',
-                      )}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={shareSessions}
-                        onChange={(e) => setShareSessions(e.target.checked)}
-                        className={cn(
-                          'mt-0.5 h-3.5 w-3.5 shrink-0 rounded border accent-[var(--vs-azur)]',
-                          'border-black/20 dark:border-white/25',
-                        )}
-                        disabled={busy}
-                      />
-                      <span>{AI_DISCLOSURE.shareCheckbox}</span>
+                      <span>
+                        J&apos;accepte les{' '}
+                        <LegalLink to="/legal/cgu">CGU</LegalLink>, la{' '}
+                        <LegalLink to="/legal/confidentialite">politique de confidentialité</LegalLink> et les{' '}
+                        <LegalLink to="/legal/mentions-legales">mentions légales</LegalLink>.
+                      </span>
                     </label>
 
                     <Hint text={hint} />
@@ -504,6 +490,19 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+function LegalLink({ to, children }: { to: string; children: string }) {
+  return (
+    <Link
+      to={to}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={(event) => event.stopPropagation()}
+      className="underline decoration-black/30 underline-offset-2 dark:decoration-white/30"
+    >
+      {children}
+    </Link>
   )
 }
 

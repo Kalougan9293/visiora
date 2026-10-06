@@ -1,17 +1,12 @@
-import { useState } from 'react'
 import { User } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { LegalFooter } from '@/components/layout/LegalFooter'
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
-import { AI_DISCLOSURE } from '@/data/uiCopy'
-import { supabase } from '@/services/supabase'
 
 export function ProfilePage() {
   const { sessions, stats } = useSessions()
-  const { user, profile, signOut, configured, refreshProfile } = useAuth()
-  const [shareBusy, setShareBusy] = useState(false)
-  const [shareError, setShareError] = useState('')
+  const { user, profile, signOut, configured } = useAuth()
 
   const heardName = sessions
     .slice()
@@ -49,44 +44,6 @@ export function ProfilePage() {
         <Row label="Séances écoutées" value={String(stats.totalListens)} />
         {profile?.cgu_accepted && <Row label="CGU" value="Acceptées" />}
       </Card>
-
-      {user && (
-        <Card className="w-full !p-4 text-left">
-          <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed text-ink/80 dark:text-champagne/90">
-            <input
-              type="checkbox"
-              checked={Boolean(profile?.share_sessions)}
-              disabled={shareBusy}
-              onChange={(e) => {
-                const next = e.target.checked
-                if (!supabase) return
-                setShareBusy(true)
-                setShareError('')
-                void (async () => {
-                  const { error } = await supabase
-                    .from('profiles')
-                    .update({ share_sessions: next })
-                    .eq('id', user.id)
-                  if (error) {
-                    setShareError('Le réglage n’a pas pu être enregistré.')
-                  } else {
-                    await refreshProfile()
-                  }
-                  setShareBusy(false)
-                })()
-              }}
-              className="mt-1 h-4 w-4 shrink-0 accent-[var(--vs-azur)]"
-            />
-            <span>
-              {AI_DISCLOSURE.shareCheckbox}
-              <span className="mt-1 block text-xs text-ink/55 dark:text-champagne/70">
-                {AI_DISCLOSURE.shareRevoke}
-              </span>
-            </span>
-          </label>
-          {shareError && <p className="mt-2 text-center text-xs text-[var(--vs-or)]">{shareError}</p>}
-        </Card>
-      )}
 
       {user && (
         <button

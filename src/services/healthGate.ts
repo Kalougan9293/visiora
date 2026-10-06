@@ -78,7 +78,8 @@ const SCAN_FIELDS = ['q1', 'q7', 'q11'] as const
 export const HEALTH_COPY = {
   title: "Avant d'entrer dans ta visualisation",
   body: "Ta séance touche à la santé et au mieux-être — un territoire précieux et intime. Prends un instant pour lire ceci. Visiora est un outil de bien-être et de développement personnel. Il ne remplace ni un avis médical, ni un suivi psychologique. Les images que tu vas explorer sont celles de ton imaginaire. Continue à prendre soin de toi et à t'entourer des personnes qui t'accompagnent.",
-  checkbox: "J'ai lu et compris. Je suis prêt·e à vivre mon expérience.",
+  checkbox:
+    "J'accepte que les informations de santé que j'ai partagées servent uniquement à créer et conserver ma séance.",
 } as const
 
 /** Le passage par l’écran n’est pas une donnée à conserver. */

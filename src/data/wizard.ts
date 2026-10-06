@@ -177,61 +177,50 @@ export const WIZARD_STEPS: WizardStep[] = [
 
 export const VOICES = [
   {
-    id: 'rituel',
-    name: 'Vanessa',
-    description: '',
-    gender: 'Féminin',
-    tag: '10/10',
-    /** Fond déjà mixé dans le MP3 d’extrait (= même boucle que le rendu). */
-    ambiance: null,
-    preview: '/voices/rituel-preview.mp3?v=bed7',
-  },
-  {
-    id: 'antoni',
-    name: 'Damien',
-    description: '',
-    gender: 'Masculin',
-    tag: '8/10',
-    ambiance: null,
-    preview: '/voices/damien-preview.mp3?v=bed8',
-  },
-  {
-    id: 'onde',
-    name: 'Sabrina',
-    description: '',
-    gender: 'Féminin',
-    tag: '8/10',
-    ambiance: null,
-    preview: '/voices/onde-preview.mp3?v=bed7',
-  },
-  {
-    id: 'louis',
-    name: 'Louis',
-    description: '',
-    gender: 'Masculin',
-    tag: '',
-    ambiance: null,
-    preview: '/voices/louis-preview.mp3?v=bed9',
-  },
-  {
     id: 'aurore',
     name: 'Aurore',
     description: '',
     gender: 'Féminin',
     tag: '',
+    /** Fond déjà mixé dans le MP3 d’extrait. `dry` = la même phrase, sans fond. */
     ambiance: null,
     preview: '/voices/aurore-preview.mp3?v=bed8',
+    dry: '/voices/aurore-dry.mp3',
   },
   {
-    id: 'maelis',
-    name: 'Maëlis',
+    id: 'steve',
+    name: 'Steve',
     description: '',
-    gender: 'Féminin',
+    gender: 'Masculin',
     tag: '',
     ambiance: null,
-    preview: '/voices/maelis-preview.mp3?v=bed7',
+    preview: '/voices/steve-preview.mp3?v=bed1',
+    dry: '/voices/steve-dry.mp3',
   },
 ] as const
+
+/** Anciennes voix, pour relire les séances déjà créées. */
+const RETIRED_VOICE_NAMES: Record<string, string> = {
+  rituel: 'Vanessa',
+  antoni: 'Damien',
+  onde: 'Sabrina',
+  louis: 'Louis',
+  maelis: 'Maëlis',
+}
+
+const ADDED_VOICE = /^v\d{10,16}$/
+
+export function catalogVoiceId(id: string | null | undefined): string {
+  const key = (id ?? '').trim().toLowerCase()
+  if (ADDED_VOICE.test(key) || VOICES.some((voice) => voice.id === key)) return key
+  return 'aurore'
+}
+
+export function voiceLabel(id: string | null | undefined): string {
+  if (!id) return '—'
+  const key = id.toLowerCase()
+  return VOICES.find((voice) => voice.id === key)?.name ?? RETIRED_VOICE_NAMES[key] ?? id
+}
 
 export const AMBIANCES = [
   { id: 'eau', label: 'Eau', description: 'Flux doux' },

@@ -50,6 +50,7 @@ const DEFAULT_VOICES: Record<string, string> = {
   onde: 'CfDJFNP9FItBtQcWKTwh',
   louis: 'vBvYVsqjPzJc9Od66elb',
   aurore: 'ucMmKRQbfDEYyb2IIGax',
+  steve: 'jfEwztGDkpbpy89xeku6',
   maelis: 'x10MLxaAmShMYt7vs7pl',
   rachel: 'zPy2sgLU4pZ7Xrjh87uz',
   bella: 'EXAVITQu4vr4xnSDxMaL',
@@ -104,7 +105,7 @@ async function saveGeneratedScript(
   sessionId: string,
   answers: unknown,
 ): Promise<string> {
-  const fiche = answers && typeof answers === 'object' ? (answers as Record<string, unknown>) : {}
+  const fiche = await ficheForScript(admin, answers)
   const generated = await generateSessionScriptDetailed(fiche)
   let title: string | null = null
   try {
@@ -133,8 +134,17 @@ async function saveGeneratedScript(
   return generated.script
 }
 
-function resolveElevenVoiceId(appVoiceId: string | null): string {
-  const key = (appVoiceId ?? 'rituel').toLowerCase()
+const DEFAULT_APP_VOICE = 'aurore'
+
+function sessionWantsBed(answers: unknown): boolean {
+  if (!answers || typeof answers !== 'object') return true
+  return (answers as Record<string, unknown>).q12_sans_fond !== '1'
+}
+
+function resolveElevenVoiceId(appVoiceId: string | null, override?: string | null): string {
+  const forced = override?.trim()
+  if (forced) return forced
+  const key = (appVoiceId ?? DEFAULT_APP_VOICE).toLowerCase()
   const envMap: Record<string, string | undefined> = {
     rituel: Deno.env.get('ELEVENLABS_VOICE_RITUEL'),
     onde: Deno.env.get('ELEVENLABS_VOICE_ONDE'),
@@ -143,9 +153,41 @@ function resolveElevenVoiceId(appVoiceId: string | null): string {
     bella: Deno.env.get('ELEVENLABS_VOICE_BELLA'),
     louis: Deno.env.get('ELEVENLABS_VOICE_LOUIS'),
     aurore: Deno.env.get('ELEVENLABS_VOICE_AURORE'),
+    steve: Deno.env.get('ELEVENLABS_VOICE_STEVE'),
     maelis: Deno.env.get('ELEVENLABS_VOICE_MAELIS'),
   }
-  return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.rituel
+  return envMap[key] || DEFAULT_VOICES[key] || DEFAULT_VOICES.aurore
+}
+
+async function readVoiceSlot(
+  admin: SupabaseClient,
+  voiceKey: string,
+): Promise<{ elevenVoiceId: string | null; bed: string | null; label: string | null }> {
+  const { data, error } = await admin
+    .from('voice_slots')
+    .select('eleven_voice_id, bed, label')
+    .eq('slot', voiceKey)
+    .maybeSingle()
+  if (error || !data) return { elevenVoiceId: null, bed: null, label: null }
+  const row = data as { eleven_voice_id?: string | null; bed?: string | null; label?: string | null }
+  return {
+    elevenVoiceId: row.eleven_voice_id?.trim() || null,
+    bed: row.bed?.trim() || null,
+    label: row.label?.trim() || null,
+  }
+}
+
+/** Le prompt voit le prénom, comme « aurore » ou « steve ». Jamais l’identifiant technique. */
+async function ficheForScript(
+  admin: SupabaseClient,
+  answers: unknown,
+): Promise<Record<string, unknown>> {
+  const fiche = answers && typeof answers === 'object' ? { ...(answers as Record<string, unknown>) } : {}
+  const voice = String(fiche.q12_voice ?? '').trim().toLowerCase()
+  if (!/^v\d{10,16}$/.test(voice)) return fiche
+  const slot = await readVoiceSlot(admin, voice)
+  if (slot.label) fiche.q12_voice = slot.label
+  return fiche
 }
 
 /** Page HTML ou coupure réseau : le segment suivant peut reprendre. */
@@ -432,10 +474,12 @@ async function renderSilencePcm(params: {
   voiceId: string | null
   bedOffset: number
   fadeOut?: boolean
+  withBed: boolean
+  bedChoice: string | null
   admin: SupabaseClient
 }): Promise<{ pcm: Int16Array; bedOffset: number }> {
-  const appVoiceKey = (params.voiceId ?? 'rituel').toLowerCase()
-  const bed = await loadBed(appVoiceKey, params.admin)
+  const appVoiceKey = (params.voiceId ?? DEFAULT_APP_VOICE).toLowerCase()
+  const bed = params.withBed ? await loadBed(appVoiceKey, params.admin, params.bedChoice) : null
   let pcm = upsampleTts(silencePcm(params.seconds))
   let nextOffset = params.bedOffset
   if (bed) {
@@ -456,6 +500,9 @@ async function processOneStep(params: {
   sessionId: string
   userId: string
   voiceId: string | null
+  withBed: boolean
+  elevenVoiceId: string | null
+  bedChoice: string | null
   script: string
   job: AudioJob
 }): Promise<{ job: AudioJob; done: boolean }> {
@@ -479,6 +526,9 @@ async function runAudioStep(params: {
   sessionId: string
   userId: string
   voiceId: string | null
+  withBed: boolean
+  elevenVoiceId: string | null
+  bedChoice: string | null
   script: string
   job: AudioJob
 }): Promise<{ job: AudioJob; done: boolean }> {
@@ -555,8 +605,8 @@ async function runAudioStep(params: {
       )
       const tts = await elevenTts({
         apiKey: params.elevenKey,
-        voiceId: resolveElevenVoiceId(params.voiceId),
-        appVoiceKey: (params.voiceId ?? 'rituel').toLowerCase(),
+        voiceId: resolveElevenVoiceId(params.voiceId, params.elevenVoiceId),
+        appVoiceKey: (params.voiceId ?? DEFAULT_APP_VOICE).toLowerCase(),
         text,
         previousRequestIds: stitchIds(job),
         seed: sessionSeed(job),
@@ -567,7 +617,9 @@ async function runAudioStep(params: {
       }
       let pcm = levelSpeech(got.pcm)
       let nextOffset = job.bedOffset
-      const bed = await loadBed((params.voiceId ?? 'rituel').toLowerCase(), params.admin)
+      const bed = params.withBed
+        ? await loadBed((params.voiceId ?? DEFAULT_APP_VOICE).toLowerCase(), params.admin, params.bedChoice)
+        : null
       if (bed) {
         const mixed = mixLoopingBed(pcm, bed.pcm, bed.gain, job.bedOffset, bed.voiceScale)
         pcm = mixed.pcm
@@ -593,6 +645,8 @@ async function runAudioStep(params: {
         voiceId: params.voiceId,
         bedOffset: job.bedOffset,
         fadeOut: step.fadeOut,
+        withBed: params.withBed,
+        bedChoice: params.bedChoice,
         admin: params.admin,
       })
       await storeRenderedPart(params.admin, path, rendered.pcm, job.version)
@@ -1273,7 +1327,8 @@ Deno.serve(async (req) => {
     return json({ ok: false, error: 'Script manquant', status: 'failed' }, 409)
   }
   const voiceId = (session.voice_id as string | null) ?? null
-  const voiceKey = (voiceId ?? 'rituel').toLowerCase()
+  const voiceKey = (voiceId ?? DEFAULT_APP_VOICE).toLowerCase()
+  const slot = await readVoiceSlot(admin, voiceKey)
 
   if (!job) {
     job = createAudioJob(script, voiceKey, sessionMinutes(session.answers))
@@ -1386,6 +1441,9 @@ Deno.serve(async (req) => {
         sessionId,
         userId: callerUserId!,
         voiceId,
+        withBed: sessionWantsBed(session.answers),
+        elevenVoiceId: slot.elevenVoiceId,
+        bedChoice: slot.bed,
         script,
         job,
       })

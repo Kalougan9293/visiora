@@ -67,7 +67,7 @@ export function VoicesLabPage() {
       <h1 className="font-display text-3xl tracking-tight text-ink dark:text-cream">Voix</h1>
       <p className="mt-2 max-w-sm text-sm text-ink/68 dark:text-champagne/86">
         Extraits ElevenLabs. Écoute libre, sans créer de séance et sans crédits TTS.
-        Les 3 voix déjà branchées sont marquées.
+        Les voix déjà branchées sont marquées.
       </p>
 
       {!configured && (
