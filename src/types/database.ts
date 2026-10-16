@@ -152,6 +152,24 @@ export interface Database {
         }
         Relationships: []
       }
+      distress_keywords: {
+        Row: {
+          id: string
+          word: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          word: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          word?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       voice_slots: {
         Row: {
           slot: string

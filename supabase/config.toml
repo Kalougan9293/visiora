@@ -8,9 +8,6 @@ policy = "per_worker"
 [functions.generate-session-audio]
 verify_jwt = true
 
-[functions.list-eleven-voices]
-verify_jwt = true
-
 [functions.delete-own-account]
 verify_jwt = true
 

@@ -575,7 +575,7 @@ async function lameEncoder(): Promise<Mp3EncoderInstance> {
 }
 
 const AI_MP3_COMMENT =
-  'Contenu audio généré artificiellement par Visiora. Voix de synthèse.'
+  'Contenu audio généré artificiellement par VisuaRise. Voix de synthèse.'
 
 function latin1(text: string): Uint8Array {
   const out = new Uint8Array(text.length)

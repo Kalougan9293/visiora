@@ -361,7 +361,7 @@ function wordTarget(answers: SessionAnswers | null | undefined): number {
   return 1200
 }
 
-const EXPAND_PROMPT = `Tu allonges un script de visualisation guidée Visiora, sans en changer la méthode.
+const EXPAND_PROMPT = `Tu allonges un script de visualisation guidée VisuaRise, sans en changer la méthode.
 Le texte reçu est trop court. Réécris-le plus développé, en gardant la même structure, les mêmes balises [pause] et les « je » entre guillemets.
 Un seul plan « si… alors… », dans le Mouvement 6.
 Le script se termine au Mouvement 7, sur la phrase « ouvre les yeux ». N’écris rien après.
@@ -451,7 +451,7 @@ export async function generateSessionScript(answers: SessionAnswers | null | und
 
 const TITLE_MAX = 56
 
-const TITLE_PROMPT = `Tu écris le titre d'une séance Visiora, en une seule ligne.
+const TITLE_PROMPT = `Tu écris le titre d'une séance VisuaRise, en une seule ligne.
 Court et concret, comme on le dirait : Marathon de Bordeaux, sous 4h15.
 Tu t'appuies sur l'objectif et l'échéance. Tu n'inventes aucun fait.
 Pas de guillemets, pas de point final, 56 caractères maximum.
@@ -487,13 +487,20 @@ export async function suggestSessionTitle(
     ? Deno.env.get('ANTHROPIC_API_KEY')?.trim() ?? ''
     : Deno.env.get('OPENAI_API_KEY')?.trim() ?? ''
   if (!apiKey) return null
-  const result = anthropic
-    ? await anthropicCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
-    : await chatCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
-  if (!result.ok) {
-    console.warn('[generate-session-audio] titre', result.detail)
-    return null
+
+  /** Un 2ᵉ essai : l’appel titre peut tomber juste après un long script (timeout / rate limit). */
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const result = anthropic
+      ? await anthropicCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
+      : await chatCompletion(apiKey, model, TITLE_PROMPT, userContent, 80)
+    if (result.ok) {
+      const title = cleanSessionTitle(result.script)
+      if (title.length >= 3) return title
+      console.warn('[generate-session-audio] titre trop court', attempt, result.script.slice(0, 80))
+    } else {
+      console.warn('[generate-session-audio] titre', attempt, result.detail)
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 800))
   }
-  const title = cleanSessionTitle(result.script)
-  return title.length >= 3 ? title : null
+  return null
 }

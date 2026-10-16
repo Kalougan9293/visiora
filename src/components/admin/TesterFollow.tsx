@@ -45,6 +45,11 @@ function formatCount(value: number | null) {
   return Math.round(value).toLocaleString('fr-FR')
 }
 
+function formatShareLabel(shared: number, total: number) {
+  const noun = shared === 1 ? 'séance partagée' : 'séances partagées'
+  return `${shared} ${noun} sur ${total}`
+}
+
 function readyProviderCells(provider: ProviderUsage | null): [string, string][] {
   if (!provider) return []
   const cells: [string, string][] = []
@@ -220,8 +225,14 @@ function UserSheet({
   onOpenSession: (id: string | null) => void
 }) {
   const notes = user.sessions.flatMap((session) =>
-    session.notes.map((note) => ({ ...note, title: session.title, before: session.scaleBefore })),
+    session.notes.map((note) => ({
+      ...note,
+      title: session.title,
+      before: session.scaleBefore,
+      canReadRemark: session.shareRead,
+    })),
   )
+  const sharedCount = user.sessions.filter((session) => session.shareRead).length
   return (
     <div className="border-t border-white/10 px-4 py-4">
       <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-center sm:grid-cols-3">
@@ -231,7 +242,7 @@ function UserSheet({
         <Fact label="Écoutes" value={String(user.listenCount)} />
         <Fact label="Jours de pratique" value={String(user.practiceDays)} />
         <Fact label="Espace" value={formatStorage(user.storageBytes)} />
-        <Fact label="Partage" value={user.share ? 'Accepté' : 'Non'} />
+        <Fact label="Partage" value={formatShareLabel(sharedCount, user.sessionCount)} />
         <Fact label="Appareil" value={user.clientLabel ?? '—'} />
       </dl>
       <p className="mt-3 text-center text-[11px] text-black/80 dark:text-white/80">
@@ -252,7 +263,7 @@ function UserSheet({
                   {note.before ?? '—'} → {note.scale}
                   {gap != null ? ` · écart ${formatGap(gap)}` : ''}
                 </span>
-                {user.share && (
+                {note.canReadRemark && (
                   <span className="mt-0.5 block text-[12px]">{note.remark || '—'}</span>
                 )}
               </li>
@@ -284,7 +295,7 @@ function UserSheet({
                   </span>
                   <ChevronDown size={14} className={`shrink-0 text-black dark:text-white ${open ? 'rotate-180' : ''}`} />
                 </button>
-                {open && <SessionSheet session={session} share={user.share} />}
+                {open && <SessionSheet session={session} />}
               </li>
             )
           })}
@@ -294,7 +305,7 @@ function UserSheet({
   )
 }
 
-function SessionSheet({ session, share }: { session: TesterSession; share: boolean }) {
+function SessionSheet({ session }: { session: TesterSession }) {
   const after = session.notes[0]?.scale ?? null
   const gap = session.scaleBefore == null || after == null ? null : after - session.scaleBefore
   return (
@@ -317,7 +328,7 @@ function SessionSheet({ session, share }: { session: TesterSession; share: boole
       {session.status === 'failed' && (
         <p className="mt-3 text-center text-xs text-black dark:text-white">{session.error || 'Échec, sans message enregistré.'}</p>
       )}
-      {share && (
+      {session.shareRead && (
         <p className="mt-3 text-center text-sm text-black dark:text-white">
           Commentaire : {session.notes.find((note) => note.remark)?.remark || '—'}
         </p>

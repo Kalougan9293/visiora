@@ -2,7 +2,6 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Header } from './Header'
 import { BottomNav } from './BottomNav'
 import { MiniPlayer } from '@/components/audio/MiniPlayer'
-import { AtelierWaves } from '@/components/layout/AtelierWaves'
 import { useTheme } from '@/context/ThemeContext'
 import { PlaybackProvider, usePlayback } from '@/context/PlaybackContext'
 import { cn } from '@/lib/utils'
@@ -31,7 +30,6 @@ function ShellFrame() {
         theme === 'dark' ? 'bg-atmosphere-dark' : 'bg-atmosphere-light',
       )}
     >
-      <AtelierWaves />
       <div
         className={cn(
           'relative z-10 mx-auto flex min-h-dvh w-full max-w-[35rem] flex-1 flex-col',

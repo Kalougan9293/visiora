@@ -76,7 +76,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
         : null
       const url = freshUrl || session.audioUrl
       if (!url) return
-      await audioStorage.downloadMp3(url, `visiora-${slug || 'seance'}.mp3`)
+      await audioStorage.downloadMp3(url, `VisuaRise-${slug || 'seance'}.mp3`)
     } catch (err) {
       console.warn('[session] download', err)
     } finally {

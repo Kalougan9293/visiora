@@ -5,10 +5,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { useAuth } from '@/context/AuthContext'
 import { useSessions } from '@/context/SessionsContext'
-import { useTrialMode } from '@/context/TrialModeContext'
-import { APP_COPY } from '@/data/uiCopy'
 import type { VisualizationAnswers } from '@/types'
-import { cn } from '@/lib/utils'
 
 function prenomSeance(sessions: { updatedAt: string; answers: VisualizationAnswers }[]): string {
   const ordered = [...sessions].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
@@ -23,7 +20,6 @@ function prenomSeance(sessions: { updatedAt: string; answers: VisualizationAnswe
 export function Header() {
   const { user, profile, loading, signOut } = useAuth()
   const { sessions } = useSessions()
-  const { atelier, toggleAtelier } = useTrialMode()
   const [authOpen, setAuthOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -74,7 +70,7 @@ export function Header() {
             </div>
 
             <Link to="/" className="flex h-8 items-center">
-              <span className="vs-logotype !text-2xl leading-none">VISIORA</span>
+              <span className="vs-logotype !text-2xl leading-none">VISUARISE</span>
             </Link>
 
             <div className="relative flex h-8 items-center justify-self-end" ref={menuRef}>
@@ -120,19 +116,6 @@ export function Header() {
                 )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={toggleAtelier}
-            aria-pressed={atelier}
-            className={cn(
-              'mx-auto mb-1.5 block rounded-full px-3 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] transition-all',
-              atelier
-                ? 'bg-[var(--vs-azur)]/15 text-[var(--vs-azur)] shadow-[0_0_24px_color-mix(in_srgb,var(--vs-azur)_25%,transparent)]'
-                : 'text-[var(--vs-azur)]/80 hover:text-[var(--vs-azur)]',
-            )}
-          >
-            {atelier ? APP_COPY.trialBannerOn : APP_COPY.trialBanner}
-          </button>
         </div>
       </header>
 

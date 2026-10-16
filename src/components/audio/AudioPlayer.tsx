@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
-import { holdAmbiance, releaseAmbiance, type AmbianceChoice } from '@/services/ambiance'
 import { AI_DISCLOSURE } from '@/data/uiCopy'
 import { hasListenedEnough } from '@/lib/listenThreshold'
 import { usePlayback } from '@/context/PlaybackContext'
@@ -32,7 +31,6 @@ interface AudioPlayerProps {
   library?: boolean
   /** Séance branchée sur le lecteur partagé, qui survit au changement d’onglet. */
   sessionId?: string
-  ambiance?: AmbianceChoice
 }
 
 export function AudioPlayer({
@@ -47,7 +45,6 @@ export function AudioPlayer({
   compact = false,
   library = false,
   sessionId,
-  ambiance = null,
 }: AudioPlayerProps) {
   const playback = usePlayback()
   const shared = library && Boolean(sessionId)
@@ -58,7 +55,6 @@ export function AudioPlayer({
   const [current, setCurrent] = useState(0)
   const [durationSec, setDurationSec] = useState(0)
   const countedRef = useRef(false)
-  const bedHeldRef = useRef(false)
   const onSampleRef = useRef(onListenSample)
   const onBeginRef = useRef(onListenBegin)
   const onDurationRef = useRef(onDuration)
@@ -68,28 +64,13 @@ export function AudioPlayer({
   onBeginRef.current = onListenBegin
   onDurationRef.current = onDuration
 
-  const dropBed = () => {
-    if (!bedHeldRef.current) return
-    bedHeldRef.current = false
-    releaseAmbiance()
-  }
-
-  const takeBed = () => {
-    if (!ambiance) return
-    if (bedHeldRef.current) return
-    bedHeldRef.current = true
-    holdAmbiance(ambiance)
-  }
-
   useEffect(() => {
     setPlaying(false)
     setProgress(0)
     setCurrent(0)
     setDurationSec(0)
     countedRef.current = false
-    dropBed()
-    return () => dropBed()
-  }, [src, ambiance])
+  }, [src])
 
   useEffect(() => {
     const el = audioRef.current
@@ -128,7 +109,6 @@ export function AudioPlayer({
       setPlaying(false)
       setProgress(100)
       markIfEnough(true)
-      dropBed()
       remember(true, true)
     }
     const onPlay = () => setPlaying(true)
@@ -173,7 +153,6 @@ export function AudioPlayer({
     if (!src || !el) return
     if (!el.paused && !el.ended) {
       el.pause()
-      dropBed()
       return
     }
     try {
@@ -184,7 +163,6 @@ export function AudioPlayer({
         countedRef.current = false
       }
       if (fresh) onBeginRef.current?.()
-      takeBed()
       document.querySelectorAll('audio').forEach((node) => {
         if (node !== el) node.pause()
       })
@@ -192,7 +170,6 @@ export function AudioPlayer({
     } catch (err) {
       console.warn('[audio] play failed', err)
       setPlaying(false)
-      dropBed()
     }
   }
 

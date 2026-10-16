@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Visiora AI',
-        short_name: 'Visiora',
+        name: 'VisuaRise AI',
+        short_name: 'VisuaRise',
         description: 'Séances de visualisation guidée, écrites pour toi.',
         theme_color: '#020C25',
         background_color: '#020C25',

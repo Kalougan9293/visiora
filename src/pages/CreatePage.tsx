@@ -12,6 +12,7 @@ import { offersFromSlots, voiceCatalogService, type VoiceOffer } from '@/service
 import { useSessions } from '@/context/SessionsContext'
 import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
+import { DistressScreen } from '@/components/create/DistressScreen'
 import { HealthScreen } from '@/components/create/HealthScreen'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -22,7 +23,13 @@ import { cn, errorMessage } from '@/lib/utils'
 import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
 import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
-import { HEALTH_KEYWORDS, needsHealthScreen } from '@/services/healthGate'
+import {
+  DISTRESS_KEYWORDS,
+  HEALTH_KEYWORDS,
+  needsDistressScreen,
+  needsHealthScreen,
+} from '@/services/healthGate'
+import { distressKeywordsService } from '@/services/distressKeywords'
 import { healthKeywordsService } from '@/services/healthKeywords'
 
 type Answers = Record<string, string>
@@ -44,7 +51,9 @@ export function CreatePage() {
     duration_minutes: '15',
   })
   const [healthGate, setHealthGate] = useState(false)
+  const [distressGate, setDistressGate] = useState(false)
   const [healthWords, setHealthWords] = useState<readonly string[]>(HEALTH_KEYWORDS)
+  const [distressWords, setDistressWords] = useState<readonly string[]>(DISTRESS_KEYWORDS)
   const [adjustBusy, setAdjustBusy] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [replaceOpen, setReplaceOpen] = useState(false)
@@ -54,6 +63,7 @@ export function CreatePage() {
 
   useEffect(() => {
     void healthKeywordsService.list().then(setHealthWords)
+    void distressKeywordsService.list().then(setDistressWords)
   }, [])
 
   useEffect(() => {
@@ -89,9 +99,13 @@ export function CreatePage() {
   useEffect(() => {
     if (phase !== 'wizard' || !user || !step) return
     if (!wizardAttemptRef.current) wizardAttemptRef.current = crypto.randomUUID()
-    const ids = healthGate ? 'sante' : step.fields.map((field) => field.id).join(',')
+    const ids = distressGate
+      ? 'detresse'
+      : healthGate
+        ? 'sante'
+        : step.fields.map((field) => field.id).join(',')
     void metricsService.touchWizard(wizardAttemptRef.current, step.step, ids)
-  }, [phase, user, step, stepIdx, healthGate])
+  }, [phase, user, step, stepIdx, healthGate, distressGate])
 
   const canContinue = useMemo(() => {
     if (!step) return false
@@ -134,13 +148,24 @@ export function CreatePage() {
   const goNext = () => {
     if (stepIdx < WIZARD_STEPS.length - 1) {
       const next = stepIdx + 1
-      if (next === WIZARD_STEPS.length - 1 && needsHealthScreen(answers, healthWords)) {
-        setHealthGate(true)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
+      if (next === WIZARD_STEPS.length - 1) {
+        if (needsDistressScreen(answers, distressWords)) {
+          setDistressGate(true)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          return
+        }
+        if (needsHealthScreen(answers, healthWords)) {
+          setHealthGate(true)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+          return
+        }
       }
       setStepIdx(next)
       window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    if (needsDistressScreen(answers, distressWords)) {
+      setDistressGate(true)
       return
     }
     if (needsHealthScreen(answers, healthWords)) {
@@ -218,6 +243,11 @@ export function CreatePage() {
     }))
     setHealthGate(false)
     setStepIdx(WIZARD_STEPS.length - 1)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const leaveDistress = () => {
+    setDistressGate(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -333,14 +363,16 @@ export function CreatePage() {
     <div className="mx-auto flex h-full min-h-0 w-full max-w-xl flex-1 flex-col items-center text-center">
       <div className="mb-1.5 flex w-full shrink-0 items-center justify-between text-[11px] font-medium uppercase tracking-[0.14em] text-ink/50 dark:text-cream/50">
         <span>
-          {healthGate ? 'Santé' : `Étape ${step.step} / ${step.total}`}
+          {distressGate ? 'Ressources' : healthGate ? 'Santé' : `Étape ${step.step} / ${step.total}`}
         </span>
         <span>{step.percent}%</span>
       </div>
       <ProgressBar value={step.percent} className="mb-2 shrink-0" />
 
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-2">
-        {healthGate ? (
+        {distressGate ? (
+          <DistressScreen onBack={leaveDistress} />
+        ) : healthGate ? (
           <HealthScreen onAccept={acceptHealth} />
         ) : (
         <AnimatePresence mode="wait">

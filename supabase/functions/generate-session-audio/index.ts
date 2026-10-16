@@ -123,6 +123,7 @@ async function saveGeneratedScript(
     scriptWords: spokenWords(generated.script),
     llmPromptTokens: generated.usage?.prompt ?? null,
     llmCompletionTokens: generated.usage?.completion ?? null,
+    titleOk: Boolean(title),
   })
   return generated.script
 }
@@ -1073,8 +1074,6 @@ Deno.serve(async (req) => {
       force?: boolean | string
       reset?: boolean | string
       chain?: boolean | string
-      compare?: boolean | string
-      model?: string
     }
     const fromBody = typeof body.sessionId === 'string' ? body.sessionId.trim() : ''
     const fromQuery = new URL(req.url).searchParams.get('sessionId')?.trim() ?? ''
@@ -1082,47 +1081,6 @@ Deno.serve(async (req) => {
     force = body.force === true || body.force === 'true'
     reset = body.reset === true || body.reset === 'true'
     chain = body.chain === true || body.chain === 'true'
-
-    if (body.compare === true || body.compare === 'true') {
-      if (!sessionId) return json({ error: 'sessionId required' }, 400)
-      const model = body.model?.trim()
-      if (!model) return json({ error: 'model required' }, 400)
-      const adminCompare = createClient(supabaseUrl, serviceKey)
-      const { data: compareSession, error: compareErr } = await adminCompare
-        .from('sessions')
-        .select('id, user_id, answers')
-        .eq('id', sessionId)
-        .maybeSingle()
-      if (compareErr || !compareSession) return json({ error: 'Session introuvable' }, 404)
-      if (!isOrchestrator) {
-        const userClient = createClient(supabaseUrl, anonKey, {
-          global: { headers: { Authorization: authHeader } },
-        })
-        const {
-          data: { user },
-          error: userError,
-        } = await userClient.auth.getUser()
-        if (userError || !user) return json({ error: 'Unauthorized' }, 401)
-        if (compareSession.user_id !== user.id) return json({ error: 'Forbidden' }, 403)
-      }
-      try {
-        const generated = await generateSessionScriptDetailed(
-          compareSession.answers && typeof compareSession.answers === 'object'
-            ? (compareSession.answers as Record<string, unknown>)
-            : {},
-          model,
-        )
-        return json({
-          ok: true,
-          model: generated.model,
-          script: generated.script,
-          usage: generated.usage,
-        })
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : 'compare failed'
-        return json({ ok: false, error: detail }, 500)
-      }
-    }
   } catch {
     return json({ error: 'Invalid JSON body' }, 400)
   }

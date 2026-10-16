@@ -1,4 +1,4 @@
-﻿-- Visiora — schéma initial Supabase
+-- Visiora — schéma initial Supabase
 -- À exécuter dans : Supabase Dashboard → SQL Editor
 
 create table if not exists public.profiles (

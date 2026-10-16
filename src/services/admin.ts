@@ -79,6 +79,8 @@ export type TesterSession = {
   error: string | null
   listenedSeconds: number | null
   estimatedSeconds: number | null
+  /** Partage séance (answers.share_read) — ouvre script + commentaire à l’admin. */
+  shareRead: boolean
   notes: TesterNote[]
   plays: TesterPlay[]
 }
@@ -104,7 +106,6 @@ export type TesterUser = {
   email: string
   createdAt: string
   lastSeenAt: string | null
-  share: boolean
   clientLabel: string | null
   sessionCount: number
   listenCount: number
@@ -155,7 +156,7 @@ function parseTesterFollow(payload: unknown): TesterFollow {
     .filter((row): row is Record<string, unknown> => Boolean(row))
     .filter((row) => {
       const email = String(row.email ?? '')
-      return !isSystemEmail(email) && !isHiddenAdminEmail(email)
+      return isAdminVisibleEmail(email)
     })
   const allowed = new Set(people.map((row) => String(row.id)))
 
@@ -195,6 +196,7 @@ function parseTesterFollow(payload: unknown): TesterFollow {
       error: textOrNull(row.error),
       listenedSeconds: numOrNull(row.listened_seconds),
       estimatedSeconds: numOrNull(row.estimated_seconds),
+      shareRead: row.share_read === true,
       notes: asArray(row.notes).flatMap((item) => {
         const note = asRecord(item)
         const scale = note ? numOrNull(note.scale) : null
@@ -218,7 +220,6 @@ function parseTesterFollow(payload: unknown): TesterFollow {
     email: String(row.email ?? ''),
     createdAt: String(row.created_at ?? ''),
     lastSeenAt: textOrNull(row.last_seen_at),
-    share: row.share_sessions === true,
     clientLabel: textOrNull(row.client_label),
     sessionCount: numOrNull(row.session_count) ?? 0,
     listenCount: numOrNull(row.listen_count) ?? 0,
@@ -275,6 +276,10 @@ function isHiddenAdminEmail(email: string) {
   return e === 'jona_92100@hotmail.com' || e === 'jonathanvillette25@gmail.com'
 }
 
+function isAdminVisibleEmail(email: string) {
+  return !isSystemEmail(email) && !isHiddenAdminEmail(email)
+}
+
 export const adminService = {
   async loadDashboard(): Promise<{ rows: AdminUserRow[]; stats: AdminStats }> {
     if (!isSupabaseConfigured() || !supabase) {
@@ -300,7 +305,7 @@ export const adminService = {
         audioCount: Number(u.audio_count) || 0,
         lastSeenAt: u.last_seen_at,
       }))
-      .filter((u) => !isSystemEmail(u.email) && !isHiddenAdminEmail(u.email))
+      .filter((u) => isAdminVisibleEmail(u.email))
 
     const raw = (statsRes.data as RpcStats | null) ?? {
       users: 0,
@@ -322,7 +327,9 @@ export const adminService = {
     if (!isSupabaseConfigured() || !supabase) return []
     const { data, error } = await supabase.rpc('admin_list_shared_sessions')
     if (error) throw error
-    return (data ?? []).map((row) => ({
+    return (data ?? [])
+      .filter((row) => isAdminVisibleEmail(row.email ?? ''))
+      .map((row) => ({
       userId: row.user_id,
       firstName: row.first_name ?? '',
       email: row.email ?? '',

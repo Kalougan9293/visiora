@@ -36,10 +36,6 @@ function mapRow(row: SlotRow): VoiceSlot {
 export type VoiceOffer = {
   id: string
   name: string
-  description: string
-  gender: string
-  tag: string
-  ambiance: null
   preview: string
   dry: string
 }
@@ -51,10 +47,6 @@ export function offersFromSlots(slots: VoiceSlot[]): VoiceOffer[] {
     const base: VoiceOffer = {
       id: voice.id,
       name: voice.name,
-      description: voice.description,
-      gender: voice.gender,
-      tag: voice.tag,
-      ambiance: null,
       preview: voice.preview,
       dry: voice.dry,
     }
@@ -71,10 +63,6 @@ export function offersFromSlots(slots: VoiceSlot[]): VoiceOffer[] {
     .map((row) => ({
       id: row.slot,
       name: row.label,
-      description: '',
-      gender: '',
-      tag: '',
-      ambiance: null as null,
       preview: row.previewUrl || '',
       dry: row.dryUrl || '',
     }))

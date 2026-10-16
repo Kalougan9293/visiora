@@ -80,7 +80,6 @@ begin
       p.email,
       p.created_at,
       p.last_seen_at,
-      coalesce(p.share_sessions, false) as share_sessions,
       nullif(btrim(p.client_label), '') as client_label,
       (select count(*)::int from public.sessions s where s.user_id = p.id) as session_count,
       (select coalesce(sum(s.listens), 0)::int from public.sessions s where s.user_id = p.id) as listen_count,
@@ -153,13 +152,15 @@ begin
         then round(s.audio_bytes * 8.0 / 128000)::int
         else null
       end as estimated_seconds,
+      (coalesce(s.answers->>'share_read', '0') = '1') as share_read,
       coalesce((
         select jsonb_agg(
           jsonb_build_object(
             'scale', f.scale,
             'created_at', f.created_at,
             'remark', case
-              when coalesce(p.share_sessions, false) then nullif(btrim(f.remark), '')
+              when coalesce(s.answers->>'share_read', '0') = '1'
+              then nullif(btrim(f.remark), '')
               else null
             end
           )

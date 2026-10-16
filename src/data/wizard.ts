@@ -2,7 +2,7 @@
 
 export const CREATE_INTRO = {
   title: 'Ta séance sur mesure',
-  body: "Quelques questions pour cerner ton objectif, ce qui te freine et ce que tu veux ressentir. À partir de tes réponses, Visiora écrit une séance de quinze minutes qui n'existera que pour toi.",
+  body: "Quelques questions pour cerner ton objectif, ce qui te freine et ce que tu veux ressentir. À partir de tes réponses, VisuaRise écrit une séance de quinze minutes qui n'existera que pour toi.",
   detailsLabel: 'CE QUI T’ATTEND',
   details: [
     '13 questions, une dizaine de minutes.',
@@ -179,21 +179,13 @@ export const VOICES = [
   {
     id: 'aurore',
     name: 'Aurore',
-    description: '',
-    gender: 'Féminin',
-    tag: '',
     /** Fond déjà mixé dans le MP3 d’extrait. `dry` = la même phrase, sans fond. */
-    ambiance: null,
     preview: '/voices/aurore-preview.mp3?v=bed8',
     dry: '/voices/aurore-dry.mp3',
   },
   {
     id: 'steve',
     name: 'Steve',
-    description: '',
-    gender: 'Masculin',
-    tag: '',
-    ambiance: null,
     preview: '/voices/steve-preview.mp3?v=bed1',
     dry: '/voices/steve-dry.mp3',
   },
@@ -212,10 +204,4 @@ export function voiceLabel(id: string | null | undefined): string {
   const key = id.toLowerCase()
   return VOICES.find((voice) => voice.id === key)?.name ?? id
 }
-
-export const AMBIANCES = [
-  { id: 'eau', label: 'Eau', description: 'Flux doux' },
-  { id: 'oiseaux', label: 'Oiseaux', description: 'Nature légère' },
-  { id: 'spa', label: 'Spa', description: 'Pad calme' },
-] as const
 

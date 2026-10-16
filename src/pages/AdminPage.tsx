@@ -4,6 +4,7 @@ import { ADMIN_LIMITS, adminService, formatStorage, type AdminSharedSession, typ
 import { VoiceStudio } from '@/components/admin/VoiceStudio'
 import { TesterOverviewBar, TesterUserList } from '@/components/admin/TesterFollow'
 import { WIZARD_STEPS, voiceLabel } from '@/data/wizard'
+import { distressKeywordsService } from '@/services/distressKeywords'
 import { healthKeywordsService } from '@/services/healthKeywords'
 import { downloadMetricsCsv } from '@/services/metrics'
 import { authService } from '@/services/auth'
@@ -54,6 +55,11 @@ export function AdminPage() {
   const [keywordDraft, setKeywordDraft] = useState('')
   const [keywordHint, setKeywordHint] = useState('')
   const [keywordBusy, setKeywordBusy] = useState(false)
+  const [baseDistress, setBaseDistress] = useState<string[]>([])
+  const [extraDistress, setExtraDistress] = useState<string[]>([])
+  const [distressDraft, setDistressDraft] = useState('')
+  const [distressHint, setDistressHint] = useState('')
+  const [distressBusy, setDistressBusy] = useState(false)
   const [tab, setTab] = useState<'users' | 'liste' | 'partage' | 'voix'>('users')
   const [shared, setShared] = useState<AdminSharedSession[]>([])
   const [sharedError, setSharedError] = useState('')
@@ -158,6 +164,10 @@ export function AdminPage() {
       setBaseKeywords(snap.base)
       setExtraKeywords(snap.extras)
     })
+    void distressKeywordsService.snapshot(supabase).then((snap) => {
+      setBaseDistress(snap.base)
+      setExtraDistress(snap.extras)
+    })
   }, [authed, refresh])
 
   async function onAddKeyword(e: FormEvent) {
@@ -193,6 +203,42 @@ export function AdminPage() {
       setKeywordHint(`« ${word} » retiré.`)
     } finally {
       setKeywordBusy(false)
+    }
+  }
+
+  async function onAddDistress(e: FormEvent) {
+    e.preventDefault()
+    const draft = distressDraft.trim()
+    if (!draft || distressBusy) return
+    setDistressBusy(true)
+    setDistressHint('')
+    try {
+      const already = [...baseDistress, ...extraDistress].some(
+        (w) => distressKeywordsService.matchKey(w) === distressKeywordsService.matchKey(draft),
+      )
+      await distressKeywordsService.add(draft, supabase)
+      const snap = await distressKeywordsService.snapshot(supabase)
+      setBaseDistress(snap.base)
+      setExtraDistress(snap.extras)
+      setDistressDraft('')
+      const label = distressKeywordsService.normalizeWord(draft)
+      setDistressHint(already ? `« ${label} » est déjà dans la liste.` : `« ${label} » ajouté.`)
+    } finally {
+      setDistressBusy(false)
+    }
+  }
+
+  async function onRemoveDistress(word: string) {
+    setDistressBusy(true)
+    setDistressHint('')
+    try {
+      await distressKeywordsService.remove(word, supabase)
+      const snap = await distressKeywordsService.snapshot(supabase)
+      setBaseDistress(snap.base)
+      setExtraDistress(snap.extras)
+      setDistressHint(`« ${word} » retiré.`)
+    } finally {
+      setDistressBusy(false)
     }
   }
 
@@ -394,10 +440,10 @@ export function AdminPage() {
 
         <div className="mt-8 flex justify-center gap-2">
           <TabBubble active={tab === 'users'} onClick={() => setTab('users')}>
-            Users
+            Utilisateurs
           </TabBubble>
           <TabBubble active={tab === 'liste'} onClick={() => setTab('liste')}>
-            Liste
+            Mots santé
           </TabBubble>
           <TabBubble active={tab === 'partage'} onClick={() => setTab('partage')}>
             Partagées
@@ -471,53 +517,110 @@ export function AdminPage() {
         {tab === 'voix' && <VoiceStudio />}
 
         {tab === 'liste' && (
-        <div className="mt-6 rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
-          <p className="text-center text-[12px] text-black dark:text-white">
-            Si quelqu’un écrit l’un de ces mots dans le questionnaire, l’écran santé s’affiche.
-          </p>
+        <div className="mt-6 space-y-6">
+          <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
+            <p className="text-center text-[10px] uppercase tracking-[0.14em] text-black dark:text-white">
+              Santé
+            </p>
+            <p className="mt-2 text-center text-[12px] text-black dark:text-white">
+              Si quelqu’un écrit l’un de ces mots, l’écran santé s’affiche (il peut continuer après acceptation).
+            </p>
 
-          <form onSubmit={(e) => void onAddKeyword(e)} className="mt-4 flex gap-2">
-            <input
-              type="text"
-              value={keywordDraft}
-              onChange={(e) => {
-                setKeywordDraft(e.target.value)
-                if (keywordHint) setKeywordHint('')
-              }}
-              placeholder="Ajouter un mot"
-              className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
-              disabled={keywordBusy}
-            />
-            <button
-              type="submit"
-              disabled={keywordBusy || !keywordDraft.trim()}
-              className="rounded-xl bg-[var(--vs-lunaire)] px-3 py-2 text-xs font-semibold text-[var(--vs-nuit)] disabled:opacity-40"
-            >
-              Ajouter
-            </button>
-          </form>
-          {keywordHint && (
-            <p className="mt-2 text-center text-[11px] text-black dark:text-white">{keywordHint}</p>
-          )}
-
-          <KeywordGrid
-            words={baseKeywords}
-            busy={keywordBusy}
-            onRemove={onRemoveKeyword}
-          />
-          {extraKeywords.length > 0 && (
-            <>
-              <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-black dark:text-white">
-                Ajoutés
-              </p>
-              <KeywordGrid
-                words={extraKeywords}
-                busy={keywordBusy}
-                onRemove={onRemoveKeyword}
-                added
+            <form onSubmit={(e) => void onAddKeyword(e)} className="mt-4 flex gap-2">
+              <input
+                type="text"
+                value={keywordDraft}
+                onChange={(e) => {
+                  setKeywordDraft(e.target.value)
+                  if (keywordHint) setKeywordHint('')
+                }}
+                placeholder="Ajouter un mot"
+                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
+                disabled={keywordBusy}
               />
-            </>
-          )}
+              <button
+                type="submit"
+                disabled={keywordBusy || !keywordDraft.trim()}
+                className="rounded-xl bg-[var(--vs-lunaire)] px-3 py-2 text-xs font-semibold text-[var(--vs-nuit)] disabled:opacity-40"
+              >
+                Ajouter
+              </button>
+            </form>
+            {keywordHint && (
+              <p className="mt-2 text-center text-[11px] text-black dark:text-white">{keywordHint}</p>
+            )}
+
+            <KeywordGrid
+              words={baseKeywords}
+              busy={keywordBusy}
+              onRemove={onRemoveKeyword}
+            />
+            {extraKeywords.length > 0 && (
+              <>
+                <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-black dark:text-white">
+                  Ajoutés
+                </p>
+                <KeywordGrid
+                  words={extraKeywords}
+                  busy={keywordBusy}
+                  onRemove={onRemoveKeyword}
+                  added
+                />
+              </>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-white/15 bg-white/[0.04] px-4 py-5">
+            <p className="text-center text-[10px] uppercase tracking-[0.14em] text-black dark:text-white">
+              Détresse
+            </p>
+            <p className="mt-2 text-center text-[12px] text-black dark:text-white">
+              Si quelqu’un écrit l’un de ces mots, la création s’arrête et le message 3114 s’affiche.
+            </p>
+
+            <form onSubmit={(e) => void onAddDistress(e)} className="mt-4 flex gap-2">
+              <input
+                type="text"
+                value={distressDraft}
+                onChange={(e) => {
+                  setDistressDraft(e.target.value)
+                  if (distressHint) setDistressHint('')
+                }}
+                placeholder="Ajouter un mot ou une expression"
+                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
+                disabled={distressBusy}
+              />
+              <button
+                type="submit"
+                disabled={distressBusy || !distressDraft.trim()}
+                className="rounded-xl bg-[var(--vs-lunaire)] px-3 py-2 text-xs font-semibold text-[var(--vs-nuit)] disabled:opacity-40"
+              >
+                Ajouter
+              </button>
+            </form>
+            {distressHint && (
+              <p className="mt-2 text-center text-[11px] text-black dark:text-white">{distressHint}</p>
+            )}
+
+            <KeywordGrid
+              words={baseDistress}
+              busy={distressBusy}
+              onRemove={onRemoveDistress}
+            />
+            {extraDistress.length > 0 && (
+              <>
+                <p className="mt-4 text-[11px] uppercase tracking-[0.14em] text-black dark:text-white">
+                  Ajoutés
+                </p>
+                <KeywordGrid
+                  words={extraDistress}
+                  busy={distressBusy}
+                  onRemove={onRemoveDistress}
+                  added
+                />
+              </>
+            )}
+          </div>
         </div>
         )}
       </div>

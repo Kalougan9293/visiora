@@ -5,11 +5,11 @@ export const AI_DISCLOSURE = {
     'Tu réponds à une intelligence artificielle, pas à une personne. Tes réponses servent à générer automatiquement le texte et la voix de ta séance.',
   player: 'Voix générée artificiellement.',
   privacy:
-    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez Visiora n’y accède, sauf si tu choisis de partager une séance.',
+    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez VisuaRise n’y accède, sauf si tu choisis de partager une séance.',
   signupPrivacyTitle: 'Ton espace reste privé.',
   signupPrivacy:
-    'Tes réponses et tes séances ne sont visibles que par toi : personne chez Visiora ne les lit, sauf si tu choisis de partager une séance. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
-  shareCheckbox: "J'accepte que Visiora lise cette séance pour améliorer la méthode.",
+    'Tes réponses et tes séances ne sont visibles que par toi : personne chez VisuaRise ne les lit, sauf si tu choisis de partager une séance. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
+  shareCheckbox: "J'accepte que VisuaRise lise cette séance pour améliorer la méthode.",
   shareRevoke: 'Tu peux retirer cette autorisation à tout moment.',
   afterTitle: 'Comment te sens-tu maintenant ?',
   afterScaleHint: '1, très bas. 10, très bien.',
@@ -86,13 +86,16 @@ export const PROGRESS_COPY = {
 } as const
 
 export const APP_COPY = {
-  trialBanner: "Version d'essai",
-  trialBannerOn: "Essai actif — recliquer pour quitter",
   generating:
     "Ta séance est en cours d'écriture. Tu peux fermer l'application, elle t'attendra dans ta bibliothèque.",
+  breathIn: 'Inspire',
+  breathOut: 'Expire',
+  breathStill: 'Respire',
+  breathInvite: 'Laisse l’onde guider ton souffle. Ta séance s’écrit pendant que tu te prépares.',
+  breathAside: 'tu peux quitter l’app, elle t’attendra',
   generateError: "La génération n'a pas abouti. Tu peux relancer, rien n'est perdu.",
   deleteConfirm: 'Es-tu sûr ?',
   footerLegal:
-    "Visiora est un outil de bien-être et de développement personnel. Il ne remplace ni un avis médical, ni un suivi psychologique.",
-  footerCredit: '© 2026 Visiora — Jonathan Villette',
+    "VisuaRise est un outil de bien-être et de développement personnel. Il ne remplace ni un avis médical, ni un suivi psychologique.",
+  footerCredit: '© 2026 VisuaRise — Jonathan Villette',
 } as const
