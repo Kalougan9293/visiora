@@ -633,8 +633,15 @@ const ANSWER_LABELS = new Map(
 )
 
 function answerLines(answers: Record<string, unknown>) {
-  const skip = new Set(['health_ack', 'health_ack_at', 'q12_tutoiement', 'duration_minutes', 'share_read'])
-  return Object.entries(answers).flatMap(([key, value]) => {
+  const skip = new Set([
+    'health_ack',
+    'health_ack_at',
+    'q12_tutoiement',
+    'duration_minutes',
+    'share_read',
+    'apaisement',
+  ])
+  const lines = Object.entries(answers).flatMap(([key, value]) => {
     if (skip.has(key) || value == null || String(value).trim() === '') return []
     const raw = Array.isArray(value) ? value.join(', ') : String(value)
     const text = key === 'q12_voice'
@@ -649,6 +656,11 @@ function answerLines(answers: Record<string, unknown>) {
         : (ANSWER_LABELS.get(key) ?? key)
     return [{ label, text }]
   })
+  /** Type de séance neutre — jamais « détresse détectée ». */
+  if (answers.apaisement === '1') {
+    lines.unshift({ label: 'Type', text: 'Séance d’apaisement' })
+  }
+  return lines
 }
 
 function SharedSessions({

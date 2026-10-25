@@ -21,6 +21,11 @@ function asText(value: unknown): string {
   return ''
 }
 
+function isApaisement(answers: Record<string, unknown>): boolean {
+  const v = answers.apaisement
+  return v === '1' || v === true
+}
+
 function q12Line(answers: Record<string, unknown>): string {
   const registre = asText(answers.q12_registre)
   const voice = asText(answers.q12_voice)
@@ -31,8 +36,27 @@ function q12Line(answers: Record<string, unknown>): string {
   return `Q12 ${parts.join(' · ')}`
 }
 
+function formatApaisementFiche(answers: Record<string, unknown>): string {
+  const prenom = asText(answers.q13)
+  const lines: string[] = [
+    'Séance d’apaisement VisuaRise (pas une séance d’objectif).',
+    '',
+  ]
+  if (prenom) lines.push(`Prénom à entendre (optionnel) : ${prenom}`)
+  lines.push(q12Line(answers))
+  const durationRaw = Number(answers.duration_minutes)
+  const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
+  const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
+  lines.push(`Durée cible : ${duration} minutes, environ ${words} mots.`)
+  lines.push('')
+  lines.push('Génère uniquement le script de cette séance d’apaisement.')
+  return lines.join('\n')
+}
+
 export function formatProfileFiche(answers: Record<string, unknown> | null | undefined): string {
   const src = answers && typeof answers === 'object' ? answers : {}
+  if (isApaisement(src)) return formatApaisementFiche(src)
+
   const lines: string[] = ['Fiche profil utilisateur :', '']
   for (const row of Q_LABELS) {
     const value = asText(src[row.key])

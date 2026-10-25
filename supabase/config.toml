@@ -17,6 +17,8 @@ verify_jwt = true
 [functions.admin-voice-studio]
 verify_jwt = true
 
+[functions.confirm-distress]
+verify_jwt = true
 
 
 

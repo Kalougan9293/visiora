@@ -24,11 +24,12 @@ import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
 import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
 import {
+  APAISEMENT_FLAG,
   DISTRESS_KEYWORDS,
   HEALTH_KEYWORDS,
-  needsDistressScreen,
   needsHealthScreen,
 } from '@/services/healthGate'
+import { evaluateDistress } from '@/services/confirmDistress'
 import { distressKeywordsService } from '@/services/distressKeywords'
 import { healthKeywordsService } from '@/services/healthKeywords'
 
@@ -52,6 +53,7 @@ export function CreatePage() {
   })
   const [healthGate, setHealthGate] = useState(false)
   const [distressGate, setDistressGate] = useState(false)
+  const [distressChecking, setDistressChecking] = useState(false)
   const [healthWords, setHealthWords] = useState<readonly string[]>(HEALTH_KEYWORDS)
   const [distressWords, setDistressWords] = useState<readonly string[]>(DISTRESS_KEYWORDS)
   const [adjustBusy, setAdjustBusy] = useState(false)
@@ -60,6 +62,7 @@ export function CreatePage() {
   const [shareRead, setShareRead] = useState(false)
   const hydratedAdjustRef = useRef<string | null>(null)
   const wizardAttemptRef = useRef<string | null>(null)
+  const replaceKindRef = useRef<'normal' | 'apaisement'>('normal')
 
   useEffect(() => {
     void healthKeywordsService.list().then(setHealthWords)
@@ -145,43 +148,59 @@ export function CreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- enter wizard only after login
   }, [user, pendingStart])
 
+  const afterDistressClear = (then: () => void) => {
+    if (needsHealthScreen(answers, healthWords)) {
+      setHealthGate(true)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    then()
+  }
+
+  const runDistressGate = async (onClear: () => void) => {
+    if (distressChecking) return
+    setDistressChecking(true)
+    try {
+      const result = await evaluateDistress(answers, distressWords)
+      if (result.show) {
+        setDistressGate(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      afterDistressClear(onClear)
+    } finally {
+      setDistressChecking(false)
+    }
+  }
+
   const goNext = () => {
+    if (distressChecking || distressGate) return
     if (stepIdx < WIZARD_STEPS.length - 1) {
       const next = stepIdx + 1
       if (next === WIZARD_STEPS.length - 1) {
-        if (needsDistressScreen(answers, distressWords)) {
-          setDistressGate(true)
+        void runDistressGate(() => {
+          setStepIdx(next)
           window.scrollTo({ top: 0, behavior: 'smooth' })
-          return
-        }
-        if (needsHealthScreen(answers, healthWords)) {
-          setHealthGate(true)
-          window.scrollTo({ top: 0, behavior: 'smooth' })
-          return
-        }
+        })
+        return
       }
       setStepIdx(next)
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
     }
-    if (needsDistressScreen(answers, distressWords)) {
-      setDistressGate(true)
-      return
-    }
-    if (needsHealthScreen(answers, healthWords)) {
-      setHealthGate(true)
-      return
-    }
-    if (generationBusy) return
-    if (!adjustId && !sessionsReady) return
-    if (!adjustId && sessionsEvictedByNewOne(sessions).length) {
-      setReplaceOpen(true)
-      return
-    }
-    void submitCreate()
+    void runDistressGate(() => {
+      if (generationBusy) return
+      if (!adjustId && !sessionsReady) return
+      if (!adjustId && sessionsEvictedByNewOne(sessions).length) {
+        replaceKindRef.current = 'normal'
+        setReplaceOpen(true)
+        return
+      }
+      void submitCreate()
+    })
   }
 
-  const submitCreate = () => {
+  const persistSession = (payload: Answers, options?: { allowAdjust?: boolean }) => {
     if (adjustBusy || generationBusy) return
     if (!user) {
       setPendingStart(true)
@@ -192,15 +211,9 @@ export function CreatePage() {
     setAdjustBusy(true)
     setReplaceOpen(false)
     setSubmitError('')
-    const payload: Answers = {
-      ...answers,
-      q12_tutoiement: 'tu',
-      duration_minutes: '15',
-      ...(adjustId ? {} : { share_read: shareRead ? '1' : '0' }),
-    }
-    const dropping = adjustId ? [] : sessionsEvictedByNewOne(sessions)
+    const dropping = options?.allowAdjust && adjustId ? [] : sessionsEvictedByNewOne(sessions)
     const run = async () => {
-      if (adjustId) {
+      if (options?.allowAdjust && adjustId) {
         await adjustSession(adjustId, payload)
         return false
       }
@@ -233,6 +246,44 @@ export function CreatePage() {
         setSubmitError(errorMessage(err, 'Impossible d’enregistrer la séance'))
       })
       .finally(() => setAdjustBusy(false))
+  }
+
+  const buildNormalPayload = (): Answers => ({
+    ...answers,
+    q12_tutoiement: 'tu',
+    duration_minutes: '15',
+    ...(adjustId ? {} : { share_read: shareRead ? '1' : '0' }),
+  })
+
+  const buildApaisementPayload = (): Answers => ({
+    ...answers,
+    [APAISEMENT_FLAG]: '1',
+    q12_tutoiement: 'tu',
+    q12_voice: answers.q12_voice || 'aurore',
+    q12_registre: answers.q12_registre === 'spirituel' ? 'spirituel' : 'neutre',
+    duration_minutes: '15',
+    share_read: shareRead ? '1' : '0',
+  })
+
+  const submitCreate = () => {
+    persistSession(buildNormalPayload(), { allowAdjust: true })
+  }
+
+  const submitApaisement = () => {
+    if (adjustBusy || generationBusy) return
+    if (!user) {
+      setPendingStart(true)
+      setAuthOpen(true)
+      setSubmitError('Connecte-toi pour enregistrer la séance')
+      return
+    }
+    if (sessionsEvictedByNewOne(sessions).length) {
+      replaceKindRef.current = 'apaisement'
+      setReplaceOpen(true)
+      return
+    }
+    setDistressGate(false)
+    persistSession(buildApaisementPayload())
   }
 
   const acceptHealth = () => {
@@ -371,7 +422,11 @@ export function CreatePage() {
 
       <div className="flex min-h-0 w-full flex-1 flex-col justify-center overflow-y-auto py-2">
         {distressGate ? (
-          <DistressScreen onBack={leaveDistress} />
+          <DistressScreen
+            onBack={leaveDistress}
+            onApaisement={submitApaisement}
+            busy={adjustBusy || generationBusy}
+          />
         ) : healthGate ? (
           <HealthScreen onAccept={acceptHealth} />
         ) : (
@@ -422,10 +477,17 @@ export function CreatePage() {
           titles={sessionsEvictedByNewOne(sessions).map((session) => session.title)}
           busy={adjustBusy}
           onCancel={() => setReplaceOpen(false)}
-          onConfirm={() => void submitCreate()}
+          onConfirm={() => {
+            if (replaceKindRef.current === 'apaisement') {
+              setDistressGate(false)
+              persistSession(buildApaisementPayload())
+              return
+            }
+            void submitCreate()
+          }}
         />
       )}
-      {!healthGate && !adjustId && stepIdx === WIZARD_STEPS.length - 1 && (
+      {!distressGate && !healthGate && !adjustId && stepIdx === WIZARD_STEPS.length - 1 && (
         <label className="mx-auto flex w-full max-w-md cursor-pointer items-start gap-2.5 pt-2 text-left text-[13px] leading-snug text-ink/70 dark:text-[var(--vs-lunaire)]/80">
           <input
             type="checkbox"
@@ -436,8 +498,14 @@ export function CreatePage() {
           <span>{AI_DISCLOSURE.shareCheckbox}</span>
         </label>
       )}
+      {!distressGate && (
       <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
-        <Button variant="outline" className="flex-1 rounded-full !py-2.5 text-[15px]" onClick={goBack}>
+        <Button
+          variant="outline"
+          className="flex-1 rounded-full !py-2.5 text-[15px]"
+          disabled={distressChecking}
+          onClick={goBack}
+        >
           <ArrowLeft size={17} />
           Retour
         </Button>
@@ -445,6 +513,7 @@ export function CreatePage() {
         <Button
           className="flex-1 rounded-full !py-2.5 text-[15px]"
           disabled={
+            distressChecking ||
             !canContinue ||
             adjustBusy ||
             (stepIdx === WIZARD_STEPS.length - 1 &&
@@ -452,19 +521,22 @@ export function CreatePage() {
           }
           onClick={goNext}
         >
-          {stepIdx === WIZARD_STEPS.length - 1
-            ? adjustBusy
-              ? adjustId
-                ? 'Regénération…'
-                : 'Création…'
-              : adjustId
-                ? 'Regénérer'
-                : 'Générer'
-            : 'Suivant'}
+          {distressChecking
+            ? 'Vérification…'
+            : stepIdx === WIZARD_STEPS.length - 1
+              ? adjustBusy
+                ? adjustId
+                  ? 'Regénération…'
+                  : 'Création…'
+                : adjustId
+                  ? 'Regénérer'
+                  : 'Générer'
+              : 'Suivant'}
           <ArrowRight size={17} />
         </Button>
         )}
       </div>
+      )}
     </div>
   )
 }

@@ -42,5 +42,8 @@ insert into public.distress_keywords (word) values
   ('envie de mourir'),
   ('finir mes jours'),
   ('mettre fin a mes jours'),
-  ('plus envie de vivre')
+  ('plus envie de vivre'),
+  ('me foutre en l''air'),
+  ('ne plus etre la'),
+  ('me supprimer')
 on conflict (word) do nothing;

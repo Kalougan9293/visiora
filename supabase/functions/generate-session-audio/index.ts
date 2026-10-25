@@ -1139,7 +1139,7 @@ Deno.serve(async (req) => {
   const canBackground = typeof EdgeRuntime !== 'undefined' && Boolean(EdgeRuntime?.waitUntil)
 
   /** Script d'abord, hors du TTS : un seul appel au modèle, pas de timeout client. */
-  if (!hasStoredScript(session.script) && canGenerateScript()) {
+  if (!hasStoredScript(session.script) && canGenerateScript(session.answers as Record<string, unknown>)) {
     if (isScriptInProgress(session.audio_job)) {
       return json({ ok: true, accepted: true, status: 'generating', progress: 8 }, 202)
     }

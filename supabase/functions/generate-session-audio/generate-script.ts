@@ -23,6 +23,12 @@ function asText(value: unknown): string {
   return ''
 }
 
+export function isApaisementSession(answers: SessionAnswers | null | undefined): boolean {
+  if (!answers || typeof answers !== 'object') return false
+  const v = answers.apaisement
+  return v === '1' || v === true
+}
+
 function q12Line(answers: SessionAnswers): string {
   const registre = asText(answers.q12_registre)
   const voice = asText(answers.q12_voice)
@@ -33,9 +39,50 @@ function q12Line(answers: SessionAnswers): string {
   return `Q12 ${parts.join(' · ')}`
 }
 
+function durationLine(src: SessionAnswers): string {
+  const durationRaw = Number(src.duration_minutes)
+  const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
+  const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
+  return duration === 15
+    ? 'Durée cible : 15 minutes. Écris entre 1 200 et 1 400 mots, avec les pauses. Va jusqu’à la fermeture. Ne t’arrête pas au milieu.'
+    : `Durée cible : ${duration} minutes, environ ${words} mots.`
+}
+
+/**
+ * Séance d’apaisement : ne pas renvoyer les réponses du questionnaire
+ * (risque de reprendre des mots de détresse dans le script).
+ */
+function formatApaisementFiche(answers: SessionAnswers): string {
+  const prenom = asText(answers.q13)
+  const lines: string[] = [
+    'Séance d’apaisement VisuaRise (pas une séance d’objectif).',
+    '',
+    'Consignes obligatoires :',
+    '- Accueil doux, sans rien demander ni rien promettre.',
+    '- Respiration lente, ancrage dans le corps (appuis, contact, sons autour).',
+    '- Un lieu sûr, calme et rassurant.',
+    '- Douceur et bienveillance envers soi.',
+    '- Retour progressif, puis un rappel tout en douceur qu’on peut appeler le 3114.',
+    '- Pas de travail sur un objectif ni sur un obstacle.',
+    '- Pas de projection dans l’avenir.',
+    '- Ne jamais inventer ni reprendre de mots de détresse, de souffrance ou de crise.',
+    '- Tutoiement. Balises [pause] et structure [Mouvement N] comme d’habitude.',
+    '- Termine sur la phrase « ouvre les yeux ». N’écris rien après.',
+    '',
+  ]
+  if (prenom) lines.push(`Prénom à entendre (optionnel) : ${prenom}`)
+  lines.push(q12Line(answers))
+  lines.push(durationLine(answers))
+  lines.push('')
+  lines.push('Génère uniquement le script de cette séance d’apaisement.')
+  return lines.join('\n')
+}
+
 /** Message utilisateur uniquement — jamais le prompt-maître. */
 export function formatProfileFiche(answers: SessionAnswers | null | undefined): string {
   const src = answers && typeof answers === 'object' ? answers : {}
+  if (isApaisementSession(src)) return formatApaisementFiche(src)
+
   const lines: string[] = ['Fiche profil utilisateur :', '']
   for (const row of Q_LABELS) {
     const value = asText(src[row.key])
@@ -46,18 +93,31 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
     lines.push(`${row.label} : ${value}`)
   }
   lines.push(q12Line(src))
-  const durationRaw = Number(src.duration_minutes)
-  const duration = durationRaw === 3 || durationRaw === 10 || durationRaw === 15 ? durationRaw : 15
-  const words = duration === 3 ? 320 : duration === 10 ? 850 : 1200
-  lines.push(
-    duration === 15
-      ? 'Durée cible : 15 minutes. Écris entre 1 200 et 1 400 mots, avec les pauses. Va jusqu’à la fermeture. Ne t’arrête pas au milieu.'
-      : `Durée cible : ${duration} minutes, environ ${words} mots.`,
-  )
+  lines.push(durationLine(src))
   lines.push('')
   lines.push('Génère le script de séance pour ce profil.')
   return lines.join('\n')
 }
+
+/** Prompt système apaisement (remplace le prompt-maître objectif). */
+export const APAISEMENT_SYSTEM_PROMPT = `Tu écris une séance d’apaisement VisuaRise, en français, tutoiement.
+Ce n’est pas une séance de visualisation d’objectif.
+
+Structure douce, avec balises [Mouvement N] et [pause] :
+1. Accueil calme, sans question, sans promesse.
+2. Respiration lente et ancrage corporel (points d’appui, contact, sons autour).
+3. Un lieu sûr, calme, rassurant — description sensorielle simple.
+4. Douceur et bienveillance envers soi, sans analyse ni conseil.
+5. Retour progressif au moment présent.
+6. Rappel tout en douceur qu’on peut appeler le 3114 si besoin.
+7. Fermeture sur la phrase exacte « ouvre les yeux ». Rien après.
+
+Interdits absolus :
+- travailler un objectif, un obstacle, une échéance ou une projection future ;
+- reprendre, citer ou reformuler des mots de détresse, de suicide ou de crise ;
+- dramatiser, diagnostiquer, moraliser.
+
+Réponds uniquement avec le script.`
 
 function stripFences(text: string): string {
   const trimmed = text.trim()
@@ -200,8 +260,11 @@ async function anthropicCompletion(
   return { ok: true, script, usage, cut }
 }
 
-export function canGenerateScript(): boolean {
-  if (!Deno.env.get('VISIORA_MASTER_PROMPT')?.trim()) return false
+export function canGenerateScript(answers?: SessionAnswers | null): boolean {
+  const hasPrompt = isApaisementSession(answers)
+    ? Boolean(Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || APAISEMENT_SYSTEM_PROMPT)
+    : Boolean(Deno.env.get('VISIORA_MASTER_PROMPT')?.trim())
+  if (!hasPrompt) return false
   const model = scriptModelFromEnv()
   if (model.startsWith('claude')) return Boolean(Deno.env.get('ANTHROPIC_API_KEY')?.trim())
   return Boolean(Deno.env.get('OPENAI_API_KEY')?.trim())
@@ -368,6 +431,12 @@ Le script se termine au Mouvement 7, sur la phrase « ouvre les yeux ». N’éc
 Garde le tutoiement et les faits de la fiche. N’invente pas d’objectif, de date ou de symptôme.
 Réponds uniquement avec le script.`
 
+const EXPAND_APAISEMENT_PROMPT = `Tu allonges un script d’apaisement VisuaRise, sans en changer l’intention.
+Le texte reçu est trop court. Réécris-le plus développé, toujours doux et concret.
+Garde les balises [pause] et [Mouvement N]. Pas d’objectif, pas d’obstacle, pas de projection future.
+Ne reprends aucun mot de détresse. Termine sur « ouvre les yeux ». Rien après.
+Réponds uniquement avec le script.`
+
 async function expandIfShort(
   answers: SessionAnswers | null | undefined,
   draft: string,
@@ -383,20 +452,28 @@ async function expandIfShort(
 Script trop court (${before} mots, vise environ ${target}) :
 
 ${draft}`
+  const expandPrompt = isApaisementSession(answers) ? EXPAND_APAISEMENT_PROMPT : EXPAND_PROMPT
   const result = anthropic
-    ? await anthropicCompletion(apiKey, model, EXPAND_PROMPT, userContent)
-    : await chatCompletion(apiKey, model, EXPAND_PROMPT, userContent)
+    ? await anthropicCompletion(apiKey, model, expandPrompt, userContent)
+    : await chatCompletion(apiKey, model, expandPrompt, userContent)
   if (!result.ok || !looksLikeSessionScript(result.script)) return draft
   if (spokenWords(result.script) <= before) return draft
   console.log('[generate-session-audio] script allongé', spokenWords(result.script))
   return result.script
 }
 
+function systemPromptFor(answers: SessionAnswers | null | undefined): string {
+  if (isApaisementSession(answers)) {
+    return Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || APAISEMENT_SYSTEM_PROMPT
+  }
+  return Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() ?? ''
+}
+
 export async function generateSessionScriptDetailed(
   answers: SessionAnswers | null | undefined,
   modelOverride?: string,
 ): Promise<{ script: string; model: string; usage?: ScriptUsage }> {
-  const prompt = Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() ?? ''
+  const prompt = systemPromptFor(answers)
   if (!prompt) throw new Error('Génération script : secrets manquants')
 
   const userContent = formatProfileFiche(answers)
@@ -476,6 +553,7 @@ export async function suggestSessionTitle(
   answers: SessionAnswers | null | undefined,
 ): Promise<string | null> {
   const src = answers && typeof answers === 'object' ? answers : {}
+  if (isApaisementSession(src)) return 'Séance d’apaisement'
   const goal = asText(src.q1)
   if (!goal) return null
   const when = asText(src.q2)

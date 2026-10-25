@@ -13,6 +13,9 @@ function voiceFromAnswers(answers: VisualizationAnswers): string | null {
 }
 
 function titleFromAnswers(answers: VisualizationAnswers): string {
+  if (answers.apaisement === '1') {
+    return 'Séance d’apaisement'
+  }
   const q1 = answers.q1
   if (typeof q1 === 'string' && q1.trim()) {
     return q1.trim().slice(0, 42) + (q1.trim().length > 42 ? '…' : '')
