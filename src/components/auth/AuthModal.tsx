@@ -170,12 +170,12 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
   )
 
   const labelClass = cn(
-    'mb-1.5 block text-left text-[10px] font-semibold uppercase tracking-[0.16em]',
+    'mb-1.5 block text-left text-[12px] font-semibold uppercase tracking-[0.16em]',
     'text-ink/55 dark:text-champagne/70',
   )
 
   const linkClass = cn(
-    'text-center text-xs transition',
+    'text-center text-[13px] transition sm:text-sm',
     'text-ink/55 hover:text-[var(--vs-azur)] dark:text-[var(--vs-brume)] dark:hover:text-[var(--vs-azur)]',
   )
 
@@ -183,11 +183,15 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     mode === 'login'
       ? 'Connexion'
       : signupStep === 1
-        ? 'Créer un compte'
+        ? 'Créer ton espace'
         : 'Sécuriser le compte'
 
   const subtitle =
-    mode === 'login' ? 'Retrouve tes séances et ton suivi.' : 'Choisis un mot de passe solide.'
+    mode === 'login'
+      ? 'Retrouve tes séances et ton suivi.'
+      : signupStep === 1
+        ? 'Quelques informations pour que VisuaRise te reconnaisse.'
+        : 'Choisis un mot de passe solide.'
 
   return (
     <AnimatePresence>
@@ -331,9 +335,22 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 </button>
                 <Hint text={hint} />
                 <PrimaryButton label={busy ? '…' : 'Se connecter'} disabled={busy} />
-                <button type="button" onClick={() => switchMode('signup')} className={cn(linkClass, 'w-full pt-1')}>
-                  Pas de compte ? Créer un compte
-                </button>
+                <div className="pt-3">
+                  <p className="text-center text-[13px] text-ink/55 dark:text-champagne/70">
+                    Pas encore de compte ?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => switchMode('signup')}
+                    className={cn(
+                      'mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full border px-4 py-3 text-base font-semibold transition',
+                      'border-[var(--vs-azur)]/45 text-[var(--vs-azur)]',
+                      'hover:bg-[var(--vs-azur)]/10 dark:border-[var(--vs-azur)]/55 dark:text-[var(--vs-ecume)] dark:hover:bg-[var(--vs-azur)]/15',
+                    )}
+                  >
+                    Créer mon compte
+                  </button>
+                </div>
               </form>
             ) : (
               <AnimatePresence mode="wait">
@@ -376,9 +393,13 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                     <button
                       type="button"
                       onClick={() => switchMode('login')}
-                      className={cn(linkClass, 'w-full pt-1')}
+                      className={cn(
+                        'w-full pt-3 text-center text-base font-medium transition',
+                        'text-ink/75 underline decoration-[var(--vs-azur)]/50 underline-offset-4',
+                        'hover:text-[var(--vs-azur)] dark:text-champagne/90 dark:hover:text-[var(--vs-ecume)]',
+                      )}
                     >
-                      Déjà un compte ?
+                      Déjà un compte ? Se connecter
                     </button>
                   </motion.form>
                 ) : (

@@ -40,7 +40,7 @@ export function HomePage() {
             <span className="vs-titre-accent">{HOME_COPY.line3}</span>
           </h1>
 
-          <p className="mt-5 max-w-lg text-sm leading-relaxed text-ink/82 dark:text-cream/92 md:text-base">
+          <p className="mt-5 max-w-lg text-base leading-relaxed text-ink/82 dark:text-cream/92">
             {HOME_COPY.intro}
           </p>
 

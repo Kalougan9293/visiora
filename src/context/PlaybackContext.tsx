@@ -91,7 +91,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     if (!hasListenedEnough(el.currentTime, el.duration, atEnd)) return
     countedRef.current = true
     markRef.current(id)
-  }, [])
+    /** Aligne l’admin (listen_plays.completed) sur le seuil 80 %, pas seulement la fin du MP3. */
+    const length = Number.isFinite(el.duration) ? el.duration : 0
+    const now = Number.isFinite(el.currentTime) ? el.currentTime : 0
+    remember({ current: now, duration: length, ended: true }, true)
+  }, [remember])
 
   useEffect(() => {
     const el = audioRef.current

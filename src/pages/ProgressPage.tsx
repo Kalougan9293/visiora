@@ -102,7 +102,7 @@ export function ProgressPage() {
         <h1 className="font-display text-3xl tracking-tight text-ink dark:text-cream sm:text-[2rem]">
           {PROGRESS_COPY.title}
         </h1>
-        <p className="mt-1.5 text-sm text-ink/68 dark:text-champagne/86">
+        <p className="mt-1.5 text-base text-ink/68 dark:text-champagne/86">
           {PROGRESS_COPY.subtitle}
         </p>
       </header>
@@ -140,18 +140,27 @@ export function ProgressPage() {
 
       {selected && stats && (
         <>
-          <select
-            aria-label="Visualisation"
-            value={selected.id}
-            onChange={(event) => setSelectedId(event.target.value)}
-            className="w-full rounded-2xl border border-black/10 bg-[var(--vs-surface)] px-3 py-3 text-center text-sm text-ink [text-align-last:center] dark:border-[var(--vs-bordure)] dark:text-cream"
-          >
-            {sessions.map((session) => (
-              <option key={session.id} value={session.id}>
-                {session.title}
-              </option>
-            ))}
-          </select>
+          <div className="w-full space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/58 dark:text-champagne/78">
+              {PROGRESS_COPY.sessionPicker}
+            </p>
+            <select
+              aria-label={PROGRESS_COPY.sessionPicker}
+              value={selected.id}
+              onChange={(event) => setSelectedId(event.target.value)}
+              className="w-full rounded-2xl border border-black/10 bg-[var(--vs-surface)] px-3 py-3 text-center text-base text-ink [text-align-last:center] dark:border-[var(--vs-bordure)] dark:text-cream"
+            >
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {session.title}
+                  {session.listens > 0 ? ` · ${session.listens} écoute${session.listens !== 1 ? 's' : ''}` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-[13px] leading-relaxed text-ink/55 dark:text-champagne/70 sm:text-sm">
+              {PROGRESS_COPY.sessionHint}
+            </p>
+          </div>
 
           <WelcomeBack stats={stats} />
 
@@ -168,7 +177,7 @@ export function ProgressPage() {
                 </span>
               </div>
               <p className="mt-3 font-sans text-4xl font-medium leading-none tabular-nums tracking-tight text-ink dark:text-cream">
-                {stats.totalListens}
+                {selected.listens}
               </p>
             </Card>
 

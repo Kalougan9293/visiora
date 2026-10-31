@@ -9,7 +9,6 @@ const Q_LABELS: { key: string; label: string; optional?: boolean }[] = [
   { key: 'q4', label: 'Q4  Scène de réussite' },
   { key: 'q5', label: 'Q5  Émotion cible' },
   { key: 'q6', label: 'Q6  État actuel' },
-  { key: 'q7', label: 'Q7  Obstacle + recadrage souhaité' },
   { key: 'q8', label: 'Q8  Blocage physique', optional: true },
   { key: 'q9', label: 'Q9  Ce que l\'utilisateur met déjà en place' },
   { key: 'q10', label: 'Q10 Micro-action concrète' },
@@ -21,6 +20,15 @@ function asText(value: unknown): string {
   if (typeof value === 'string') return value.trim()
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean).join(', ')
   return ''
+}
+
+/** Q7a + Q7b (ou ancien q7) → une ligne pour le prompt. */
+function combineObstacle(answers: SessionAnswers): string {
+  const a = asText(answers.q7a)
+  const b = asText(answers.q7b)
+  if (a && b) return `${a} — ${b}`
+  if (a || b) return a || b
+  return asText(answers.q7)
 }
 
 export function isApaisementSession(answers: SessionAnswers | null | undefined): boolean {
@@ -49,25 +57,15 @@ function durationLine(src: SessionAnswers): string {
 }
 
 /**
- * Séance d’apaisement : ne pas renvoyer les réponses du questionnaire
- * (risque de reprendre des mots de détresse dans le script).
+ * Séance d’apaisement : fiche courte + MODE demandé par le prompt-maître 1.3.
+ * Ne pas renvoyer les réponses du questionnaire (mots de détresse).
+ * Les consignes de contenu sont dans VISIORA_MASTER_PROMPT, pas ici.
  */
 function formatApaisementFiche(answers: SessionAnswers): string {
   const prenom = asText(answers.q13)
   const lines: string[] = [
+    'MODE : APAISEMENT',
     'Séance d’apaisement VisuaRise (pas une séance d’objectif).',
-    '',
-    'Consignes obligatoires :',
-    '- Accueil doux, sans rien demander ni rien promettre.',
-    '- Respiration lente, ancrage dans le corps (appuis, contact, sons autour).',
-    '- Un lieu sûr, calme et rassurant.',
-    '- Douceur et bienveillance envers soi.',
-    '- Retour progressif, puis un rappel tout en douceur qu’on peut appeler le 3114.',
-    '- Pas de travail sur un objectif ni sur un obstacle.',
-    '- Pas de projection dans l’avenir.',
-    '- Ne jamais inventer ni reprendre de mots de détresse, de souffrance ou de crise.',
-    '- Tutoiement. Balises [pause] et structure [Mouvement N] comme d’habitude.',
-    '- Termine sur la phrase « ouvre les yeux ». N’écris rien après.',
     '',
   ]
   if (prenom) lines.push(`Prénom à entendre (optionnel) : ${prenom}`)
@@ -84,6 +82,7 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
   if (isApaisementSession(src)) return formatApaisementFiche(src)
 
   const lines: string[] = ['Fiche profil utilisateur :', '']
+  let obstaclePlaced = false
   for (const row of Q_LABELS) {
     const value = asText(src[row.key])
     if (!value) {
@@ -91,6 +90,17 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
       continue
     }
     lines.push(`${row.label} : ${value}`)
+    if (row.key === 'q6') {
+      const obstacle = combineObstacle(src)
+      if (obstacle) {
+        lines.push(`Q7  Obstacle + recadrage souhaité : ${obstacle}`)
+        obstaclePlaced = true
+      }
+    }
+  }
+  if (!obstaclePlaced) {
+    const obstacle = combineObstacle(src)
+    if (obstacle) lines.push(`Q7  Obstacle + recadrage souhaité : ${obstacle}`)
   }
   lines.push(q12Line(src))
   lines.push(durationLine(src))
@@ -99,23 +109,25 @@ export function formatProfileFiche(answers: SessionAnswers | null | undefined): 
   return lines.join('\n')
 }
 
-/** Prompt système apaisement (remplace le prompt-maître objectif). */
+/**
+ * Filet local uniquement si VISIORA_MASTER_PROMPT (et override apaisement) sont absents.
+ * En prod, le maître 1.3 porte la variante MODE : APAISEMENT (≈5 mouvements).
+ */
 export const APAISEMENT_SYSTEM_PROMPT = `Tu écris une séance d’apaisement VisuaRise, en français, tutoiement.
 Ce n’est pas une séance de visualisation d’objectif.
 
-Structure douce, avec balises [Mouvement N] et [pause] :
+Structure douce, environ cinq mouvements, avec balises [Mouvement N] et [pause] :
 1. Accueil calme, sans question, sans promesse.
 2. Respiration lente et ancrage corporel (points d’appui, contact, sons autour).
 3. Un lieu sûr, calme, rassurant — description sensorielle simple.
-4. Douceur et bienveillance envers soi, sans analyse ni conseil.
-5. Retour progressif au moment présent.
-6. Rappel tout en douceur qu’on peut appeler le 3114 si besoin.
-7. Fermeture sur la phrase exacte « ouvre les yeux ». Rien après.
+4. Douceur et bienveillance envers soi, sans analyse ni conseil ; rappel doux du 3114 si besoin.
+5. Retour progressif, puis fermeture sur la phrase exacte « ouvre les yeux ». Rien après.
 
 Interdits absolus :
 - travailler un objectif, un obstacle, une échéance ou une projection future ;
 - reprendre, citer ou reformuler des mots de détresse, de suicide ou de crise ;
-- dramatiser, diagnostiquer, moraliser.
+- dramatiser, diagnostiquer, moraliser ;
+- plan « si… alors… » (réservé aux séances d’objectif).
 
 Réponds uniquement avec le script.`
 
@@ -261,16 +273,23 @@ async function anthropicCompletion(
 }
 
 export function canGenerateScript(answers?: SessionAnswers | null): boolean {
+  const master = Boolean(Deno.env.get('VISIORA_MASTER_PROMPT')?.trim())
   const hasPrompt = isApaisementSession(answers)
-    ? Boolean(Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || APAISEMENT_SYSTEM_PROMPT)
-    : Boolean(Deno.env.get('VISIORA_MASTER_PROMPT')?.trim())
+    ? Boolean(
+        Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || master || APAISEMENT_SYSTEM_PROMPT,
+      )
+    : master
   if (!hasPrompt) return false
   const model = scriptModelFromEnv()
   if (model.startsWith('claude')) return Boolean(Deno.env.get('ANTHROPIC_API_KEY')?.trim())
   return Boolean(Deno.env.get('OPENAI_API_KEY')?.trim())
 }
 
-const SCRIPT_CLAIM_TTL_MS = 120_000
+/**
+ * Un script Claude long peut dépasser 2 min. Avant, le TTL à 120 s relançait
+ * une 2ᵉ écriture et remettait la barre à ~8 % (« reprise à zéro »).
+ */
+const SCRIPT_CLAIM_TTL_MS = 15 * 60 * 1000
 
 function isPhaseClaim(job: unknown, phase: string, ttlMs: number): boolean {
   if (!job || typeof job !== 'object') return false
@@ -282,6 +301,18 @@ function isPhaseClaim(job: unknown, phase: string, ttlMs: number): boolean {
 
 export function isScriptInProgress(job: unknown): boolean {
   return isPhaseClaim(job, 'scripting', SCRIPT_CLAIM_TTL_MS)
+}
+
+/** True si un plan TTS est déjà posé — ne jamais l’écraser par une phase script. */
+export function isFullAudioJob(job: unknown): boolean {
+  if (!job || typeof job !== 'object') return false
+  const v = job as { version?: unknown; steps?: unknown; nextIndex?: unknown; phase?: unknown }
+  return (
+    typeof v.version === 'number' &&
+    Array.isArray(v.steps) &&
+    typeof v.nextIndex === 'number' &&
+    (v.phase === 'tts' || v.phase === 'finalize' || v.phase === 'done')
+  )
 }
 
 const N8N_QUEUE_TTL_MS = 40 * 60 * 1000
@@ -326,28 +357,33 @@ function movement7At(script: string): number {
   return script.search(MOVEMENT_7)
 }
 
-/** Le Mouvement 7 est écrit et la personne a déjà l’ordre d’ouvrir les yeux. */
-export function scriptEndingIsClosed(script: string): boolean {
+function awakeningSearchFrom(script: string): number {
   const at = movement7At(script)
-  if (at < 0) return false
-  return AWAKENING.test(script.slice(at))
+  if (at >= 0) return at
+  /** Apaisement (souvent 5 mouvements) : cherche le réveil dans la 2ᵉ moitié. */
+  return Math.floor(script.length * 0.45)
 }
 
-/** Garde le script jusqu’à la première phrase de réveil du Mouvement 7. */
+/** Fermeture = « ouvre les yeux » dans le dernier mouvement (7) ou en fin de script. */
+export function scriptEndingIsClosed(script: string): boolean {
+  return AWAKENING.test(script.slice(awakeningSearchFrom(script)))
+}
+
+/** Coupe tout texte après la première phrase de réveil utile. */
 export function clipScriptAfterAwakening(script: string): string {
-  const at = movement7At(script)
-  if (at < 0) return script
-  const tail = script.slice(at)
+  const from = awakeningSearchFrom(script)
+  const head = script.slice(0, from)
+  const tail = script.slice(from)
   const wake = AWAKENING.exec(tail)
   if (!wake) return script
   const wakeEnd = wake.index + wake[0].length
   const stop = tail.slice(wakeEnd).search(/[.!?]/)
   const end = stop >= 0 ? wakeEnd + stop + 1 : tail.length
-  return `${script.slice(0, at)}${tail.slice(0, end)}`.trim()
+  return `${head}${tail.slice(0, end)}`.trim()
 }
 
 /** Citation ouverte, fin au milieu d’un mot, ou dernier mouvement à peine commencé. */
-export function scriptIsCut(script: string): boolean {
+export function scriptIsCut(script: string, apaisement = false): boolean {
   if (scriptEndingIsClosed(script)) return false
   const text = script.trim()
   if (text.length < 80) return true
@@ -356,16 +392,29 @@ export function scriptIsCut(script: string): boolean {
   if (open > close) return true
   if (!/(?:[.!?…»]|\[pause(?:\s+longue)?\])\s*$/i.test(text)) return true
   const lastMove = text.split(/\[Mouvement[^\]]*\]/i).pop()?.trim() ?? ''
-  if (lastMove.length < 280) return true
+  const minLast = apaisement ? 120 : 280
+  if (lastMove.length < minLast) return true
   return false
 }
 
 /** Ce qui manque encore avant d’envoyer le texte à la voix. */
-export function scriptFinishGaps(script: string): string[] {
+export function scriptFinishGaps(script: string, apaisement = false): string[] {
   const gaps: string[] = []
   const closed = scriptEndingIsClosed(script)
+  if (!closed && scriptIsCut(script, apaisement)) gaps.push('coupé')
+  const movements = (script.match(/\[Mouvement[^\]]*\]/gi) ?? []).length
+
+  if (apaisement) {
+    if (!closed) {
+      const words = spokenWords(script)
+      if (words < 500) gaps.push(`${words} mots`)
+      if (movements < 5) gaps.push(`${movements} mouvements`)
+      gaps.push('retour')
+    }
+    return gaps
+  }
+
   // Un script déjà fermé sur le réveil ne se rallonge pas : ni mots, ni pauses, ni suite.
-  if (!closed && scriptIsCut(script)) gaps.push('coupé')
   if (!closed) {
     const words = spokenWords(script)
     if (words < 1100) gaps.push(`${words} mots`)
@@ -373,17 +422,17 @@ export function scriptFinishGaps(script: string): string[] {
     const longs = (script.match(/\[pause longue\]/gi) ?? []).length
     if (pauses < 30 || longs < 8) gaps.push(`${pauses} pauses dont ${longs} longues`)
   }
-  const beforeWake = closed ? script.slice(0, movement7At(script)) : script
+  const beforeWake =
+    closed && movement7At(script) >= 0 ? script.slice(0, movement7At(script)) : script
   if (!/si\b[\s\S]{0,500}\balors\b/i.test(beforeWake)) gaps.push('si… alors')
-  const movements = (script.match(/\[Mouvement[^\]]*\]/gi) ?? []).length
   if (movements < 7) gaps.push(`${movements} mouvements`)
   if (!closed) gaps.push('retour')
   return gaps
 }
 
 /** Trop court, coupé, ou sans la fermeture : on ne l’envoie pas à la voix. */
-export function scriptNeedsFinish(script: string): boolean {
-  return scriptFinishGaps(script).length > 0
+export function scriptNeedsFinish(script: string, apaisement = false): boolean {
+  return scriptFinishGaps(script, apaisement).length > 0
 }
 
 const CONTINUE_PROMPT = `La séance n'est pas finie. Tu écris uniquement ce qui manque, sans répéter le début.
@@ -394,19 +443,32 @@ N'ajoute aucun texte après cette phrase.
 Garde le tutoiement, les balises [Mouvement N] et les « je » entre guillemets.
 Réponds uniquement avec la suite.`
 
+const CONTINUE_APAISEMENT_PROMPT = `La séance d'apaisement n'est pas finie. Tu écris uniquement ce qui manque, sans répéter le début.
+Structure douce en environ cinq mouvements. Pas d'objectif, pas d'obstacle, pas de « si… alors… ».
+Si le script contient déjà « ouvre les yeux », n'écris rien.
+Sinon termine sur le réveil, avec la phrase « ouvre les yeux ». Rien après.
+Garde le tutoiement et les balises [Mouvement N] / [pause].
+Réponds uniquement avec la suite.`
+
 async function finishScript(
   draft: string,
   model: string,
   anthropic: boolean,
   apiKey: string,
+  apaisement = false,
 ): Promise<string> {
   let text = clipScriptAfterAwakening(draft)
-  for (let attempt = 0; attempt < 3 && !scriptEndingIsClosed(text) && scriptNeedsFinish(text); attempt++) {
+  const continuePrompt = apaisement ? CONTINUE_APAISEMENT_PROMPT : CONTINUE_PROMPT
+  for (
+    let attempt = 0;
+    attempt < 3 && !scriptEndingIsClosed(text) && scriptNeedsFinish(text, apaisement);
+    attempt++
+  ) {
     const tail = text.trim().slice(-900)
     const userContent = `Fin actuelle du script :\n\n${tail}`
     const result = anthropic
-      ? await anthropicCompletion(apiKey, model, CONTINUE_PROMPT, userContent)
-      : await chatCompletion(apiKey, model, CONTINUE_PROMPT, userContent)
+      ? await anthropicCompletion(apiKey, model, continuePrompt, userContent)
+      : await chatCompletion(apiKey, model, continuePrompt, userContent)
     if (!result.ok) break
     const extra = result.script.trim()
     if (extra.length < 40) break
@@ -463,10 +525,12 @@ ${draft}`
 }
 
 function systemPromptFor(answers: SessionAnswers | null | undefined): string {
+  const master = Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() ?? ''
+  /** 1.3 embarque la variante apaisement ; secret dédié = override optionnel. */
   if (isApaisementSession(answers)) {
-    return Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || APAISEMENT_SYSTEM_PROMPT
+    return Deno.env.get('VISIORA_APAISEMENT_PROMPT')?.trim() || master || APAISEMENT_SYSTEM_PROMPT
   }
-  return Deno.env.get('VISIORA_MASTER_PROMPT')?.trim() ?? ''
+  return master
 }
 
 export async function generateSessionScriptDetailed(
@@ -507,9 +571,10 @@ export async function generateSessionScriptDetailed(
       continue
     }
     console.log('[generate-session-audio] script ok', model, result.script.length)
+    const apaisement = isApaisementSession(answers)
     const expanded = await expandIfShort(answers, result.script, model, anthropic, apiKey)
-    const script = await finishScript(expanded, model, anthropic, apiKey)
-    const gaps = scriptFinishGaps(script)
+    const script = await finishScript(expanded, model, anthropic, apiKey, apaisement)
+    const gaps = scriptFinishGaps(script, apaisement)
     if (gaps.length) {
       console.error('[generate-session-audio] script incomplet', gaps.join(', '))
       throw new Error(`Génération script : fin incomplète (${gaps.join(', ')}), audio non lancé`)

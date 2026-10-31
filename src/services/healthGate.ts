@@ -73,7 +73,7 @@ export function sameHealthFamily(word: string, keyword: string): boolean {
   return FAMILY_ENDING.test(word.slice(shared)) && FAMILY_ENDING.test(keyword.slice(shared))
 }
 
-const HEALTH_SCAN_FIELDS = ['q1', 'q7', 'q11'] as const
+const HEALTH_SCAN_FIELDS = ['q1', 'q7', 'q7a', 'q7b', 'q11'] as const
 
 /** Champs hors texte libre (ne pas scanner pour la détresse). */
 const DISTRESS_SKIP_FIELDS = new Set([

@@ -11,6 +11,8 @@ export const PARAGRAPH_PAUSE_SECONDS = 1.8
 export const BREATH_PAUSE_SECONDS = 2.4
 /** Après une affirmation entre guillemets — un rien de plus, pas une plage vide. */
 const AFFIRMATION_EXTRA_SECONDS = 1.2
+/** Avant une affirmation isolée (jobs v10+) : le « je » a le temps d’arriver. */
+const AFFIRMATION_BEFORE_SECONDS = 1.6
 /** Entre deux mouvements, seulement si le script n’a pas déjà posé une pause. */
 const MOVEMENT_HOLD_SECONDS = 2.5
 /**
@@ -21,8 +23,10 @@ export const TTS_CHUNK_CHARS = 900
 
 export type PacingMode = 'sentence' | 'paragraph'
 
+export type SpeechPace = 'normal' | 'affirmation'
+
 export type ScriptPart =
-  | { kind: 'speech'; text: string }
+  | { kind: 'speech'; text: string; pace?: SpeechPace }
   | { kind: 'silence'; seconds: number }
 
 const MARKER = /\[pause longue\]|\[pause\]/gi
@@ -76,11 +80,27 @@ function softenCommas(text: string): string {
   return text.replace(/;\s+/g, ' … ').replace(/,\s+/g, ', … ')
 }
 
+function pushAffirmationSpeech(out: ScriptPart[], sentence: string) {
+  out.push({ kind: 'silence', seconds: AFFIRMATION_BEFORE_SECONDS })
+  out.push({
+    kind: 'speech',
+    text: softenCommas(sentence),
+    pace: 'affirmation',
+  })
+  out.push({
+    kind: 'silence',
+    seconds: gapSeconds(sentence, SENTENCE_PAUSE_SECONDS),
+  })
+}
+
 /**
  * Ancien mode (jobs < v9) : une phrase = un appel TTS.
  * Conserve le comportement pour les générations déjà lancées.
  */
-function expandPacingBySentence(parts: ScriptPart[]): ScriptPart[] {
+function expandPacingBySentence(
+  parts: ScriptPart[],
+  isolateAffirmations = false,
+): ScriptPart[] {
   const out: ScriptPart[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -94,9 +114,15 @@ function expandPacingBySentence(parts: ScriptPart[]): ScriptPart[] {
     paragraphs.forEach((para, pi) => {
       const sentences = splitSentences(para)
       sentences.forEach((sentence, si) => {
-        out.push({ kind: 'speech', text: softenCommas(sentence) })
         const lastInPara = si === sentences.length - 1
         const lastPara = pi === paragraphs.length - 1
+
+        if (isolateAffirmations && isAffirmation(sentence)) {
+          pushAffirmationSpeech(out, sentence)
+          return
+        }
+
+        out.push({ kind: 'speech', text: softenCommas(sentence) })
         if (!lastInPara) {
           out.push({
             kind: 'silence',
@@ -138,8 +164,12 @@ function expandPacingBySentence(parts: ScriptPart[]): ScriptPart[] {
  * Mode v9+ : un paragraphe = un appel TTS (ton / rythme / volume plus stables).
  * On ne coupe qu’après une consigne de souffle ou une affirmation, pour garder
  * les blancs volontaires du CDC.
+ * v10+ : les phrases entre guillemets partent seules, avec pause avant + débit posé.
  */
-function expandPacingByParagraph(parts: ScriptPart[]): ScriptPart[] {
+function expandPacingByParagraph(
+  parts: ScriptPart[],
+  isolateAffirmations = false,
+): ScriptPart[] {
   const out: ScriptPart[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -159,9 +189,23 @@ function expandPacingByParagraph(parts: ScriptPart[]): ScriptPart[] {
         buffer = []
       }
       sentences.forEach((sentence, si) => {
-        buffer.push(sentence)
         const lastInPara = si === sentences.length - 1
         const lastPara = pi === paragraphs.length - 1
+
+        if (isolateAffirmations && isAffirmation(sentence)) {
+          /** « Dis-toi : » reste avec le « je », pas en mini-bloc à part. */
+          let lead = ''
+          if (buffer.length === 1 && /:\s*$/.test(buffer[0]!)) {
+            lead = `${buffer[0]} `
+            buffer = []
+          } else {
+            flush()
+          }
+          pushAffirmationSpeech(out, `${lead}${sentence}`)
+          return
+        }
+
+        buffer.push(sentence)
         const holdAfter =
           isBreathCue(sentence) || isAffirmation(sentence)
 
@@ -210,8 +254,11 @@ function expandPacingByParagraph(parts: ScriptPart[]): ScriptPart[] {
 export function expandPacing(
   parts: ScriptPart[],
   mode: PacingMode = 'paragraph',
+  isolateAffirmations = false,
 ): ScriptPart[] {
-  return mode === 'sentence' ? expandPacingBySentence(parts) : expandPacingByParagraph(parts)
+  return mode === 'sentence'
+    ? expandPacingBySentence(parts, isolateAffirmations)
+    : expandPacingByParagraph(parts, isolateAffirmations)
 }
 
 function mergeSilences(parts: ScriptPart[]): ScriptPart[] {
@@ -253,8 +300,9 @@ export function parseAnnexScript(raw: string): ScriptPart[] {
 export function longSessionParts(
   script: string,
   mode: PacingMode = 'paragraph',
+  isolateAffirmations = false,
 ): ScriptPart[] {
-  return expandPacing(parseAnnexScript(script), mode)
+  return expandPacing(parseAnnexScript(script), mode, isolateAffirmations)
 }
 
 function splitMovements(script: string): string[] {
@@ -273,8 +321,11 @@ function splitMovements(script: string): string[] {
 export function partsForDuration(
   script: string,
   mode: PacingMode = 'paragraph',
+  isolateAffirmations = false,
 ): ScriptPart[] {
-  const groups = splitMovements(script).map((chunk) => longSessionParts(chunk, mode))
+  const groups = splitMovements(script).map((chunk) =>
+    longSessionParts(chunk, mode, isolateAffirmations),
+  )
   if (groups.length <= 1) return groups.flat()
   const out: ScriptPart[] = []
   groups.forEach((group, index) => {

@@ -12,15 +12,49 @@ const BREATH_CYCLE_MS = BREATH_IN_MS + BREATH_OUT_MS
  * une onde qui respire, invitation à souffler avec elle.
  * Le % reste discret — la présence prime sur la barre.
  */
-export function GeneratingWaterProgress({ serverPct }: { serverPct: number }) {
+function floorKey(sessionId: string) {
+  return `visiora-gen-floor:${sessionId}`
+}
+
+function readFloor(sessionId: string | undefined, server: number) {
+  if (!sessionId) return server
+  try {
+    const raw = localStorage.getItem(floorKey(sessionId))
+    const n = raw ? Number(raw) : NaN
+    return Number.isFinite(n) ? Math.max(server, Math.round(n)) : server
+  } catch {
+    return server
+  }
+}
+
+function writeFloor(sessionId: string | undefined, pct: number) {
+  if (!sessionId) return
+  try {
+    localStorage.setItem(floorKey(sessionId), String(Math.round(pct)))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function GeneratingWaterProgress({
+  serverPct,
+  sessionId,
+}: {
+  serverPct: number
+  sessionId?: string
+}) {
   const server = Math.min(99, Math.max(5, Math.round(serverPct)))
-  const [display, setDisplay] = useState(server)
+  const [display, setDisplay] = useState(() => readFloor(sessionId, server))
   const [phase, setPhase] = useState<'in' | 'out'>('in')
   const [reduceMotion, setReduceMotion] = useState(false)
 
   useEffect(() => {
-    setDisplay((prev) => Math.max(prev, server))
-  }, [server])
+    setDisplay((prev) => {
+      const next = Math.max(prev, server, readFloor(sessionId, server))
+      writeFloor(sessionId, next)
+      return next
+    })
+  }, [server, sessionId])
 
   useEffect(() => {
     const reduce =
@@ -136,10 +170,10 @@ export function GeneratingWaterProgress({ serverPct }: { serverPct: number }) {
         >
           {reduceMotion ? APP_COPY.breathStill : cue}
         </p>
-        <p className="mt-3 max-w-[17rem] text-[12px] leading-relaxed text-[var(--vs-nuit)]/70 dark:text-[var(--vs-brume)] sm:text-[13px]">
+        <p className="mt-3 max-w-[17rem] text-[14px] leading-relaxed text-[var(--vs-nuit)]/70 dark:text-[var(--vs-brume)] sm:text-[15px]">
           {APP_COPY.breathInvite}
         </p>
-        <p className="mt-5 text-[10px] tabular-nums tracking-[0.14em] text-[var(--vs-nuit)]/45 dark:text-[var(--vs-brume)]/80">
+        <p className="mt-5 text-[12px] tabular-nums tracking-[0.14em] text-[var(--vs-nuit)]/45 dark:text-[var(--vs-brume)]/80">
           {shown}% · {APP_COPY.breathAside}
         </p>
       </div>

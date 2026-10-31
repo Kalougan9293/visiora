@@ -535,7 +535,7 @@ export function AdminPage() {
                   if (keywordHint) setKeywordHint('')
                 }}
                 placeholder="Ajouter un mot"
-                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
+                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2.5 text-base text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
                 disabled={keywordBusy}
               />
               <button
@@ -587,7 +587,7 @@ export function AdminPage() {
                   if (distressHint) setDistressHint('')
                 }}
                 placeholder="Ajouter un mot ou une expression"
-                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2 text-sm text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
+                className="flex-1 rounded-xl border border-black/25 bg-black/[0.03] dark:border-white/20 dark:bg-white/10 px-3 py-2.5 text-base text-black dark:text-white outline-none placeholder:text-black/50 dark:placeholder:text-white focus:border-[var(--vs-azur)]/50"
                 disabled={distressBusy}
               />
               <button
@@ -641,8 +641,12 @@ function answerLines(answers: Record<string, unknown>) {
     'share_read',
     'apaisement',
   ])
+  const hasSplitQ7 =
+    (typeof answers.q7a === 'string' && answers.q7a.trim()) ||
+    (typeof answers.q7b === 'string' && answers.q7b.trim())
   const lines = Object.entries(answers).flatMap(([key, value]) => {
     if (skip.has(key) || value == null || String(value).trim() === '') return []
+    if (key === 'q7' && hasSplitQ7) return []
     const raw = Array.isArray(value) ? value.join(', ') : String(value)
     const text = key === 'q12_voice'
       ? voiceLabel(raw)

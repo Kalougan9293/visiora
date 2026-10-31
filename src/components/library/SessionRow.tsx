@@ -103,7 +103,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
     'w-full min-w-0 rounded-xl border border-black/8 bg-cream-card/80 dark:border-[var(--vs-ardoise)] dark:bg-[var(--vs-abysse)]'
 
   if (generating) {
-    return <GeneratingWaterProgress serverPct={pct} />
+    return <GeneratingWaterProgress serverPct={pct} sessionId={session.id} />
   }
 
   return (
@@ -113,7 +113,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
         <div className="flex min-w-0 flex-1 flex-col items-start text-left">
           <span
             className={cn(
-              'truncate text-[11px]',
+              'truncate text-[12px]',
               'text-ink/55 dark:text-champagne/85',
             )}
           >
@@ -124,7 +124,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           <div className="flex w-full items-center gap-2">
             <p
               className={cn(
-                'min-w-0 flex-1 whitespace-normal break-words text-sm font-medium leading-snug line-clamp-2',
+                'min-w-0 flex-1 whitespace-normal break-words text-base font-medium leading-snug line-clamp-2',
                 'text-ink dark:text-cream',
               )}
               title={displayTitle}
@@ -137,7 +137,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
                 disabled={generationBusy}
                 onClick={() => void retryGeneration(session.id)}
                 className={cn(
-                  'max-w-[12.5rem] shrink-0 text-left text-[10px] leading-snug underline',
+                  'max-w-[12.5rem] shrink-0 text-left text-[12px] leading-snug underline',
                   'text-[var(--vs-or)] disabled:pointer-events-none disabled:opacity-40',
                 )}
               >
@@ -147,7 +147,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
           </div>
           <span
             className={cn(
-              'truncate text-[10px]',
+              'truncate text-[12px]',
               'text-ink/45 dark:text-champagne/70',
             )}
           >
@@ -157,7 +157,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
             {session.listens !== 1 ? 's' : ''}
           </span>
           {ready && (
-            <span className="text-[10px] leading-snug text-ink/70 dark:text-champagne/85">
+            <span className="text-[12px] leading-snug text-ink/70 dark:text-champagne/85">
               {AI_DISCLOSURE.player}
             </span>
           )}
@@ -171,7 +171,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               setShareBusy(true)
               void setShareRead(session.id, next).finally(() => setShareBusy(false))
             }}
-            className="mt-2 flex w-full items-center gap-2 text-left text-[11px] leading-snug text-ink/70 disabled:opacity-50 dark:text-champagne/80"
+            className="mt-2 flex w-full items-center gap-2 text-left text-[13px] leading-snug text-ink/70 disabled:opacity-50 dark:text-champagne/80"
           >
             <span
               className={cn(
@@ -308,7 +308,7 @@ export function SessionRow({ session }: { session: VisualizationSession }) {
               onChange={(event) => setRemark(event.target.value)}
               placeholder={AI_DISCLOSURE.afterRemarkHint}
               rows={3}
-              className="mt-1.5 w-full resize-none rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-ink/35 dark:border-white/15 dark:placeholder:text-cream/35"
+              className="mt-1.5 w-full resize-none rounded-xl border border-black/10 bg-transparent px-3 py-2.5 text-base outline-none placeholder:text-ink/35 dark:border-white/15 dark:placeholder:text-cream/35"
             />
           </label>
           <div className="mt-3 flex justify-center gap-3">

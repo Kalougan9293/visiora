@@ -2,10 +2,10 @@
 
 export const AI_DISCLOSURE = {
   beforeQuestionnaire:
-    'Tu réponds à une intelligence artificielle, pas à une personne. Tes réponses servent à générer automatiquement le texte et la voix de ta séance.',
+    'Ta séance est écrite par une intelligence artificielle, guidée par une méthode pensée avec soin. Plus tu te livres, plus elle te ressemblera.',
   player: 'Voix générée artificiellement.',
   privacy:
-    'Tes réponses et tes séances ne sont visibles que par toi. Personne chez VisuaRise n’y accède, sauf si tu choisis de partager une séance.',
+    'Ce que tu écris reste entre toi et ta séance. Personne d’autre ne le lit, sauf si tu choisis de le partager.',
   signupPrivacyTitle: 'Ton espace reste privé.',
   signupPrivacy:
     'Tes réponses et tes séances ne sont visibles que par toi : personne chez VisuaRise ne les lit, sauf si tu choisis de partager une séance. On te demande seulement ton mail, pour retrouver tes séances. Ton prénom est facultatif, et on ne te demande ni nom de famille ni adresse.',
@@ -32,7 +32,7 @@ export const HOME_COPY = {
 } as const
 
 export const STORAGE_COPY = {
-  rule: 'Tu gardes trois séances. À la quatrième, la plus ancienne est effacée, avec son audio.',
+  rule: 'Tu gardes tes trois dernières séances. Quand tu en crées une nouvelle, la plus ancienne laisse sa place.',
   confirmOne: 'Cette création efface ta séance la plus ancienne, avec son audio.',
   confirmMany: 'Cette création efface tes séances les plus anciennes, avec leur audio.',
   cancel: 'Annuler',
@@ -54,14 +54,17 @@ export const LIBRARY_COPY = {
 
 export const PROGRESS_COPY = {
   title: 'Mon chemin',
-  subtitle: 'Chaque visualisation avance à son rythme',
+  subtitle: 'Chaque visualisation a son propre suivi — choisis-en une ci-dessous',
   emptyTitle: 'Pas encore de visualisation',
   emptyBody:
     'Dès que tu en crées une, ses compteurs, son calendrier et ses repères apparaîtront ici. Une écoute ne fait avancer qu’elle.',
   emptyCta: 'Créer ma séance',
   lockedBody: 'Connecte-toi pour suivre chaque visualisation à part.',
   lockedCta: 'Se connecter',
-  listens: 'Séances écoutées',
+  sessionPicker: 'Visualisation suivie',
+  sessionHint:
+    'Compteurs et calendrier ci-dessous : uniquement pour cette séance, pas pour tout le compte.',
+  listens: 'Écoutes (cette séance)',
   practiceDays: 'Jours de pratique',
   nextLabel: 'PROCHAIN REPÈRE',
   nextBody: (remaining: number) =>
@@ -87,7 +90,7 @@ export const PROGRESS_COPY = {
 
 export const APP_COPY = {
   generating:
-    "Ta séance est en cours d'écriture. Tu peux fermer l'application, elle t'attendra dans ta bibliothèque.",
+    'Ta séance prend forme, rien que pour toi. Tu peux fermer l’application : elle t’attendra dans ta bibliothèque.',
   breathIn: 'Inspire',
   breathOut: 'Expire',
   breathStill: 'Respire',

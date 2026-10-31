@@ -30,7 +30,7 @@ export function BottomNav() {
             }}
             className={({ isActive }) =>
               cn(
-                'relative flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[10px] font-semibold tracking-wide transition-all duration-200',
+                'relative flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-[12px] font-semibold tracking-wide transition-all duration-200',
                 isActive
                   ? 'bg-[var(--vs-azur)]/15 text-[var(--vs-azur)] dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-ecume)]'
                   : 'text-ink/55 hover:bg-black/[0.03] hover:text-ink/80 dark:text-[var(--vs-texte-faible)] dark:hover:bg-white/5 dark:hover:text-[var(--vs-ecume)]',

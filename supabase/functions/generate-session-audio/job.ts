@@ -5,11 +5,12 @@ import {
   longSessionParts,
   partsForDuration,
   type PacingMode,
+  type SpeechPace,
 } from './script.ts'
 
-export const JOB_VERSION = 9
+export const JOB_VERSION = 10
 /** Repère affiché dans l’admin. Le texte du prompt reste le secret. */
-export const PROMPT_VERSION = '1.2'
+export const PROMPT_VERSION = '1.3'
 /** Une pause CDC = un step. v8 : WAV par segment, un seul MP3 à la fin. */
 export const SILENCE_SLICE_SECONDS = 12
 /** Après le dernier bloc voix : fond seul, puis fondu. Toutes les séances. */
@@ -18,7 +19,7 @@ export const OUTRO_FADE_SECONDS = 4
 
 /** Steps compacts (sans texte) → JSON léger, moins de risques d’échec d’update. */
 export type JobStep =
-  | { kind: 'speech'; partPath?: string; requestId?: string }
+  | { kind: 'speech'; partPath?: string; requestId?: string; pace?: SpeechPace }
   | { kind: 'silence'; seconds: number; fadeOut?: boolean; partPath?: string }
 
 export type AudioJob = {
@@ -60,11 +61,16 @@ export type AudioJob = {
 }
 
 type FullStep =
-  | { kind: 'speech'; text: string }
+  | { kind: 'speech'; text: string; pace?: SpeechPace }
   | { kind: 'silence'; seconds: number; fadeOut?: boolean }
 
 function pacingForJobVersion(version: number): PacingMode {
   return version >= 9 ? 'paragraph' : 'sentence'
+}
+
+/** v10+ : affirmations « je » isolées (pause avant + débit posé). */
+function isolateAffirmationsForVersion(version: number): boolean {
+  return version >= 10
 }
 
 export function buildFullSteps(
@@ -73,7 +79,11 @@ export function buildFullSteps(
   jobVersion = JOB_VERSION,
 ): FullStep[] {
   const mode = pacingForJobVersion(jobVersion)
-  const parts = minutes > 0 ? partsForDuration(script, mode) : longSessionParts(script, mode)
+  const isolate = isolateAffirmationsForVersion(jobVersion)
+  const parts =
+    minutes > 0
+      ? partsForDuration(script, mode, isolate)
+      : longSessionParts(script, mode, isolate)
   const steps: FullStep[] = []
   for (const part of parts) {
     if (part.kind === 'silence') {
@@ -85,8 +95,9 @@ export function buildFullSteps(
       }
       continue
     }
+    const pace = part.pace === 'affirmation' ? 'affirmation' : undefined
     for (const text of chunkSpeech(part.text)) {
-      steps.push({ kind: 'speech', text })
+      steps.push(pace ? { kind: 'speech', text, pace } : { kind: 'speech', text })
     }
   }
   steps.push({ kind: 'silence', seconds: OUTRO_HOLD_SECONDS })
@@ -100,12 +111,21 @@ export function speechTextAt(
   minutes = 0,
   jobVersion = JOB_VERSION,
 ): string {
+  return speechAt(script, index, minutes, jobVersion).text
+}
+
+export function speechAt(
+  script: string,
+  index: number,
+  minutes = 0,
+  jobVersion = JOB_VERSION,
+): { text: string; pace?: SpeechPace } {
   const full = buildFullSteps(script, minutes, jobVersion)
   const step = full[index]
   if (!step || step.kind !== 'speech') {
     throw new Error(`Pas de texte speech à l’index ${index}`)
   }
-  return step.text
+  return step.pace ? { text: step.text, pace: step.pace } : { text: step.text }
 }
 
 export function createAudioJob(script: string, voiceKey: string, minutes = 15): AudioJob {
@@ -113,7 +133,7 @@ export function createAudioJob(script: string, voiceKey: string, minutes = 15): 
   const full = buildFullSteps(script, durationMinutes, JOB_VERSION)
   const steps: JobStep[] = full.map((s) =>
     s.kind === 'speech'
-      ? { kind: 'speech' }
+      ? { kind: 'speech', ...(s.pace ? { pace: s.pace } : {}) }
       : { kind: 'silence', seconds: s.seconds, ...(s.fadeOut ? { fadeOut: true } : {}) },
   )
   const totalSpeech = Math.max(1, steps.filter((s) => s.kind === 'speech').length)
@@ -149,7 +169,8 @@ export function isAudioJob(value: unknown): value is AudioJob {
     (job.version === 6 ||
       job.version === 7 ||
       job.version === 8 ||
-      job.version === 9) &&
+      job.version === 9 ||
+      job.version === 10) &&
     Array.isArray(job.steps) &&
     typeof job.nextIndex === 'number' &&
     (job.phase === 'tts' || job.phase === 'finalize' || job.phase === 'done')

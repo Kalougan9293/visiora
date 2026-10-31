@@ -69,6 +69,7 @@ export type TesterSession = {
   title: string
   createdAt: string
   status: string
+  listens: number
   voiceId: string | null
   register: string | null
   fileBytes: number | null
@@ -186,6 +187,7 @@ function parseTesterFollow(payload: unknown): TesterFollow {
       title: String(row.title ?? ''),
       createdAt: String(row.created_at ?? ''),
       status: String(row.status ?? ''),
+      listens: numOrNull(row.listens) ?? 0,
       voiceId: textOrNull(row.voice_id),
       register: textOrNull(row.register),
       fileBytes: numOrNull(row.file_bytes),

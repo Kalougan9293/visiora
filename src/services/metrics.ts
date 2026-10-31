@@ -41,13 +41,17 @@ export const metricsService = {
     if (!supabase) return
     const uid = await userId()
     if (!uid) return
+    const reached = Math.max(maxSeconds, sample.current)
+    const done =
+      sample.ended ||
+      (sample.duration > 0 && Number.isFinite(sample.duration) && reached / sample.duration >= 0.8)
     const { error } = await supabase
       .from('listen_plays')
       .update({
         duration_seconds: round1(sample.duration),
         stop_seconds: round1(sample.current),
-        max_seconds: round1(Math.max(maxSeconds, sample.current)),
-        ...(sample.ended ? { completed: true } : {}),
+        max_seconds: round1(reached),
+        ...(done ? { completed: true } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)

@@ -105,6 +105,7 @@ begin
       s.title,
       s.created_at,
       s.status,
+      s.listens,
       s.voice_id,
       case
         when s.answers->>'q12_registre' in ('neutre', 'spirituel') then s.answers->>'q12_registre'

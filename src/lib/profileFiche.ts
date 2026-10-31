@@ -1,5 +1,7 @@
 /** Même fiche que l’Edge Function — message utilisateur uniquement. */
 
+import { combineObstacleAnswers } from '@/data/wizard'
+
 const Q_LABELS: { key: string; label: string; optional?: boolean }[] = [
   { key: 'q1', label: 'Q1  Objectif précis' },
   { key: 'q2', label: 'Q2  Échéance' },
@@ -7,7 +9,6 @@ const Q_LABELS: { key: string; label: string; optional?: boolean }[] = [
   { key: 'q4', label: 'Q4  Scène de réussite' },
   { key: 'q5', label: 'Q5  Émotion cible' },
   { key: 'q6', label: 'Q6  État actuel' },
-  { key: 'q7', label: 'Q7  Obstacle + recadrage souhaité' },
   { key: 'q8', label: 'Q8  Blocage physique', optional: true },
   { key: 'q9', label: 'Q9  Ce que l\'utilisateur met déjà en place' },
   { key: 'q10', label: 'Q10 Micro-action concrète' },
@@ -39,6 +40,7 @@ function q12Line(answers: Record<string, unknown>): string {
 function formatApaisementFiche(answers: Record<string, unknown>): string {
   const prenom = asText(answers.q13)
   const lines: string[] = [
+    'MODE : APAISEMENT',
     'Séance d’apaisement VisuaRise (pas une séance d’objectif).',
     '',
   ]
@@ -58,10 +60,22 @@ export function formatProfileFiche(answers: Record<string, unknown> | null | und
   if (isApaisement(src)) return formatApaisementFiche(src)
 
   const lines: string[] = ['Fiche profil utilisateur :', '']
+  let obstaclePlaced = false
   for (const row of Q_LABELS) {
     const value = asText(src[row.key])
     if (!value) continue
     lines.push(`${row.label} : ${value}`)
+    if (row.key === 'q6') {
+      const obstacle = combineObstacleAnswers(src)
+      if (obstacle) {
+        lines.push(`Q7  Obstacle + recadrage souhaité : ${obstacle}`)
+        obstaclePlaced = true
+      }
+    }
+  }
+  if (!obstaclePlaced) {
+    const obstacle = combineObstacleAnswers(src)
+    if (obstacle) lines.push(`Q7  Obstacle + recadrage souhaité : ${obstacle}`)
   }
   lines.push(q12Line(src))
   const durationRaw = Number(src.duration_minutes)

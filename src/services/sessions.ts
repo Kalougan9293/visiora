@@ -35,6 +35,14 @@ function progressFromRow(row: SessionRow): number {
   return 8
 }
 
+function orchestratedFromRow(row: SessionRow): boolean {
+  const job = row.audio_job
+  if (!job || typeof job !== 'object' || Array.isArray(job)) return false
+  const v = job as { handedToN8n?: unknown; phase?: unknown }
+  if (v.handedToN8n === true) return true
+  return v.phase === 'n8n' || v.phase === 'scripting'
+}
+
 function rowToSession(row: SessionRow): VisualizationSession {
   return {
     id: row.id,
@@ -48,6 +56,7 @@ function rowToSession(row: SessionRow): VisualizationSession {
     audioUrl: row.audio_url,
     audioStoragePath: row.audio_path,
     audioProgress: progressFromRow(row),
+    audioOrchestrated: orchestratedFromRow(row),
     listens: row.listens,
     script: row.script ?? null,
     shareRead: (row.answers as { share_read?: unknown } | null)?.share_read === '1',

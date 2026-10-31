@@ -126,7 +126,7 @@ async function dropUnusedBeds(admin: ReturnType<typeof createClient>) {
 }
 
 async function fetchSpeech(apiKey: string, voiceId: string): Promise<Uint8Array> {
-  const model = Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_multilingual_v2'
+  const model = Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_v3'
   const res = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=${TTS_PCM_FORMAT}`,
     {
@@ -142,9 +142,9 @@ async function fetchSpeech(apiKey: string, voiceId: string): Promise<Uint8Array>
         language_code: 'fr',
         seed: 42,
         voice_settings: {
-          stability: 0.82,
+          stability: 0.58,
           similarity_boost: 0.75,
-          style: 0,
+          style: 0.12,
           use_speaker_boost: false,
           speed: 1,
         },

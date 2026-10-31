@@ -6,6 +6,7 @@ import {
   CREATE_INTRO,
   WIZARD_STEPS,
   catalogVoiceId,
+  combineObstacleAnswers,
   type WizardField,
 } from '@/data/wizard'
 import { offersFromSlots, voiceCatalogService, type VoiceOffer } from '@/services/voiceCatalog'
@@ -14,12 +15,14 @@ import { useAuth } from '@/context/AuthContext'
 import { AuthModal } from '@/components/auth/AuthModal'
 import { DistressScreen } from '@/components/create/DistressScreen'
 import { HealthScreen } from '@/components/create/HealthScreen'
+import { PrepScreen } from '@/components/create/PrepScreen'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { AutoGrowTextarea } from '@/components/ui/AutoGrowTextarea'
 import { LegalFooter } from '@/components/layout/LegalFooter'
 import { cn, errorMessage } from '@/lib/utils'
+import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from '@/lib/wizardDraft'
 import { AI_DISCLOSURE, STORAGE_COPY } from '@/data/uiCopy'
 import { sessionsEvictedByNewOne } from '@/lib/sessionLimit'
 import { metricsService } from '@/services/metrics'
@@ -41,7 +44,7 @@ export function CreatePage() {
   const adjustId = searchParams.get('adjust')
   const { addSession, adjustSession, forgetSessions, sessions, sessionsReady, generationBusy } = useSessions()
   const { user } = useAuth()
-  const [phase, setPhase] = useState<'intro' | 'wizard'>(adjustId ? 'wizard' : 'intro')
+  const [phase, setPhase] = useState<'intro' | 'prep' | 'wizard'>(adjustId ? 'wizard' : 'intro')
   const [stepIdx, setStepIdx] = useState(0)
   const [authOpen, setAuthOpen] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
@@ -60,7 +63,9 @@ export function CreatePage() {
   const [submitError, setSubmitError] = useState('')
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [shareRead, setShareRead] = useState(false)
+  const [continueHint, setContinueHint] = useState('')
   const hydratedAdjustRef = useRef<string | null>(null)
+  const draftHydratedRef = useRef(false)
   const wizardAttemptRef = useRef<string | null>(null)
   const replaceKindRef = useRef<'normal' | 'apaisement'>('normal')
 
@@ -68,6 +73,64 @@ export function CreatePage() {
     void healthKeywordsService.list().then(setHealthWords)
     void distressKeywordsService.list().then(setDistressWords)
   }, [])
+
+  /** Reprend le questionnaire après onglet / freeze iPhone (pas en mode Ajuster). */
+  useEffect(() => {
+    if (adjustId || draftHydratedRef.current) return
+    draftHydratedRef.current = true
+    const draft =
+      loadWizardDraft(user?.id) ?? (user?.id ? loadWizardDraft(null) : null)
+    if (!draft) return
+    const filled = Object.entries(draft.answers).some(
+      ([id, value]) => id.startsWith('q') && typeof value === 'string' && value.trim(),
+    )
+    if (!filled) return
+    const restored = { ...draft.answers }
+    if (restored.q7?.trim() && !restored.q7a?.trim() && !restored.q7b?.trim()) {
+      restored.q7a = restored.q7
+    }
+    setAnswers((prev) => ({
+      ...prev,
+      ...restored,
+      q12_voice: catalogVoiceId(restored.q12_voice || prev.q12_voice || 'aurore'),
+      q12_tutoiement: 'tu',
+      duration_minutes: '15',
+      q12_registre: restored.q12_registre === 'spirituel' ? 'spirituel' : 'neutre',
+    }))
+    setStepIdx(Math.max(0, Math.min(draft.stepIdx, WIZARD_STEPS.length - 1)))
+    setShareRead(Boolean(draft.shareRead))
+    setPhase('wizard')
+    if (user?.id) {
+      saveWizardDraft(user.id, {
+        stepIdx: draft.stepIdx,
+        answers: draft.answers,
+        shareRead: Boolean(draft.shareRead),
+      })
+      clearWizardDraft(null)
+    }
+  }, [adjustId, user?.id])
+
+  useEffect(() => {
+    if (adjustId || (phase !== 'wizard' && phase !== 'prep')) return
+    saveWizardDraft(user?.id, { stepIdx, answers, shareRead })
+  }, [adjustId, phase, stepIdx, answers, shareRead, user?.id])
+
+  useEffect(() => {
+    if (adjustId) return
+    const flush = () => {
+      if (phase !== 'wizard' && phase !== 'prep') return
+      saveWizardDraft(user?.id, { stepIdx, answers, shareRead })
+    }
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [adjustId, phase, stepIdx, answers, shareRead, user?.id])
 
   useEffect(() => {
     if (!adjustId) {
@@ -86,6 +149,10 @@ export function CreatePage() {
     }
     for (const [key, value] of Object.entries(session.answers)) {
       next[key] = Array.isArray(value) ? value.join(', ') : String(value ?? '')
+    }
+    /** Ancien champ unique q7 → 7a si 7a/7b absents. */
+    if (next.q7?.trim() && !next.q7a?.trim() && !next.q7b?.trim()) {
+      next.q7a = next.q7
     }
     next.q12_voice = catalogVoiceId(next.q12_voice)
     next.q12_tutoiement = 'tu'
@@ -121,13 +188,23 @@ export function CreatePage() {
     })
   }, [step, answers])
 
+  useEffect(() => {
+    setContinueHint('')
+  }, [stepIdx, canContinue])
+
   const setField = (id: string, value: string) => {
     setAnswers((prev) => ({ ...prev, [id]: value }))
   }
 
-  const startWizard = () => {
+  const startPrep = () => {
+    setPhase('prep')
+    setStepIdx(0)
+  }
+
+  const enterWizard = () => {
     setPhase('wizard')
     setStepIdx(0)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const onStartClick = () => {
@@ -137,15 +214,15 @@ export function CreatePage() {
       setAuthOpen(true)
       return
     }
-    startWizard()
+    startPrep()
   }
 
   useEffect(() => {
     if (!user || !pendingStart) return
     setPendingStart(false)
     setAuthOpen(false)
-    startWizard()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter wizard only after login
+    startPrep()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- enter prep only after login
   }, [user, pendingStart])
 
   const afterDistressClear = (then: () => void) => {
@@ -175,6 +252,14 @@ export function CreatePage() {
 
   const goNext = () => {
     if (distressChecking || distressGate) return
+    if (!canContinue) {
+      setContinueHint('Complète tous les champs de cette étape pour continuer.')
+      return
+    }
+    setContinueHint('')
+    /** Ferme le clavier iPhone pour que « Suivant » ne soit plus masqué au passage. */
+    const active = document.activeElement
+    if (active instanceof HTMLElement) active.blur()
     if (stepIdx < WIZARD_STEPS.length - 1) {
       const next = stepIdx + 1
       if (next === WIZARD_STEPS.length - 1) {
@@ -229,6 +314,7 @@ export function CreatePage() {
     void run()
       .then((oldKept) => {
         if (wizardAttemptRef.current) void metricsService.completeWizard(wizardAttemptRef.current)
+        clearWizardDraft(user?.id)
         navigate(
           '/bibliotheque',
           oldKept
@@ -248,22 +334,29 @@ export function CreatePage() {
       .finally(() => setAdjustBusy(false))
   }
 
-  const buildNormalPayload = (): Answers => ({
-    ...answers,
-    q12_tutoiement: 'tu',
-    duration_minutes: '15',
-    ...(adjustId ? {} : { share_read: shareRead ? '1' : '0' }),
-  })
+  const withCombinedQ7 = (payload: Answers): Answers => {
+    const combined = combineObstacleAnswers(payload)
+    return combined ? { ...payload, q7: combined } : payload
+  }
 
-  const buildApaisementPayload = (): Answers => ({
-    ...answers,
-    [APAISEMENT_FLAG]: '1',
-    q12_tutoiement: 'tu',
-    q12_voice: answers.q12_voice || 'aurore',
-    q12_registre: answers.q12_registre === 'spirituel' ? 'spirituel' : 'neutre',
-    duration_minutes: '15',
-    share_read: shareRead ? '1' : '0',
-  })
+  const buildNormalPayload = (): Answers =>
+    withCombinedQ7({
+      ...answers,
+      q12_tutoiement: 'tu',
+      duration_minutes: '15',
+      ...(adjustId ? {} : { share_read: shareRead ? '1' : '0' }),
+    })
+
+  const buildApaisementPayload = (): Answers =>
+    withCombinedQ7({
+      ...answers,
+      [APAISEMENT_FLAG]: '1',
+      q12_tutoiement: 'tu',
+      q12_voice: answers.q12_voice || 'aurore',
+      q12_registre: answers.q12_registre === 'spirituel' ? 'spirituel' : 'neutre',
+      duration_minutes: '15',
+      share_read: shareRead ? '1' : '0',
+    })
 
   const submitCreate = () => {
     persistSession(buildNormalPayload(), { allowAdjust: true })
@@ -312,7 +405,7 @@ export function CreatePage() {
         navigate('/bibliotheque')
         return
       }
-      setPhase('intro')
+      setPhase('prep')
       return
     }
     setStepIdx((s) => s - 1)
@@ -366,13 +459,13 @@ export function CreatePage() {
         <h1 className="font-display text-3xl tracking-tight text-ink dark:text-cream sm:text-4xl">
           {CREATE_INTRO.title}
         </h1>
-        <p className="mt-4 max-w-md text-sm leading-relaxed text-ink/82 dark:text-cream/92">
+        <p className="mt-4 max-w-md text-base leading-relaxed text-ink/82 dark:text-cream/92">
           {CREATE_INTRO.body}
         </p>
-        <p className="mt-4 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+        <p className="mt-4 max-w-md text-base leading-relaxed text-ink dark:text-cream">
           {AI_DISCLOSURE.beforeQuestionnaire}
         </p>
-        <p className="mt-3 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+        <p className="mt-3 max-w-md text-base leading-relaxed text-ink dark:text-cream">
           {AI_DISCLOSURE.privacy}
         </p>
 
@@ -384,7 +477,7 @@ export function CreatePage() {
             {CREATE_INTRO.details.map((line) => (
               <li
                 key={line}
-                className="flex items-start gap-2 text-sm text-ink/82 dark:text-cream/90"
+                className="flex items-start gap-2 text-base text-ink/82 dark:text-cream/90"
               >
                 <Check size={16} className="mt-0.5 shrink-0 text-[var(--vs-azur)]" />
                 <span>{line}</span>
@@ -393,7 +486,7 @@ export function CreatePage() {
           </ul>
         </Card>
 
-        <p className="mt-6 max-w-md text-sm leading-relaxed text-ink dark:text-cream">
+        <p className="mt-6 max-w-md text-base leading-relaxed text-ink dark:text-cream">
           {STORAGE_COPY.rule}
         </p>
         <Button
@@ -407,6 +500,15 @@ export function CreatePage() {
         </Button>
         <LegalFooter />
       </div>
+    )
+  }
+
+  if (phase === 'prep') {
+    return (
+      <PrepScreen
+        onContinue={enterWizard}
+        onBack={() => setPhase('intro')}
+      />
     )
   }
 
@@ -442,7 +544,7 @@ export function CreatePage() {
             <h1 className="font-display text-[1.7rem] leading-snug tracking-tight text-ink dark:text-cream sm:text-[1.95rem]">
               {step.title}
             </h1>
-            <p className="mx-auto mt-2 max-w-md text-[14px] leading-relaxed text-ink/65 dark:text-cream/70">
+            <p className="mx-auto mt-2 max-w-md text-[15px] leading-relaxed text-ink/65 dark:text-cream/70 sm:text-base">
               {step.subtitle}
             </p>
             {adjustId && (
@@ -499,7 +601,13 @@ export function CreatePage() {
         </label>
       )}
       {!distressGate && (
-      <div className="flex w-full shrink-0 gap-2.5 pt-3 pb-1">
+      <div className="flex w-full shrink-0 flex-col gap-1.5 pt-3 pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+        {continueHint && (
+          <p className="text-center text-[12px] leading-snug text-[var(--vs-or)]" role="status">
+            {continueHint}
+          </p>
+        )}
+        <div className="flex w-full gap-2.5">
         <Button
           variant="outline"
           className="flex-1 rounded-full !py-2.5 text-[15px]"
@@ -511,10 +619,12 @@ export function CreatePage() {
         </Button>
         {!healthGate && (
         <Button
-          className="flex-1 rounded-full !py-2.5 text-[15px]"
+          className={cn(
+            'flex-1 rounded-full !py-2.5 text-[15px]',
+            !canContinue && !distressChecking && 'opacity-40',
+          )}
           disabled={
             distressChecking ||
-            !canContinue ||
             adjustBusy ||
             (stepIdx === WIZARD_STEPS.length - 1 &&
               (generationBusy || (!adjustId && !sessionsReady)))
@@ -535,6 +645,7 @@ export function CreatePage() {
           <ArrowRight size={17} />
         </Button>
         )}
+        </div>
       </div>
       )}
     </div>
@@ -557,7 +668,7 @@ function FieldBlock({
   locked?: boolean
 }) {
   const inputClass = cn(
-    'mt-2 w-full rounded-2xl border px-3.5 py-2.5 text-center text-base leading-relaxed outline-none transition',
+    'mt-2 w-full rounded-2xl border px-3.5 py-3 text-center text-base leading-relaxed outline-none transition',
     'border-[var(--vs-bordure)] bg-[var(--vs-surface)] text-ink placeholder:text-ink/35',
     'focus:border-[var(--vs-azur)]/50 focus:ring-2 focus:ring-[var(--vs-azur)]/12',
     'dark:text-[var(--vs-lunaire)] dark:placeholder:text-[var(--vs-brume)]',
@@ -581,7 +692,7 @@ function FieldBlock({
   if (field.type === 'choice-row') {
     return (
       <div className="w-full text-center">
-        <p className="text-[14px] font-medium leading-snug text-ink/85 dark:text-cream/90">
+        <p className="text-[15px] font-medium leading-snug text-ink/85 dark:text-cream/90 sm:text-base">
           {field.label}
         </p>
         <div className="mt-2.5 flex flex-wrap justify-center gap-2">
@@ -593,7 +704,7 @@ function FieldBlock({
                 type="button"
                 onClick={() => onChange(c.id)}
                 className={cn(
-                  'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-all sm:text-[14px]',
+                  'rounded-full px-3.5 py-2 text-[15px] font-medium transition-all sm:text-base',
                   selected
                     ? 'bg-[var(--vs-azur)] text-[var(--vs-nuit)]'
                     : 'bg-black/[0.04] text-ink/70 hover:bg-black/[0.07] dark:bg-[var(--vs-abysse)] dark:text-[var(--vs-lunaire)]/80 dark:hover:bg-[var(--vs-abysse)]',
@@ -610,7 +721,7 @@ function FieldBlock({
 
   return (
     <div className="w-full text-center">
-      <p className="text-[14px] font-medium leading-snug text-ink/85 dark:text-cream/90">
+      <p className="text-[15px] font-medium leading-snug text-ink/85 dark:text-cream/90 sm:text-base">
         {field.label}
       </p>
       {field.id === 'q6' && (
@@ -620,7 +731,7 @@ function FieldBlock({
         />
       )}
       {field.hint && (
-        <p className="mx-auto mt-1.5 max-w-md text-[12px] leading-relaxed text-ink/50 dark:text-cream/50 sm:text-[13px]">
+        <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink/50 dark:text-cream/50 sm:text-sm">
           {field.hint}
         </p>
       )}
@@ -648,7 +759,7 @@ function FieldBlock({
         />
       )}
       {locked && (
-        <p className="mt-1.5 text-[12px] text-ink/45 dark:text-cream/45">
+        <p className="mt-1.5 text-[13px] text-ink/45 dark:text-cream/45">
           L’objectif reste — il porte le titre de la séance.
         </p>
       )}

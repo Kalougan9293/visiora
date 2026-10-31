@@ -9,11 +9,11 @@ export function HealthScreen({ onAccept }: { onAccept: () => void }) {
       <h1 className="font-display text-[1.45rem] leading-snug text-ink dark:text-cream sm:text-2xl">
         {HEALTH_COPY.title}
       </h1>
-      <p className="mt-4 max-w-md text-justify text-sm leading-relaxed text-ink/72 dark:text-champagne/88">
+      <p className="mt-4 max-w-md text-justify text-base leading-relaxed text-ink/72 dark:text-champagne/88">
         {HEALTH_COPY.body}
       </p>
 
-      <label className="mt-6 flex w-full max-w-md cursor-pointer items-start gap-3 rounded-2xl border border-[var(--vs-bordure)] bg-[var(--vs-surface)] px-4 py-3 text-left text-sm text-ink/85 dark:text-[var(--vs-lunaire)]">
+      <label className="mt-6 flex w-full max-w-md cursor-pointer items-start gap-3 rounded-2xl border border-[var(--vs-bordure)] bg-[var(--vs-surface)] px-4 py-3 text-left text-base text-ink/85 dark:text-[var(--vs-lunaire)]">
         <input
           type="checkbox"
           checked={checked}

@@ -19,6 +19,27 @@ const POLL_MS = 1500
 const CLIENT_STALE_MS = 40 * 60 * 1000
 /** Filet local seulement si N8N n’orchestre pas. */
 const CONTINUE_KICK_MS = 8_000
+/** N8N silencieux : attendre plus longtemps avant que le téléphone reprenne. */
+const N8N_QUIET_MS = 45_000
+const PROGRESS_STALL_MS = 35_000
+const ORCH_KEY = (id: string) => `visiora-orch:${id}`
+
+function rememberOrchestrated(id: string, on: boolean) {
+  try {
+    if (on) localStorage.setItem(ORCH_KEY(id), '1')
+    else localStorage.removeItem(ORCH_KEY(id))
+  } catch {
+    /* ignore */
+  }
+}
+
+function wasOrchestrated(id: string) {
+  try {
+    return localStorage.getItem(ORCH_KEY(id)) === '1'
+  } catch {
+    return false
+  }
+}
 
 interface SessionsContextValue {
   sessions: VisualizationSession[]
@@ -129,6 +150,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         current.audioUrl === fresh.audioUrl &&
         current.audioStoragePath === fresh.audioStoragePath &&
         current.audioProgress === fresh.audioProgress &&
+        current.audioOrchestrated === fresh.audioOrchestrated &&
         current.script === fresh.script &&
         current.title === fresh.title &&
         current.listens === fresh.listens &&
@@ -161,6 +183,7 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
       const result = await audioService.enqueueGeneration(sessionId, { force, reset })
       if (result.orchestrated) {
         orchestratedRef.current.add(sessionId)
+        rememberOrchestrated(sessionId, true)
       }
       if (result.status === 'ready') {
         const fresh = userId ? await sessionsService.get(sessionId, userId) : null
@@ -196,7 +219,17 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
           kickedRef.current.delete(id)
           delete lastKickAtRef.current[id]
           orchestratedRef.current.delete(id)
+          rememberOrchestrated(id, false)
+          try {
+            localStorage.removeItem(`visiora-gen-floor:${id}`)
+          } catch {
+            /* ignore */
+          }
           continue
+        }
+        if (fresh.audioOrchestrated || wasOrchestrated(id)) {
+          orchestratedRef.current.add(id)
+          rememberOrchestrated(id, true)
         }
         const age = Date.now() - new Date(fresh.updatedAt).getTime()
         if (fresh.status === 'generating' && age > CLIENT_STALE_MS) {
@@ -209,13 +242,16 @@ export function SessionsProvider({ children }: { children: ReactNode }) {
         const now = Date.now()
         if (!mark || mark.pct !== pct) progressMark.current[id] = { pct, at: now }
         const progressAge = now - (progressMark.current[id]?.at ?? now)
-        /** N8N en marche : on ne double pas. S’il se tait, ou si le pourcentage ne bouge plus, on reprend. */
-        const n8nQuiet = orchestratedRef.current.has(id) && age > 25_000
-        const stalled = fresh.status === 'generating' && progressAge > 20_000
+        const orchestrated = orchestratedRef.current.has(id)
+        /** N8N en marche : le téléphone observe. Reprise seulement si silence prolongé. */
+        const n8nQuiet = orchestrated && age > N8N_QUIET_MS
+        const stalled =
+          fresh.status === 'generating' &&
+          progressAge > (orchestrated ? PROGRESS_STALL_MS : 20_000)
         if (
           fresh.status === 'generating' &&
           age > CONTINUE_KICK_MS &&
-          (stalled || n8nQuiet || !orchestratedRef.current.has(id))
+          (n8nQuiet || stalled || !orchestrated)
         ) {
           void enqueueAudio(id, false)
         }

@@ -42,6 +42,8 @@ export interface VisualizationSession {
   script?: string | null
   /** 0–100 pendant `generating` (stocké temporairement dans audio_bytes) */
   audioProgress?: number
+  /** N8N (ou file serveur) pilote la boucle — le téléphone ne doit pas re-kick agressivement. */
+  audioOrchestrated?: boolean
   listens: number
   tags?: string[]
   /** La personne accepte que Visiora lise cette séance. */

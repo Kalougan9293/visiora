@@ -32,6 +32,14 @@
 
   html {
     scroll-behavior: smooth;
+    /** iPhone : texte un cran plus lisible (rem). Desktop reste à 16. */
+    font-size: 17px;
+  }
+
+  @media (min-width: 640px) {
+    html {
+      font-size: 16px;
+    }
   }
 
   body {
@@ -40,6 +48,18 @@
     min-height: 100dvh;
     background: var(--vs-fond, #020c25);
     color: var(--vs-texte, #e9eff4);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  /**
+   * Safari iOS zoome si input/textarea/select < 16px.
+   * !important : passe devant text-sm / text-xs des composants.
+   */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 
   #root {

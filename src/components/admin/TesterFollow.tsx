@@ -239,14 +239,15 @@ function UserSheet({
         <Fact label="Compte créé" value={formatWhen(user.createdAt)} />
         <Fact label="Dernière connexion" value={formatWhen(user.lastSeenAt)} />
         <Fact label="Séances" value={String(user.sessionCount)} />
-        <Fact label="Écoutes" value={String(user.listenCount)} />
+        <Fact label="Écoutes (total séances)" value={String(user.listenCount)} />
         <Fact label="Jours de pratique" value={String(user.practiceDays)} />
         <Fact label="Espace" value={formatStorage(user.storageBytes)} />
         <Fact label="Partage" value={formatShareLabel(sharedCount, user.sessionCount)} />
         <Fact label="Appareil" value={user.clientLabel ?? '—'} />
       </dl>
       <p className="mt-3 text-center text-[11px] text-black/80 dark:text-white/80">
-        Les écoutes sont celles comptées après 80 %. Chaque lecture est dans la séance.
+        Écoutes = total des compteurs séance (après 80 %). Les lectures détaillées sont dans chaque séance.
+        Connexion ≠ écoute : une visite sans lecture n’apparaît pas ici.
       </p>
 
       <p className="mt-5 text-center text-[10px] uppercase tracking-[0.14em] text-black dark:text-white">Notes</p>
@@ -291,6 +292,10 @@ function UserSheet({
                     <span className="block truncate text-sm text-black dark:text-white">{session.title || 'Séance'}</span>
                     <span className="block text-[11px] text-black dark:text-white">
                       {formatWhen(session.createdAt)} · {statusName(session.status)}
+                      {` · ${session.listens} écoute${session.listens !== 1 ? 's' : ''}`}
+                      {session.plays.length > 0
+                        ? ` · ${session.plays.length} lecture${session.plays.length !== 1 ? 's' : ''} tech.`
+                        : ''}
                     </span>
                   </span>
                   <ChevronDown size={14} className={`shrink-0 text-black dark:text-white ${open ? 'rotate-180' : ''}`} />
@@ -312,6 +317,7 @@ function SessionSheet({ session }: { session: TesterSession }) {
     <div className="border-t border-white/10 px-3 py-3">
       <dl className="grid grid-cols-2 gap-x-3 gap-y-3 text-center">
         <Fact label="Créée" value={formatWhen(session.createdAt)} />
+        <Fact label="Écoutes comptées" value={String(session.listens)} />
         <Fact label="Prompt" value={session.promptVersion ?? '—'} />
         <Fact label="Génération" value={session.generationSeconds == null ? '—' : formatClock(session.generationSeconds)} />
         <Fact label="Statut" value={statusName(session.status)} />

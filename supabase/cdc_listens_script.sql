@@ -28,7 +28,8 @@ drop policy if exists "listens_insert_own" on public.listens;
 create policy "listens_insert_own" on public.listens
   for insert with check (auth.uid() = user_id);
 
--- Enregistre une écoute du jour. Retourne true si c’était la 1ʳᵉ du jour pour cette séance.
+-- Compteur séance : +1 à chaque écoute complète.
+-- Calendrier Suivi : 1 jour validé max / séance / jour (unique listens).
 create or replace function public.record_listen(p_session_id uuid)
 returns boolean
 language plpgsql
@@ -37,7 +38,6 @@ set search_path = public
 as $$
 declare
   uid uuid := auth.uid();
-  inserted boolean := false;
 begin
   if uid is null or p_session_id is null then
     return false;
@@ -52,19 +52,16 @@ begin
   begin
     insert into public.listens (user_id, session_id, listened_on)
     values (uid, p_session_id, (timezone('utc', now()))::date);
-    inserted := true;
   exception
     when unique_violation then
-      inserted := false;
+      null;
   end;
 
-  if inserted then
-    update public.sessions
-    set listens = listens + 1, updated_at = now()
-    where id = p_session_id and user_id = uid;
-  end if;
+  update public.sessions
+  set listens = listens + 1, updated_at = now()
+  where id = p_session_id and user_id = uid;
 
-  return inserted;
+  return true;
 end;
 $$;
 

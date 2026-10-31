@@ -6,11 +6,11 @@ import {
   progressPct,
   PROMPT_VERSION,
   concatBytes,
-  speechTextAt,
+  speechAt,
   type AudioJob,
   type JobStep,
 } from './job.ts'
-import { resolveScript } from './script.ts'
+import { resolveScript, type SpeechPace } from './script.ts'
 import {
   canGenerateScript,
   suggestSessionTitle,
@@ -19,6 +19,7 @@ import {
   hasStoredScript,
   n8nQueueAgeMs,
   isScriptInProgress,
+  isFullAudioJob,
   n8nQueuePayload,
   scriptClaimPayload,
 } from './generate-script.ts'
@@ -58,8 +59,13 @@ const MIX_SLICE_CAP = 12 * MIX_RATE
 /** Deux blocs voix par passage, l’un après l’autre, pour garder la même voix sans dépasser le délai de l’orchestrateur. */
 const PARALLEL_SPEECH = 2
 
+/**
+ * Modèle expressif par défaut (v3 : speed/style OK pour les « je »).
+ * Override : secret VISIORA_ELEVEN_MODEL (ex. eleven_multilingual_v2 pour rollback).
+ * Pas eleven_v4 ici : pas de speed, donc pas de marquage des affirmations.
+ */
 function elevenModelId(): string {
-  return Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_multilingual_v2'
+  return Deno.env.get('VISIORA_ELEVEN_MODEL')?.trim() || 'eleven_v3'
 }
 
 declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined
@@ -192,10 +198,18 @@ async function setProgress(
   const value = Math.round(Math.min(99, Math.max(1, pct)))
   const owned = matchClaimId === undefined ? job.claimId : matchClaimId
   if (job.claimId) job.claimedAt = new Date().toISOString()
+  /** Ne jamais faire reculer la barre (reprise / double worker). */
+  const { data: cur } = await admin
+    .from('sessions')
+    .select('audio_bytes')
+    .eq('id', sessionId)
+    .maybeSingle()
+  const prev = Number((cur as { audio_bytes?: number } | null)?.audio_bytes)
+  const bytes = Number.isFinite(prev) && prev > value ? Math.round(prev) : value
   let query = admin
     .from('sessions')
     .update({
-      audio_bytes: value,
+      audio_bytes: bytes,
       audio_job: job,
       status: 'generating',
       updated_at: new Date().toISOString(),
@@ -232,15 +246,17 @@ async function claimSession(
   return data === true
 }
 
-function elevenVoiceSettings(_appVoiceKey: string) {
+function elevenVoiceSettings(_appVoiceKey: string, pace: SpeechPace = 'normal') {
+  const affirmation = pace === 'affirmation'
   return {
-    /** Plus haut = moins de sautes de ton/rythme entre blocs ; un peu moins d’expressivité. */
-    stability: 0.82,
-    /** Colle à la voix du début. Le débit reste 1. */
+    /** Plus bas = plus d’expressivité ; on reste au milieu pour éviter les sautes. */
+    stability: 0.58,
     similarity_boost: 0.75,
-    style: 0,
+    /** Léger caractère ; un peu plus sur les « je ». */
+    style: affirmation ? 0.18 : 0.12,
     use_speaker_boost: false,
-    speed: 1.0,
+    /** Affirmations un peu plus posées pour qu’elles ressortent. */
+    speed: affirmation ? 0.9 : 1.0,
   }
 }
 
@@ -273,6 +289,7 @@ function elevenTtsBody(
   appVoiceKey: string,
   previousRequestIds: string[],
   seed: number,
+  pace: SpeechPace = 'normal',
 ) {
   return {
     text: frenchForSpeech(text),
@@ -280,7 +297,7 @@ function elevenTtsBody(
     language_code: 'fr',
     seed,
     ...(previousRequestIds.length ? { previous_request_ids: previousRequestIds.slice(-3) } : {}),
-    voice_settings: elevenVoiceSettings(appVoiceKey),
+    voice_settings: elevenVoiceSettings(appVoiceKey, pace),
   }
 }
 
@@ -291,7 +308,9 @@ async function elevenTts(params: {
   text: string
   previousRequestIds: string[]
   seed: number
+  pace?: SpeechPace
 }): Promise<{ audio: Uint8Array; requestId: string | null }> {
+  const pace = params.pace ?? 'normal'
   const ttsRes = await fetch(
     `https://api.elevenlabs.io/v1/text-to-speech/${params.voiceId}?output_format=${TTS_PCM_FORMAT}`,
     {
@@ -302,7 +321,7 @@ async function elevenTts(params: {
         Accept: 'application/octet-stream',
       },
       body: JSON.stringify(
-        elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
+        elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed, pace),
       ),
       signal: AbortSignal.timeout(35_000),
     },
@@ -322,7 +341,13 @@ async function elevenTts(params: {
             Accept: 'application/octet-stream',
           },
           body: JSON.stringify(
-            elevenTtsBody(params.text, params.appVoiceKey, params.previousRequestIds, params.seed),
+            elevenTtsBody(
+              params.text,
+              params.appVoiceKey,
+              params.previousRequestIds,
+              params.seed,
+              pace,
+            ),
           ),
           signal: AbortSignal.timeout(35_000),
         },
@@ -534,7 +559,12 @@ async function runAudioStep(params: {
     const path = partPath(params.userId, params.sessionId, index, job.version)
     if (step.partPath || (await partExists(params.admin, params.userId, params.sessionId, index, job.version))) {
       if (step.kind === 'speech') {
-        job.steps[index] = { kind: 'speech', partPath: path, requestId: step.requestId }
+        job.steps[index] = {
+          kind: 'speech',
+          partPath: path,
+          requestId: step.requestId,
+          ...(step.pace ? { pace: step.pace } : {}),
+        }
       } else {
         job.steps[index] = {
           kind: 'silence',
@@ -583,12 +613,14 @@ async function runAudioStep(params: {
     const path = partPath(params.userId, params.sessionId, index, job.version)
 
     if (step.kind === 'speech') {
-      const text = speechTextAt(
+      const spoken = speechAt(
         params.script,
         index,
         params.job.version >= 7 ? (params.job.durationMinutes ?? 15) : 0,
         params.job.version,
       )
+      const text = spoken.text
+      const pace = spoken.pace ?? step.pace ?? 'normal'
       const tts = await elevenTts({
         apiKey: params.elevenKey,
         voiceId: resolveElevenVoiceId(params.voiceId, params.elevenVoiceId),
@@ -596,6 +628,7 @@ async function runAudioStep(params: {
         text,
         previousRequestIds: stitchIds(job),
         seed: sessionSeed(job),
+        pace,
       })
       const got = {
         pcm: upsampleTts(pcmFromEleven(tts.audio)),
@@ -620,6 +653,7 @@ async function runAudioStep(params: {
       job.steps[index] = {
         kind: 'speech',
         partPath: path,
+        ...(pace === 'affirmation' ? { pace } : {}),
         ...(got.requestId ? { requestId: got.requestId } : {}),
       }
       job.bedOffset = nextOffset
@@ -1140,19 +1174,51 @@ Deno.serve(async (req) => {
 
   /** Script d'abord, hors du TTS : un seul appel au modèle, pas de timeout client. */
   if (!hasStoredScript(session.script) && canGenerateScript(session.answers as Record<string, unknown>)) {
+    /** Un job TTS ne doit jamais être écrasé par une phase script (reprise à zéro). */
+    if (isAudioJob(session.audio_job) || isFullAudioJob(session.audio_job)) {
+      await noteUsage(admin, sessionId, {
+        finishedAt: new Date().toISOString(),
+        error: 'Script manquant',
+      })
+      await admin
+        .from('sessions')
+        .update({
+          status: 'failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', sessionId)
+      return json({ ok: false, error: 'Script manquant', status: 'failed' }, 409)
+    }
     if (isScriptInProgress(session.audio_job)) {
-      return json({ ok: true, accepted: true, status: 'generating', progress: 8 }, 202)
+      const prev = Number(session.audio_bytes)
+      const progress = Number.isFinite(prev) && prev >= 8 ? Math.min(17, Math.round(prev)) : 8
+      return json({ ok: true, accepted: true, status: 'generating', progress }, 202)
     }
 
-    await admin
+    const prevBytes = Number(session.audio_bytes)
+    const scriptBytes =
+      Number.isFinite(prevBytes) && prevBytes > 8 ? Math.min(17, Math.round(prevBytes)) : 8
+    const { data: scriptClaimed } = await admin
       .from('sessions')
       .update({
         status: 'generating',
-        audio_bytes: 8,
+        audio_bytes: scriptBytes,
         audio_job: scriptClaimPayload(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', sessionId)
+      /** N’écrase pas un job TTS posé entre-temps. */
+      .or('audio_job.is.null,audio_job->>phase.eq.scripting,audio_job->>phase.eq.n8n')
+      .select('id')
+    if (!scriptClaimed?.length) {
+      return json({
+        ok: true,
+        accepted: true,
+        status: 'generating',
+        progress: scriptBytes,
+        orchestrated: n8nConfigured || isOrchestrator,
+      }, 202)
+    }
     await noteUsage(admin, sessionId, {
       startedAt: new Date().toISOString(),
       finishedAt: null,
@@ -1184,15 +1250,24 @@ Deno.serve(async (req) => {
       if (n8nConfigured) {
         const handed = await notifyN8n(sessionId)
         if (handed) {
+          const { data: afterScript } = await admin
+            .from('sessions')
+            .select('audio_bytes')
+            .eq('id', sessionId)
+            .maybeSingle()
+          const had = Number((afterScript as { audio_bytes?: number } | null)?.audio_bytes)
+          const nextBytes = Number.isFinite(had) && had > 17 ? Math.round(had) : 17
           await admin
             .from('sessions')
             .update({
               audio_job: n8nQueuePayload(),
-              audio_bytes: 17,
+              audio_bytes: nextBytes,
               status: 'generating',
               updated_at: new Date().toISOString(),
             })
             .eq('id', sessionId)
+            /** Ne remplace pas un job TTS déjà installé. */
+            .or('audio_job.is.null,audio_job->>phase.eq.scripting,audio_job->>phase.eq.n8n')
           return
         }
         console.warn('[generate-session-audio] n8n injoignable, la séance continue ici')
@@ -1227,7 +1302,8 @@ Deno.serve(async (req) => {
   }
 
   const queuedAge = n8nQueueAgeMs(session.audio_job)
-  if (queuedAge != null && queuedAge < 25_000 && !isOrchestrator && !chain) {
+  /** Filet téléphone seulement si N8N reste vraiment silencieux. */
+  if (queuedAge != null && queuedAge < 45_000 && !isOrchestrator && !chain) {
     return json({
       ok: true,
       accepted: true,
@@ -1239,8 +1315,11 @@ Deno.serve(async (req) => {
 
   let job = isAudioJob(session.audio_job) ? (session.audio_job as AudioJob) : null
 
-  if (reset || (force && !job)) {
+  /** `force` sans `reset` = reprise : on garde les segments déjà payés. */
+  if (reset) {
     await clearParts(admin, callerUserId!, sessionId)
+    job = null
+  } else if (force && !job) {
     job = null
   }
 
@@ -1295,7 +1374,7 @@ Deno.serve(async (req) => {
     if (session.status === 'failed') job.handedToN8n = false
     const updatedAt = new Date(String(session.updated_at ?? '')).getTime()
     const quietMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0
-    const n8nQuiet = Boolean(job.handedToN8n) && quietMs >= 25_000
+    const n8nQuiet = Boolean(job.handedToN8n) && quietMs >= 45_000
     if (job.handedToN8n && !n8nQuiet) {
       return json({
         ok: true,
@@ -1307,11 +1386,15 @@ Deno.serve(async (req) => {
     }
     if (!n8nQuiet) {
       job.handedToN8n = true
+      const handoffPct = progressPct(job)
+      const prevHand = Number(session.audio_bytes)
+      const handoffBytes =
+        Number.isFinite(prevHand) && prevHand > handoffPct ? Math.round(prevHand) : handoffPct
       await admin
         .from('sessions')
         .update({
           audio_job: job,
-          audio_bytes: progressPct(job),
+          audio_bytes: handoffBytes,
           status: 'generating',
           updated_at: new Date().toISOString(),
         })
@@ -1323,7 +1406,7 @@ Deno.serve(async (req) => {
           ok: true,
           accepted: true,
           status: 'generating',
-          progress: progressPct(job),
+          progress: handoffBytes,
           orchestrated: true,
         }, 202)
       }
